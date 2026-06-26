@@ -91,6 +91,7 @@ func main() {
 	mux.Handle("GET /api/events/{id}", auth(http.HandlerFunc(s.handleGetEvent)))
 	mux.Handle("POST /api/events/{id}/rsvp", auth(http.HandlerFunc(s.handleRsvp)))
 	mux.Handle("POST /api/events/{id}/votes", auth(http.HandlerFunc(s.handleVotes)))
+	mux.Handle("POST /api/events/{id}/general-votes", auth(http.HandlerFunc(s.handleGeneralVotes)))
 	mux.Handle("POST /api/events/{id}/preferences", auth(http.HandlerFunc(s.handlePreferences)))
 	mux.Handle("POST /api/events/{id}/finalize", auth(http.HandlerFunc(s.handleFinalize)))
 	mux.Handle("GET /api/friends", auth(http.HandlerFunc(s.handleListFriends)))

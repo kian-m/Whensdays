@@ -36,6 +36,14 @@ type EventAttendee struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type EventGeneralVote struct {
+	ID        pgtype.UUID `json:"id"`
+	EventID   pgtype.UUID `json:"event_id"`
+	UserID    string      `json:"user_id"`
+	Dimension string      `json:"dimension"`
+	Value     string      `json:"value"`
+}
+
 type EventPreferenceAnswer struct {
 	ID          pgtype.UUID `json:"id"`
 	EventID     pgtype.UUID `json:"event_id"`

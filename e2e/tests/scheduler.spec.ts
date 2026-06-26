@@ -67,6 +67,32 @@ test.describe("scheduler", () => {
     await expect(page.getByText("Vegetarian")).toBeVisible();
   });
 
+  test("create a general-availability poll and respond", async ({ page }) => {
+    await ensureProfile(page);
+
+    const title = `Hangout ${test.info().testId}`;
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-other").click();
+    await page.getByTestId("sched-general").click();
+    await page.getByTestId("create-event").click();
+
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Preview as a guest: pick a month, a day, and a time of day, then save.
+    await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("gp-month-0").click();
+    await page.getByTestId("gp-weekday-6").click();
+    await page.getByTestId("gp-daypart-evening").click();
+    await page.getByTestId("save-general").click();
+
+    // Back in the host view, the aggregate reflects the pick.
+    await page.getByTestId("preview-toggle").click();
+    await expect(page.getByText("Group availability")).toBeVisible();
+    await expect(page.getByText("Evening")).toBeVisible();
+  });
+
   test("create form visual baseline", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();

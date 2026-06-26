@@ -156,6 +156,22 @@ FROM event_time_votes v
 JOIN event_time_options o ON o.id = v.option_id
 WHERE o.event_id = $1;
 
+-- ====================== general poll votes ========================
+
+-- name: ClearGeneralVotes :exec
+DELETE FROM event_general_votes
+WHERE event_id = $1 AND user_id = $2;
+
+-- name: AddGeneralVote :exec
+INSERT INTO event_general_votes (event_id, user_id, dimension, value)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT DO NOTHING;
+
+-- name: ListGeneralVotesForEvent :many
+SELECT user_id, dimension, value
+FROM event_general_votes
+WHERE event_id = $1;
+
 -- ========================= attendees ==============================
 
 -- name: UpsertRsvp :one

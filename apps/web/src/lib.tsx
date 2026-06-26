@@ -12,7 +12,7 @@ export type Event = {
   description: string;
   location_mode: "host_place" | "find_venue";
   location_address: string;
-  scheduling_mode: "fixed" | "poll";
+  scheduling_mode: "fixed" | "poll" | "general";
   starts_at: string | null;
   status: "polling" | "scheduled" | "cancelled";
   created_at: string;
@@ -20,6 +20,7 @@ export type Event = {
 
 export type TimeOption = { id: string; event_id: string; starts_at: string };
 export type Vote = { id: string; option_id: string; user_id: string; response: "yes" | "no" | "maybe" };
+export type GeneralVote = { user_id: string; dimension: "month" | "weekday" | "daypart"; value: string };
 export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined"; display_name: string | null };
 export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
 
@@ -29,6 +30,7 @@ export type EventDetail = {
   viewer_id: string;
   time_options: TimeOption[];
   votes: Vote[];
+  general_votes: GeneralVote[];
   attendees: Attendee[];
   preference_answers: PrefAnswer[];
 };
@@ -71,6 +73,26 @@ export async function sendJSON(api: ApiFn, method: string, path: string, body: u
 
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const PARTS = ["morning", "afternoon", "evening"] as const;
+
+// Coarse time-of-day buckets for general-availability polls (value + label).
+export const DAYPARTS: { value: string; label: string }[] = [
+  { value: "early_morning", label: "Early morning" },
+  { value: "morning", label: "Morning" },
+  { value: "noon", label: "Noon" },
+  { value: "afternoon", label: "Afternoon" },
+  { value: "evening", label: "Evening" },
+  { value: "night", label: "Night" },
+];
+
+// The next n calendar months as { value: "YYYY-MM", label: "Aug 2026" }.
+export function nextMonths(n: number): { value: string; label: string }[] {
+  const now = new Date();
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return { value, label: d.toLocaleDateString(undefined, { month: "short", year: "numeric" }) };
+  });
+}
 
 export function fmtDateTime(iso: string | null): string {
   if (!iso) return "TBD";

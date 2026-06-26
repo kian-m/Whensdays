@@ -19,7 +19,7 @@ export function NewEvent() {
   const [description, setDescription] = useState("");
   const [locationMode, setLocationMode] = useState<"host_place" | "find_venue">("host_place");
   const [address, setAddress] = useState("");
-  const [schedulingMode, setSchedulingMode] = useState<"fixed" | "poll">("fixed");
+  const [schedulingMode, setSchedulingMode] = useState<"fixed" | "poll" | "general">("fixed");
   const [startsAt, setStartsAt] = useState("");
   const [options, setOptions] = useState<string[]>([""]);
   const [error, setError] = useState<string | null>(null);
@@ -43,11 +43,12 @@ export function NewEvent() {
     };
     if (schedulingMode === "fixed") {
       body.starts_at = startsAt ? new Date(startsAt).toISOString() : "";
-    } else {
+    } else if (schedulingMode === "poll") {
       body.time_options = options
         .filter((o) => o.trim() !== "")
         .map((o) => new Date(o).toISOString());
     }
+    // general: no extra fields — guests submit month/weekday/daypart after creation.
     const res = await sendJSON(api, "POST", "/api/events", body);
     setSaving(false);
     if (!res.ok) {
@@ -110,13 +111,16 @@ export function NewEvent() {
             <button type="button" className={`chip ${schedulingMode === "fixed" ? "on" : ""}`}
               data-testid="sched-fixed" onClick={() => setSchedulingMode("fixed")}>I'll set a time</button>
             <button type="button" className={`chip ${schedulingMode === "poll" ? "on" : ""}`}
-              data-testid="sched-poll" onClick={() => setSchedulingMode("poll")}>Poll for availability</button>
+              data-testid="sched-poll" onClick={() => setSchedulingMode("poll")}>Poll specific times</button>
+            <button type="button" className={`chip ${schedulingMode === "general" ? "on" : ""}`}
+              data-testid="sched-general" onClick={() => setSchedulingMode("general")}>Poll general availability</button>
           </div>
 
-          {schedulingMode === "fixed" ? (
+          {schedulingMode === "fixed" && (
             <input type="datetime-local" className="input" style={{ marginTop: 8 }}
               data-testid="fixed-time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
-          ) : (
+          )}
+          {schedulingMode === "poll" && (
             <div className="stack" style={{ marginTop: 8 }}>
               {options.map((o, i) => (
                 <input key={i} type="datetime-local" className="input" data-testid={`poll-option-${i}`}
@@ -125,6 +129,12 @@ export function NewEvent() {
               <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
                 data-testid="add-option" onClick={() => setOptions((o) => [...o, ""])}>+ Add time</button>
             </div>
+          )}
+          {schedulingMode === "general" && (
+            <p className="muted small" style={{ marginTop: 8 }}>
+              Guests pick their ideal months, days of the week, and times of day
+              (early morning → night). You'll lock in a time from the results.
+            </p>
           )}
         </div>
 

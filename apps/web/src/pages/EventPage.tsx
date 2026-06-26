@@ -2,13 +2,17 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Attendee,
+  DAYPARTS,
   EventDetail,
+  GeneralVote,
   PrefAnswer,
   TimeOption,
   Vote,
+  WEEKDAYS,
   fmtDate,
   fmtDateTime,
   getJSON,
+  nextMonths,
   sendJSON,
   useApi,
 } from "../lib";
@@ -72,6 +76,9 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
       {e.scheduling_mode === "poll" && e.status === "polling" && (
         <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} reload={reload} />
       )}
+      {e.scheduling_mode === "general" && e.status === "polling" && (
+        <GeneralPoll eventId={e.id} votes={data.general_votes} viewerId={data.viewer_id} reload={reload} />
+      )}
       <PrefFlow eventId={e.id} type={e.event_type} answers={data.preference_answers.filter((a) => a.user_id === data.viewer_id)} reload={reload} />
     </div>
   );
@@ -132,6 +139,80 @@ function PollVote({ eventId, options, votes, viewerId, reload }: {
         </div>
       ))}
       <button className="btn soft sm" style={{ alignSelf: "flex-start" }} data-testid="save-votes" onClick={save}>
+        {saved ? "Saved ✓" : "Save availability"}
+      </button>
+    </div>
+  );
+}
+
+// General-availability poll: the guest picks ideal months, weekdays, and times
+// of day. The whole set is saved at once (replace semantics on the API).
+function GeneralPoll({ eventId, votes, viewerId, reload }: {
+  eventId: string; votes: GeneralVote[]; viewerId: string; reload: () => void;
+}) {
+  const api = useApi();
+  const months = nextMonths(6);
+  const mine = votes.filter((v) => v.user_id === viewerId);
+  const pick = (dim: GeneralVote["dimension"]) =>
+    new Set(mine.filter((v) => v.dimension === dim).map((v) => v.value));
+
+  const [sel, setSel] = useState<Record<string, Set<string>>>({
+    month: pick("month"),
+    weekday: pick("weekday"),
+    daypart: pick("daypart"),
+  });
+  const [saved, setSaved] = useState(false);
+
+  function toggle(dim: string, value: string) {
+    setSaved(false);
+    setSel((s) => {
+      const next = new Set(s[dim]);
+      next.has(value) ? next.delete(value) : next.add(value);
+      return { ...s, [dim]: next };
+    });
+  }
+
+  async function save() {
+    await sendJSON(api, "POST", `/api/events/${eventId}/general-votes`, {
+      months: [...sel.month],
+      weekdays: [...sel.weekday].map(Number),
+      dayparts: [...sel.daypart],
+    });
+    setSaved(true);
+    reload();
+  }
+
+  return (
+    <div className="card stack">
+      <h3>When works for you?</h3>
+      <div>
+        <div className="muted small" style={{ marginBottom: 6 }}>Ideal months</div>
+        <div className="row wrap">
+          {months.map((m, i) => (
+            <button key={m.value} className={`chip sm ${sel.month.has(m.value) ? "on" : ""}`}
+              data-testid={`gp-month-${i}`} onClick={() => toggle("month", m.value)}>{m.label}</button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="muted small" style={{ marginBottom: 6 }}>Days that work</div>
+        <div className="row wrap">
+          {WEEKDAYS.map((d, wd) => (
+            <button key={wd} className={`chip sm ${sel.weekday.has(String(wd)) ? "on" : ""}`}
+              data-testid={`gp-weekday-${wd}`} onClick={() => toggle("weekday", String(wd))}>{d}</button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="muted small" style={{ marginBottom: 6 }}>Times of day</div>
+        <div className="row wrap">
+          {DAYPARTS.map((dp) => (
+            <button key={dp.value} className={`chip sm ${sel.daypart.has(dp.value) ? "on" : ""}`}
+              data-testid={`gp-daypart-${dp.value}`} onClick={() => toggle("daypart", dp.value)}>{dp.label}</button>
+          ))}
+        </div>
+      </div>
+      <button className="btn soft sm" style={{ alignSelf: "flex-start" }} data-testid="save-general" onClick={save}>
         {saved ? "Saved ✓" : "Save availability"}
       </button>
     </div>
@@ -212,6 +293,9 @@ function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
       {e.scheduling_mode === "poll" && e.status === "polling" && (
         <PollResults data={data} reload={reload} />
       )}
+      {e.scheduling_mode === "general" && e.status === "polling" && (
+        <GeneralResults data={data} reload={reload} />
+      )}
       <Guests attendees={data.attendees} />
       <AnswerSummary data={data} />
     </div>
@@ -260,6 +344,68 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Aggregates the general poll (months / weekdays / dayparts) and lets the host
+// read the group's preference, then finalize a concrete time.
+function GeneralResults({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const [when, setWhen] = useState("");
+
+  const voters = new Set(data.general_votes.map((v) => v.user_id)).size;
+  const counts = (dim: GeneralVote["dimension"]) => {
+    const m = new Map<string, number>();
+    data.general_votes.filter((v) => v.dimension === dim).forEach((v) => m.set(v.value, (m.get(v.value) ?? 0) + 1));
+    return m;
+  };
+  const monthLabel = (v: string) => {
+    const [y, mo] = v.split("-").map(Number);
+    return new Date(y, mo - 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  };
+  const dayName = (v: string) => WEEKDAYS[Number(v)] ?? v;
+  const daypartLabel = (v: string) => DAYPARTS.find((d) => d.value === v)?.label ?? v;
+
+  const ranked = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1]);
+  const max = (m: Map<string, number>) => Math.max(1, ...m.values());
+
+  function Bars({ dim, label }: { dim: GeneralVote["dimension"]; label: (v: string) => string }) {
+    const m = counts(dim);
+    const top = max(m);
+    const rows = ranked(m);
+    if (rows.length === 0) return <p className="muted small">No picks yet.</p>;
+    return (
+      <div className="stack" style={{ gap: 4 }}>
+        {rows.map(([value, n]) => (
+          <div key={value} className="stack" style={{ gap: 2 }}>
+            <div className="row between"><span className="small">{label(value)}</span><span className="muted small">{n}</span></div>
+            <div className="tally"><span style={{ width: `${(n / top) * 100}%` }} /></div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  async function finalize() {
+    if (!when) return;
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, { starts_at: new Date(when).toISOString() });
+    reload();
+  }
+
+  return (
+    <div className="card stack">
+      <div className="row between"><h3>Group availability</h3><span className="muted small">{voters} responded</span></div>
+      <div><div className="section-h" style={{ margin: "0 0 4px" }}>Months</div><Bars dim="month" label={monthLabel} /></div>
+      <div><div className="section-h" style={{ margin: "0 0 4px" }}>Days</div><Bars dim="weekday" label={dayName} /></div>
+      <div><div className="section-h" style={{ margin: "0 0 4px" }}>Times of day</div><Bars dim="daypart" label={daypartLabel} /></div>
+      <div className="divider" />
+      <div className="muted small">Pick the final date &amp; time:</div>
+      <div className="row">
+        <input type="datetime-local" className="input" data-testid="general-finalize-time" value={when}
+          onChange={(ev) => setWhen(ev.target.value)} />
+        <button className="btn sm" data-testid="general-finalize" disabled={!when} onClick={finalize}>Finalize</button>
+      </div>
     </div>
   );
 }

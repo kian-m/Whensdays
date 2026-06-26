@@ -63,9 +63,7 @@ function EventRow({ e, onClick }: { e: Event; onClick: () => void }) {
             : <Pill kind="scheduled">Set</Pill>}
         </div>
         <div className="muted small">
-          {labelFor(e.event_type)} · {e.scheduling_mode === "poll" && e.status === "polling"
-            ? "Finding a time"
-            : fmtDateTime(e.starts_at)}
+          {labelFor(e.event_type)} · {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
         </div>
         <div className="muted small">
           {e.location_mode === "find_venue" ? "📍 Venue TBD" : `📍 ${e.location_address || "Host's place"}`}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,6 +51,15 @@ func parseTS(s string) (pgtype.Timestamptz, bool) {
 	ts.Time = t
 	ts.Valid = true
 	return ts, true
+}
+
+// dayparts are the coarse time-of-day buckets used by general-availability polls.
+var dayparts = []string{"early_morning", "morning", "noon", "afternoon", "evening", "night"}
+
+// validMonth checks a "YYYY-MM" value.
+func validMonth(s string) bool {
+	t, err := time.Parse("2006-01", s)
+	return err == nil && t.Year() >= 2000 && t.Year() <= 2100
 }
 
 func uuidStr(u pgtype.UUID) string {
@@ -236,7 +246,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid location_mode"})
 		return
 	}
-	if !oneOf(in.SchedulingMode, "fixed", "poll") {
+	if !oneOf(in.SchedulingMode, "fixed", "poll", "general") {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid scheduling_mode"})
 		return
 	}
@@ -246,7 +256,8 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress, SchedulingMode: in.SchedulingMode,
 	}
 	var options []pgtype.Timestamptz
-	if in.SchedulingMode == "fixed" {
+	switch in.SchedulingMode {
+	case "fixed":
 		ts, ok := parseTS(in.StartsAt)
 		if !ok {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "fixed events need a valid starts_at"})
@@ -254,7 +265,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		}
 		params.StartsAt = ts
 		params.Status = "scheduled"
-	} else {
+	case "poll":
 		if len(in.TimeOptions) < 1 || len(in.TimeOptions) > 20 {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "polls need 1-20 time options"})
 			return
@@ -267,6 +278,9 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			}
 			options = append(options, ts)
 		}
+		params.Status = "polling"
+	case "general":
+		// Guests submit coarse month/weekday/daypart preferences after creation.
 		params.Status = "polling"
 	}
 
@@ -320,6 +334,11 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "list votes", err)
 		return
 	}
+	generalVotes, err := s.queries.ListGeneralVotesForEvent(r.Context(), id)
+	if err != nil {
+		s.internal(w, "list general votes", err)
+		return
+	}
 	attendees, err := s.queries.ListAttendees(r.Context(), id)
 	if err != nil {
 		s.internal(w, "list attendees", err)
@@ -356,6 +375,7 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		"viewer_id":          uid,
 		"time_options":       options,
 		"votes":              votes,
+		"general_votes":      generalVotes,
 		"attendees":          attendees,
 		"preference_answers": answers,
 	})
@@ -431,6 +451,84 @@ func (s *server) handleVotes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.analytics.Capture(uid, "poll_voted", map[string]any{"event_id": r.PathValue("id"), "votes": len(in.Votes)})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleGeneralVotes saves a guest's coarse availability for a general poll:
+// ideal months (YYYY-MM), weekdays (0-6), and dayparts. The guest's whole set is
+// replaced each save.
+func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	id, ok := parseUUID(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
+		return
+	}
+	var in struct {
+		Months   []string `json:"months"`
+		Weekdays []int16  `json:"weekdays"`
+		Dayparts []string `json:"dayparts"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if len(in.Months) > 24 || len(in.Weekdays) > 7 || len(in.Dayparts) > len(dayparts) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "too many selections"})
+		return
+	}
+	for _, m := range in.Months {
+		if !validMonth(m) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid month"})
+			return
+		}
+	}
+	for _, wd := range in.Weekdays {
+		if wd < 0 || wd > 6 {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid weekday"})
+			return
+		}
+	}
+	for _, dp := range in.Dayparts {
+		if !oneOf(dp, dayparts...) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid daypart"})
+			return
+		}
+	}
+
+	if err := s.queries.ClearGeneralVotes(r.Context(), db.ClearGeneralVotesParams{EventID: id, UserID: uid}); err != nil {
+		s.internal(w, "clear general votes", err)
+		return
+	}
+	add := func(dimension, value string) bool {
+		if err := s.queries.AddGeneralVote(r.Context(), db.AddGeneralVoteParams{
+			EventID: id, UserID: uid, Dimension: dimension, Value: value,
+		}); err != nil {
+			s.internal(w, "add general vote", err)
+			return false
+		}
+		return true
+	}
+	for _, m := range in.Months {
+		if !add("month", m) {
+			return
+		}
+	}
+	for _, wd := range in.Weekdays {
+		if !add("weekday", strconv.Itoa(int(wd))) {
+			return
+		}
+	}
+	for _, dp := range in.Dayparts {
+		if !add("daypart", dp) {
+			return
+		}
+	}
+	s.analytics.Capture(uid, "general_voted", map[string]any{
+		"event_id": r.PathValue("id"),
+		"months":   len(in.Months),
+		"weekdays": len(in.Weekdays),
+		"dayparts": len(in.Dayparts),
+	})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

@@ -53,6 +53,29 @@ func (q *Queries) AddAvailabilitySlot(ctx context.Context, arg AddAvailabilitySl
 	return err
 }
 
+const addGeneralVote = `-- name: AddGeneralVote :exec
+INSERT INTO event_general_votes (event_id, user_id, dimension, value)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT DO NOTHING
+`
+
+type AddGeneralVoteParams struct {
+	EventID   pgtype.UUID `json:"event_id"`
+	UserID    string      `json:"user_id"`
+	Dimension string      `json:"dimension"`
+	Value     string      `json:"value"`
+}
+
+func (q *Queries) AddGeneralVote(ctx context.Context, arg AddGeneralVoteParams) error {
+	_, err := q.db.Exec(ctx, addGeneralVote,
+		arg.EventID,
+		arg.UserID,
+		arg.Dimension,
+		arg.Value,
+	)
+	return err
+}
+
 const addTimeOption = `-- name: AddTimeOption :one
 
 INSERT INTO event_time_options (event_id, starts_at)
@@ -101,6 +124,23 @@ WHERE user_id = $1
 
 func (q *Queries) ClearAvailability(ctx context.Context, userID string) error {
 	_, err := q.db.Exec(ctx, clearAvailability, userID)
+	return err
+}
+
+const clearGeneralVotes = `-- name: ClearGeneralVotes :exec
+
+DELETE FROM event_general_votes
+WHERE event_id = $1 AND user_id = $2
+`
+
+type ClearGeneralVotesParams struct {
+	EventID pgtype.UUID `json:"event_id"`
+	UserID  string      `json:"user_id"`
+}
+
+// ====================== general poll votes ========================
+func (q *Queries) ClearGeneralVotes(ctx context.Context, arg ClearGeneralVotesParams) error {
+	_, err := q.db.Exec(ctx, clearGeneralVotes, arg.EventID, arg.UserID)
 	return err
 }
 
@@ -478,6 +518,38 @@ func (q *Queries) ListFriends(ctx context.Context, requesterID string) ([]ListFr
 	for rows.Next() {
 		var i ListFriendsRow
 		if err := rows.Scan(&i.FriendID, &i.DisplayName, &i.Handle); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGeneralVotesForEvent = `-- name: ListGeneralVotesForEvent :many
+SELECT user_id, dimension, value
+FROM event_general_votes
+WHERE event_id = $1
+`
+
+type ListGeneralVotesForEventRow struct {
+	UserID    string `json:"user_id"`
+	Dimension string `json:"dimension"`
+	Value     string `json:"value"`
+}
+
+func (q *Queries) ListGeneralVotesForEvent(ctx context.Context, eventID pgtype.UUID) ([]ListGeneralVotesForEventRow, error) {
+	rows, err := q.db.Query(ctx, listGeneralVotesForEvent, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGeneralVotesForEventRow{}
+	for rows.Next() {
+		var i ListGeneralVotesForEventRow
+		if err := rows.Scan(&i.UserID, &i.Dimension, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

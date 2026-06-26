@@ -24,20 +24,22 @@ diff before committing).
 **Run:** 2026-06-26 · `make e2e-docker` · Chromium (Desktop Chrome), Playwright
 v1.49.1 · pinned `timezoneId: UTC`, `locale: en-US`.
 
-**Summary: ✅ 2 passed · 1 skipped · 0 failed · 0 flaky** (assertion pass)
+**Summary: ✅ 3 passed · 1 skipped · 0 failed · 0 flaky** (assertion pass)
 
 | Spec | Test | Asserts | Result | Time |
 |---|---|---|---|---|
-| `scheduler.spec.ts` | create an event, respond as a guest, host sees preferences | behavior | ✅ pass | 740 ms |
-| `scheduler.spec.ts` | create form visual baseline | visual (`new-event-form.png`) | ✅ pass | 443 ms |
+| `scheduler.spec.ts` | create an event, respond as a guest, host sees preferences | behavior | ✅ pass | 1.5 s |
+| `scheduler.spec.ts` | create a general-availability poll and respond | behavior | ✅ pass | 1.3 s |
+| `scheduler.spec.ts` | create form visual baseline | visual (`new-event-form.png`) | ✅ pass | 856 ms |
 | `screenshots.spec.ts` | capture scheduler pages | — (docs capture) | ⏭️ skipped | — |
 
 ```
-Running 3 tests using 2 workers
-  ✓  scheduler.spec.ts:41:3 › scheduler › create an event, respond as a guest, host sees preferences (740ms)
-  ✓  scheduler.spec.ts:70:3 › scheduler › create form visual baseline (443ms)
+Running 4 tests using 2 workers
+  ✓  scheduler.spec.ts:41:3 › scheduler › create an event, respond as a guest, host sees preferences (1.5s)
+  ✓  scheduler.spec.ts:70:3 › scheduler › create a general-availability poll and respond (1.3s)
+  ✓  scheduler.spec.ts:96:3 › scheduler › create form visual baseline (856ms)
   1 skipped
-  2 passed (2.2s)
+  3 passed (5.8s)
 ```
 
 ## What each test covers
@@ -55,6 +57,16 @@ The core happy path, end to end:
 
 Exercises: `PUT /api/profile`, `POST /api/events`, `GET /api/events/{id}`
 (role-aware), `POST /api/events/{id}/rsvp`, `POST /api/events/{id}/preferences`.
+
+### `scheduler.spec.ts` › create a general-availability poll and respond
+1. Create an event with the **general** scheduling mode.
+2. Preview as guest → RSVP → pick an ideal **month**, **weekday**, and **time of
+   day**, then save.
+3. Back in the host view, assert the **Group availability** aggregate reflects the
+   pick (e.g. "Evening" appears).
+
+Exercises: `POST /api/events` (general mode), `POST /api/events/{id}/general-votes`,
+and the role-aware aggregation in `GET /api/events/{id}`.
 
 ### `scheduler.spec.ts` › create form visual baseline
 Navigates to `/new`, selects a known event type, and snapshots the create form
