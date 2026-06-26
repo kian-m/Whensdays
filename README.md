@@ -44,6 +44,11 @@ docker compose -f compose.demo.yaml down -v     # wipe the database too
 
 The end-to-end tests and their latest results are documented in **[E2E.md](E2E.md)**.
 
+**Testing with two users (dev mode):** open the app with `?as=<name>` to act as that
+user (the API trusts an `X-Dev-User` header in dev). The id is stored per browser
+tab, so two tabs can be two people at once — e.g. visit `http://localhost:8080/?as=alice`
+in one tab and `?as=bob` in another to test friend requests, invites, and RSVPs.
+
 ---
 
 ## Features (manual navigation guide)

@@ -21,12 +21,27 @@ import { ProfileSetup } from "./pages/ProfileSetup";
 // local/CI runs). Default (prod) uses Clerk. See main.tsx.
 export const DEV_AUTH = import.meta.env.VITE_AUTH_MODE === "dev";
 
+// Dev-only multi-user switch: open the app with ?as=<name> to act as that user
+// (the API trusts the X-Dev-User header in dev). Stored per-TAB in sessionStorage
+// so two tabs/windows can be two different people at once — handy for testing
+// friends, invites, and RSVPs. Defaults to "demo-user". No effect with Clerk.
+function resolveDevUser(): string {
+  if (!DEV_AUTH) return "";
+  const q = new URLSearchParams(window.location.search).get("as");
+  if (q) sessionStorage.setItem("clsandbox.devUser", q.trim());
+  return sessionStorage.getItem("clsandbox.devUser") || "demo-user";
+}
+export const DEV_USER = resolveDevUser();
+
+const devApi: ApiFn = (p, i) =>
+  fetch(p, { ...i, headers: { ...(i?.headers as Record<string, string>), "X-Dev-User": DEV_USER } });
+
 export function App() {
   return (
     <BrowserRouter>
       <AnalyticsPageviews />
       {DEV_AUTH ? (
-        <ApiContext.Provider value={(p, i) => fetch(p, i)}>
+        <ApiContext.Provider value={devApi}>
           <ProfileGate />
         </ApiContext.Provider>
       ) : (
@@ -161,6 +176,7 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
             <NavLink to="/" end>Events</NavLink>
             <NavLink to="/friends">Friends</NavLink>
             <NavLink to="/profile">Profile</NavLink>
+            {DEV_AUTH && <span className="pill polling" title="dev user (?as=…)">dev: {DEV_USER}</span>}
             {!DEV_AUTH && <UserButton />}
           </div>
         )}
