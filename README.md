@@ -42,6 +42,8 @@ docker compose -f compose.demo.yaml down -v     # wipe the database too
 | Hot-reload dev (native) | `make dev` | needs Go + Node + pnpm; uses real Clerk |
 | Production-shaped stack | `make up` | real Clerk; see `docs/DEPLOY.md` |
 
+The end-to-end tests and their latest results are documented in **[E2E.md](E2E.md)**.
+
 ---
 
 ## Features (manual navigation guide)

@@ -9,6 +9,10 @@ const DEV_AUTH = process.env.E2E_AUTH_MODE === "dev";
 // stubbed so no Clerk is needed. Idempotent: the dev DB persists across the
 // two-pass (baseline + assert) run, so we tolerate pre-existing profile/data.
 test.describe("scheduler", () => {
+  // These tests share the dev stub user (demo-user) and its profile, so run them
+  // in order rather than racing two workers over the same first-run setup.
+  test.describe.configure({ mode: "serial" });
+
   test.beforeEach(async ({ page }) => {
     if (DEV_AUTH) return;
     await setupClerkTestingToken({ page });
