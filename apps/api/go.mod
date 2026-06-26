@@ -5,11 +5,15 @@ go 1.23
 require (
 	github.com/clerk/clerk-sdk-go/v2 v2.3.0
 	github.com/jackc/pgx/v5 v5.7.1
+	github.com/posthog/posthog-go v1.16.2
 	github.com/pressly/goose/v3 v3.24.1
 )
 
 require (
 	github.com/go-jose/go-jose/v3 v3.0.3 // indirect
+	github.com/goccy/go-json v0.10.5 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -18,5 +22,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 )

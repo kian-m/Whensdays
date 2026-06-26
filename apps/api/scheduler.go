@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -49,6 +50,21 @@ func parseTS(s string) (pgtype.Timestamptz, bool) {
 	ts.Time = t
 	ts.Valid = true
 	return ts, true
+}
+
+func uuidStr(u pgtype.UUID) string {
+	if !u.Valid {
+		return ""
+	}
+	b := u.Bytes
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// handleFlags returns every PostHog feature flag evaluated for the current user
+// (empty object when analytics is disabled).
+func (s *server) handleFlags(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	writeJSON(w, http.StatusOK, s.analytics.AllFlags(uid))
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
@@ -115,6 +131,8 @@ func (s *server) handleUpsertProfile(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "upsert profile", err)
 		return
 	}
+	s.analytics.Identify(uid, map[string]any{"handle": p.Handle, "name": p.DisplayName})
+	s.analytics.Capture(uid, "profile_updated", map[string]any{"handle": p.Handle})
 	writeJSON(w, http.StatusOK, p)
 }
 
@@ -263,6 +281,14 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s.analytics.Capture(uid, "event_created", map[string]any{
+		"event_id":        uuidStr(ev.ID),
+		"event_type":      ev.EventType,
+		"location_mode":   ev.LocationMode,
+		"scheduling_mode": ev.SchedulingMode,
+		"status":          ev.Status,
+		"time_options":    len(options),
+	})
 	writeJSON(w, http.StatusCreated, ev)
 }
 
@@ -319,6 +345,11 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 	if isHost {
 		role = "host"
 	}
+	s.analytics.Capture(uid, "event_viewed", map[string]any{
+		"event_id": uuidStr(ev.ID),
+		"role":     role,
+		"status":   ev.Status,
+	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"event":              ev,
 		"role":               role,
@@ -352,6 +383,7 @@ func (s *server) handleRsvp(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "rsvp", err)
 		return
 	}
+	s.analytics.Capture(uid, "rsvp_submitted", map[string]any{"event_id": r.PathValue("id"), "rsvp": in.Rsvp})
 	writeJSON(w, http.StatusOK, a)
 }
 
@@ -398,6 +430,7 @@ func (s *server) handleVotes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s.analytics.Capture(uid, "poll_voted", map[string]any{"event_id": r.PathValue("id"), "votes": len(in.Votes)})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -431,6 +464,7 @@ func (s *server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s.analytics.Capture(uid, "preferences_submitted", map[string]any{"event_id": r.PathValue("id"), "answers": len(in.Answers)})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -462,6 +496,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "finalize", err)
 		return
 	}
+	s.analytics.Capture(uid, "event_finalized", map[string]any{"event_id": r.PathValue("id")})
 	writeJSON(w, http.StatusOK, ev)
 }
 
@@ -525,6 +560,7 @@ func (s *server) handleAddFriend(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "create friend request", err)
 		return
 	}
+	s.analytics.Capture(uid, "friend_requested", map[string]any{})
 	writeJSON(w, http.StatusCreated, f)
 }
 
@@ -544,6 +580,7 @@ func (s *server) handleAcceptFriend(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "accept friend", err)
 		return
 	}
+	s.analytics.Capture(uid, "friend_accepted", map[string]any{})
 	writeJSON(w, http.StatusOK, f)
 }
 

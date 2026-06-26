@@ -11,6 +11,14 @@ ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 # VITE_AUTH_MODE=dev builds a hermetic, Clerk-free bundle for local/CI E2E.
 ARG VITE_AUTH_MODE
 ENV VITE_AUTH_MODE=$VITE_AUTH_MODE
+# PostHog analytics (public; baked into the static bundle by design). Unset =>
+# analytics disabled (no-op), which is what hermetic E2E/docs builds use.
+ARG VITE_PUBLIC_POSTHOG_KEY
+ENV VITE_PUBLIC_POSTHOG_KEY=$VITE_PUBLIC_POSTHOG_KEY
+ARG VITE_PUBLIC_POSTHOG_HOST
+ENV VITE_PUBLIC_POSTHOG_HOST=$VITE_PUBLIC_POSTHOG_HOST
+ARG VITE_PUBLIC_POSTHOG_RECORD
+ENV VITE_PUBLIC_POSTHOG_RECORD=$VITE_PUBLIC_POSTHOG_RECORD
 RUN pnpm build
 
 # --- runtime stage ---

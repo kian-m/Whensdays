@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
+import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import {
   SignedIn,
   SignedOut,
@@ -9,6 +9,7 @@ import {
 } from "@clerk/clerk-react";
 import "./styles.css";
 import { ApiContext, ApiFn, Profile, ProfileContext, useApi } from "./lib";
+import { analytics } from "./analytics";
 import { Home } from "./pages/Home";
 import { NewEvent } from "./pages/NewEvent";
 import { EventPage } from "./pages/EventPage";
@@ -23,6 +24,7 @@ export const DEV_AUTH = import.meta.env.VITE_AUTH_MODE === "dev";
 export function App() {
   return (
     <BrowserRouter>
+      <AnalyticsPageviews />
       {DEV_AUTH ? (
         <ApiContext.Provider value={(p, i) => fetch(p, i)}>
           <ProfileGate />
@@ -43,6 +45,15 @@ export function App() {
   );
 }
 
+// Fires a PostHog $pageview on every client-side route change (SPA).
+function AnalyticsPageviews() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    analytics.pageview();
+  }, [pathname]);
+  return null;
+}
+
 function ClerkApiProvider({ children }: { children?: React.ReactNode }) {
   const { getToken } = useAuth();
   // Every request carries the Clerk session token; the API verifies it.
@@ -60,6 +71,10 @@ function ClerkApiProvider({ children }: { children?: React.ReactNode }) {
 }
 
 function Landing() {
+  // Signed out: clear any prior identity from this browser.
+  useEffect(() => {
+    analytics.reset();
+  }, []);
   return (
     <div className="app">
       <div className="hero stack" style={{ alignItems: "center" }}>
@@ -100,6 +115,11 @@ function ProfileGate() {
       cancelled = true;
     };
   }, [api]);
+
+  // Tie analytics to the app user id (same id the API uses) once known.
+  useEffect(() => {
+    if (profile) analytics.identify(profile.user_id, { handle: profile.handle });
+  }, [profile]);
 
   if (state === "loading") return <div className="app"><p className="muted" style={{ marginTop: "3rem" }}>Loading…</p></div>;
   if (state === "needs-setup")

@@ -14,6 +14,7 @@ import {
 } from "../lib";
 import { QUESTIONS, emojiFor, labelFor, questionLabel } from "../scheduler/questions";
 import { BackLink, Loading, Pill, useAsync } from "../ui";
+import { EVENTS, analytics } from "../analytics";
 
 export function EventPage() {
   const { id } = useParams();
@@ -52,7 +53,7 @@ export function EventPage() {
 
       {data.role === "host" && (
         <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="preview-toggle"
-          onClick={() => setPreview((p) => !p)}>
+          onClick={() => setPreview((p) => { analytics.capture(EVENTS.previewToggled, { to: !p ? "guest" : "host" }); return !p; })}>
           {preview ? "← Back to host view" : "👀 Preview as guest"}
         </button>
       )}
@@ -226,7 +227,7 @@ function ShareLink({ eventId }: { eventId: string }) {
       <p className="muted small">Share this link — anyone who opens it can RSVP.</p>
       <div className="row">
         <input className="input" readOnly value={url} data-testid="share-link" onFocus={(ev) => ev.currentTarget.select()} />
-        <button className="btn soft sm" onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); }}>
+        <button className="btn soft sm" onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); analytics.capture(EVENTS.shareLinkCopied); }}>
           {copied ? "Copied" : "Copy"}
         </button>
       </div>

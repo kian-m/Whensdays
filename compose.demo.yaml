@@ -27,6 +27,10 @@ services:
       DATABASE_URL: postgres://clsandbox:clsandbox@db:5432/clsandbox?sslmode=disable
       AUTH_MODE: dev # stubbed auth — local navigation only
       RUN_MIGRATIONS: "true" # apply schema on boot
+      # Optional: export these in your shell to send demo analytics to PostHog.
+      POSTHOG_HOST: ${POSTHOG_HOST:-https://us.i.posthog.com}
+      POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
+      POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -37,6 +41,10 @@ services:
       context: ./apps/web
       args:
         VITE_AUTH_MODE: dev # Clerk-free bundle
+        # Optional: export these to test the web analytics locally.
+        VITE_PUBLIC_POSTHOG_KEY: ${VITE_PUBLIC_POSTHOG_KEY:-}
+        VITE_PUBLIC_POSTHOG_HOST: ${VITE_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
+        VITE_PUBLIC_POSTHOG_RECORD: ${VITE_PUBLIC_POSTHOG_RECORD:-true}
     ports:
       - "8080:80"
     depends_on:

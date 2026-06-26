@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
 
+	"github.com/clsandbox/api/internal/analytics"
 	"github.com/clsandbox/api/internal/db"
 )
 
@@ -34,8 +36,9 @@ type ctxKey string
 const userIDKey ctxKey = "userID"
 
 type server struct {
-	queries *db.Queries
-	logger  *slog.Logger
+	queries   *db.Queries
+	logger    *slog.Logger
+	analytics *analytics.Client
 }
 
 func main() {
@@ -61,7 +64,16 @@ func main() {
 	}
 	defer pool.Close()
 
-	s := &server{queries: db.New(pool), logger: logger}
+	an := analytics.New(analytics.Config{
+		APIKey:         os.Getenv("POSTHOG_API_KEY"),
+		Host:           envOr("POSTHOG_HOST", "https://us.i.posthog.com"),
+		PersonalAPIKey: os.Getenv("POSTHOG_PERSONAL_API_KEY"),
+		Env:            envOr("APP_ENV", "development"),
+		Release:        os.Getenv("APP_VERSION"),
+	}, logger)
+	defer an.Close()
+
+	s := &server{queries: db.New(pool), logger: logger, analytics: an}
 	auth := s.authMiddleware()
 
 	mux := http.NewServeMux()
@@ -86,10 +98,14 @@ func main() {
 	mux.Handle("POST /api/friends/{id}/accept", auth(http.HandlerFunc(s.handleAcceptFriend)))
 	mux.Handle("GET /api/friends/{id}/availability", auth(http.HandlerFunc(s.handleFriendAvailability)))
 
+	// Server-side feature flags evaluated for the current user (see analytics).
+	mux.Handle("GET /api/flags", auth(http.HandlerFunc(s.handleFlags)))
+
 	port := envOr("API_PORT", "8080")
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           securityHeaders(requestLogger(logger, mux)),
+		// telemetry (innermost) captures per-request metrics to PostHog.
+		Handler:           securityHeaders(requestLogger(logger, s.telemetry(mux))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
@@ -243,6 +259,46 @@ func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		logger.Info("request", "method", r.Method, "path", r.URL.Path, "dur_ms", time.Since(start).Milliseconds())
+	})
+}
+
+// statusRecorder captures the response status for telemetry.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// telemetry sends one PostHog event per request (method, matched route, status,
+// duration) as an operational signal — the raw material for latency/error-rate
+// dashboards and anomaly alerts. It wraps the mux so it sees the final status and
+// can resolve the low-cardinality route pattern. No-op when analytics is off.
+func (s *server) telemetry(mux *http.ServeMux) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.analytics.Enabled() {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		start := time.Now()
+		mux.ServeHTTP(rec, r)
+		if r.URL.Path == "/healthz" {
+			return // skip health-check noise
+		}
+		_, route := mux.Handler(r) // matched pattern, e.g. "GET /api/events/{id}"
+		s.analytics.CaptureServer("api_request", map[string]any{
+			"method":       r.Method,
+			"route":        route,
+			"path":         r.URL.Path,
+			"status":       rec.status,
+			"status_class": fmt.Sprintf("%dxx", rec.status/100),
+			"ok":           rec.status < 400,
+			"duration_ms":  time.Since(start).Milliseconds(),
+		})
 	})
 }
 

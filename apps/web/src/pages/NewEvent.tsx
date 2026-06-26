@@ -1,13 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Event, EventType, sendJSON, useApi } from "../lib";
 import { EVENT_TYPES } from "../scheduler/questions";
+import { EVENTS, analytics } from "../analytics";
 
 // Stage one of an event's life: the host creates it, picks a location style, and
 // either sets a fixed time or opens an availability poll with candidate times.
 export function NewEvent() {
   const api = useApi();
   const nav = useNavigate();
+
+  useEffect(() => {
+    analytics.capture(EVENTS.createEventOpened);
+  }, []);
 
   const [title, setTitle] = useState("");
   const [type, setType] = useState<EventType>("dinner");

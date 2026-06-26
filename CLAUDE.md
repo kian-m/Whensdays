@@ -97,6 +97,7 @@ Local toolchains: Node, pnpm, and Docker are present. **Go is not installed loca
 - **Auth.** The React app wraps everything in `ClerkProvider`; protected UI sits inside `<SignedIn>`. Every API call attaches the Clerk session token (`Authorization: Bearer`). On the API, protected routes are wrapped with `clerkhttp.RequireHeaderAuthorization()`; handlers read the user id via `userIDFrom(ctx)` (the Clerk `sub`) and scope all queries to it. Never trust a user id from the request body — always from the verified token.
 - **API design.** `apps/api/main.go` connects a `pgxpool`, builds `*db.Queries`, and wires routes on the stdlib mux with `securityHeaders` + `requestLogger` middleware and graceful shutdown. Handlers hang off `*server`, return JSON via `writeJSON`, and bound request bodies with `MaxBytesReader`. Keep dependencies minimal — `pgx` is the only direct one.
 - **Data flow (the Notes feature is the reference example).** Define schema in `db/migrations/*.sql` → write SQL in `db/query/*.sql` → `make generate` produces type-safe Go in `internal/db` → call it from a handler. Never hand-write SQL strings in handlers or edit `internal/db` by hand.
+- **Analytics.** PostHog is wired front and back (`apps/web/src/analytics.ts`, `apps/api/internal/analytics`). Both no-op when unconfigured (dev/E2E). Backend owns authoritative business events + automatic `api_request` telemetry; frontend owns autocapture, pageviews, masked replay, and intent events. Distinct id = the app user id on both sides. **See [`ANALYTICS.md`](ANALYTICS.md).**
 - **Containers.** Each app has a multi-stage Dockerfile: build in a full image, ship a minimal one (`scratch` for api as non-root `65534`, `nginx:alpine` for web). This is what makes hosting cheap and the attack surface small.
 
 ## The non-negotiable workflow: a feature = code + a visual E2E test
@@ -104,9 +105,10 @@ Local toolchains: Node, pnpm, and Docker are present. **Go is not installed loca
 For every feature:
 
 1. Implement it (web and/or api).
-2. Add/extend a Playwright spec in `e2e/tests/` that asserts **behavior** (`expect(...).toHaveText`, etc.) **and** a screenshot (`expect(page).toHaveScreenshot(...)`).
-3. `make e2e` locally. New baselines are generated on first run — commit the `*-snapshots/` PNGs.
-4. CI re-runs the suite; a visual diff fails the build.
+2. **Instrument analytics** — capture the authoritative business event(s) in the API handler (`s.analytics.Capture`) and any UI/intent event on the web (`analytics.capture`, name in `EVENTS`). Both no-op when unconfigured. See the "Instrumenting a new feature" checklist in [`ANALYTICS.md`](ANALYTICS.md).
+3. Add/extend a Playwright spec in `e2e/tests/` that asserts **behavior** (`expect(...).toHaveText`, etc.) **and** a screenshot (`expect(page).toHaveScreenshot(...)`).
+4. `make e2e` locally. New baselines are generated on first run — commit the `*-snapshots/` PNGs.
+5. CI re-runs the suite; a visual diff fails the build.
 
 ### Run the whole thing with only Docker (nothing else installed)
 

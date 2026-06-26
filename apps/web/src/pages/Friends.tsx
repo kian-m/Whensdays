@@ -11,6 +11,7 @@ import {
   useApi,
 } from "../lib";
 import { Loading, useAsync } from "../ui";
+import { EVENTS, analytics } from "../analytics";
 
 type FriendsResp = { friends: Friend[]; incoming: FriendRequest[]; outgoing: FriendRequest[] };
 
@@ -91,9 +92,12 @@ function FriendCard({ friend }: { friend: Friend }) {
   const [avail, setAvail] = useState<{ slots: AvailabilitySlot[]; commitments: Commitment[] } | null>(null);
 
   async function toggle() {
-    if (!open && !avail) {
-      const res = await api(`/api/friends/${friend.friend_id}/availability`);
-      if (res.ok) setAvail(await res.json());
+    if (!open) {
+      analytics.capture(EVENTS.friendAvailabilityViewed);
+      if (!avail) {
+        const res = await api(`/api/friends/${friend.friend_id}/availability`);
+        if (res.ok) setAvail(await res.json());
+      }
     }
     setOpen((o) => !o);
   }
