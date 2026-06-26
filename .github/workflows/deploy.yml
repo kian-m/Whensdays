@@ -1,0 +1,67 @@
+name: deploy
+
+# Deploys on green main: API -> Cloud Run, web -> Cloudflare Pages.
+# Fill the env block + repo secrets once (see docs/DEPLOY.md). No long-lived
+# cloud keys: GCP auth uses Workload Identity Federation (OIDC).
+on:
+  push:
+    branches: [main]
+
+env:
+  GCP_PROJECT: your-gcp-project-id
+  GCP_REGION: us-central1
+  AR_REPO: clsandbox # Artifact Registry repo name
+  SERVICE: clsandbox-api # Cloud Run service name
+
+jobs:
+  deploy-api:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build & push image
+        run: |
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/${AR_REPO}/api:${GITHUB_SHA}"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE" apps/api
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --platform managed \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --port 8080 \
+            --set-secrets "DATABASE_URL=DATABASE_URL:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest"
+
+  deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Generate the single-origin proxy from /api/* to the Cloud Run API.
+      - run: echo "/api/*  ${{ secrets.API_PUBLIC_URL }}/api/:splat  200" > apps/web/public/_redirects
+      - run: pnpm build:web
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/web/dist --project-name=clsandbox

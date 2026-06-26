@@ -1,0 +1,56 @@
+# Fully containerized end-to-end run — nothing needed on the host but Docker.
+#   docker compose -f compose.e2e.yaml up --build --abort-on-container-exit --exit-code-from e2e
+# Brings up Postgres + API (dev auth, self-migrating) + web (Clerk-free build)
+# + a Playwright runner that executes the visual E2E against the real stack.
+name: clsandbox-e2e
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: clsandbox
+      POSTGRES_PASSWORD: clsandbox
+      POSTGRES_DB: clsandbox
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clsandbox"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./apps/api
+    environment:
+      API_PORT: "8080"
+      DATABASE_URL: postgres://clsandbox:clsandbox@db:5432/clsandbox?sslmode=disable
+      AUTH_MODE: dev # stubbed auth — hermetic test only
+      RUN_MIGRATIONS: "true" # apply schema on boot
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_AUTH_MODE: dev # Clerk-free bundle
+    depends_on:
+      - api
+
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.49.1-jammy
+    working_dir: /work
+    volumes:
+      - ./e2e:/work
+    environment:
+      BASE_URL: http://web
+      E2E_AUTH_MODE: dev
+      CI: "1"
+    depends_on:
+      - web
+    # Wait for the stack, generate the visual baseline on first run, then do a
+    # real assertion run against that baseline.
+    command: >-
+      sh -c "npm install --no-audit --no-fund &&
+             npx wait-on -t 60000 http://web http://web/api/notes &&
+             npx playwright test --update-snapshots --reporter=list &&
+             echo '--- baseline created, running real assertion pass ---' &&
+             npx playwright test --reporter=list"

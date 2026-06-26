@@ -1,0 +1,128 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  docs:
+    # Flag PRs that change app code without updating the docs. Bypass with
+    # "[skip-docs]" in the PR title when a change genuinely needs no doc update.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require doc updates for code changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if echo "$TITLE" | grep -qi '\[skip-docs\]'; then
+            echo "skip-docs flagged in PR title — skipping doc check"; exit 0
+          fi
+          changed=$(git diff --name-only "$BASE" "$HEAD")
+          echo "$changed"
+          if echo "$changed" | grep -q '^apps/' && ! echo "$changed" | grep -Eq '^(README\.md|CLAUDE\.md)$'; then
+            echo "::error::App code changed under apps/ but README.md / CLAUDE.md were not updated. Update the docs (or add [skip-docs] to the PR title)."
+            exit 1
+          fi
+          echo "docs check passed"
+
+  screenshots:
+    # Regenerate README feature screenshots from the live app and fail if the
+    # committed PNGs are stale. Keeps docs/screenshots in lockstep with the UI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regenerate screenshots
+        run: make docs-shots
+      - name: Fail if screenshots changed
+        run: |
+          if ! git diff --quiet -- docs/screenshots; then
+            echo "::error::docs/screenshots is out of date. Run 'make docs-shots' and commit the result."
+            git --no-pager diff --stat -- docs/screenshots
+            exit 1
+          fi
+          echo "screenshots are up to date"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feature-screenshots
+          path: docs/screenshots
+
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - run: go mod tidy # generates go.sum (committed locally via `make install`)
+        working-directory: apps/api
+      - run: go vet ./...
+        working-directory: apps/api
+      - run: go test ./...
+        working-directory: apps/api
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build:web
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    services:
+      db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: clsandbox
+          POSTGRES_PASSWORD: clsandbox
+          POSTGRES_DB: clsandbox
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U clsandbox"
+          --health-interval 5s --health-timeout 3s --health-retries 5
+    env:
+      DATABASE_URL: postgres://clsandbox:clsandbox@localhost:5432/clsandbox?sslmode=disable
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+      E2E_CLERK_USER_USERNAME: ${{ secrets.E2E_CLERK_USER_USERNAME }}
+      E2E_CLERK_USER_PASSWORD: ${{ secrets.E2E_CLERK_USER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - run: pnpm install --frozen-lockfile
+      - run: cd e2e && pnpm exec playwright install --with-deps chromium
+      - run: make migrate # apply schema to the service db
+      # Start api + web, wait for them, then run visual tests.
+      - run: |
+          (cd apps/api && go run . &)
+          pnpm dev:web &
+          npx wait-on http://localhost:5173 http://localhost:8080/healthz
+          pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report

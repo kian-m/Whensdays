@@ -1,0 +1,50 @@
+# Production-shaped stack: web (nginx) proxies /api -> api (Go) -> db (Postgres).
+# `make up` builds and runs it. Local hot-reload dev uses `make dev` + `make db-up`.
+#
+# In production the db is Neon (serverless Postgres); this local Postgres exists
+# only so the stack runs offline and CI has a database. Same DATABASE_URL shape.
+name: clsandbox
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: clsandbox
+      POSTGRES_PASSWORD: clsandbox
+      POSTGRES_DB: clsandbox
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clsandbox"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: ./apps/api
+    environment:
+      API_PORT: "8080"
+      APP_ENV: production
+      DATABASE_URL: postgres://clsandbox:clsandbox@db:5432/clsandbox?sslmode=disable
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+    expose:
+      - "8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

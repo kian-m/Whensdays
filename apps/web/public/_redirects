@@ -1,0 +1,5 @@
+# Cloudflare Pages: proxy /api/* to the deployed Cloud Run API so the app stays
+# single-origin (no CORS, same-origin cookies). The deploy workflow overwrites
+# this file with the real API URL from the API_PUBLIC_URL secret.
+# Format: /api/*  https://<api-host>/api/:splat  200
+/api/*  https://REPLACE_WITH_API_HOST/api/:splat  200

@@ -1,0 +1,47 @@
+# Run the app locally for manual navigation — only Docker required.
+#   docker compose -f compose.demo.yaml up --build -d
+#   open http://localhost:8080
+# Uses dev auth mode (no Clerk account needed). NOT for production.
+name: clsandbox-demo
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: clsandbox
+      POSTGRES_PASSWORD: clsandbox
+      POSTGRES_DB: clsandbox
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_demo:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clsandbox"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./apps/api
+    environment:
+      API_PORT: "8080"
+      DATABASE_URL: postgres://clsandbox:clsandbox@db:5432/clsandbox?sslmode=disable
+      AUTH_MODE: dev # stubbed auth — local navigation only
+      RUN_MIGRATIONS: "true" # apply schema on boot
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_AUTH_MODE: dev # Clerk-free bundle
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata_demo:

@@ -1,0 +1,246 @@
+// Package main is the clSandbox API: a minimal-dependency HTTP service built on
+// the Go 1.22+ stdlib router, backed by Postgres via pgx + sqlc-generated
+// queries, with authentication handled by Clerk.
+package main
+
+import (
+	"context"
+	"database/sql"
+	"embed"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/clerk/clerk-sdk-go/v2"
+	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
+	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for migrations
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pressly/goose/v3"
+
+	"github.com/clsandbox/api/internal/db"
+)
+
+//go:embed db/migrations/*.sql
+var migrationsFS embed.FS
+
+type ctxKey string
+
+const userIDKey ctxKey = "userID"
+
+type server struct {
+	queries *db.Queries
+	logger  *slog.Logger
+}
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	dbURL := mustEnv("DATABASE_URL")
+
+	// Optionally apply migrations on boot (used by containers/CI for a
+	// self-contained stack). Off by default.
+	if os.Getenv("RUN_MIGRATIONS") == "true" {
+		if err := runMigrations(dbURL); err != nil {
+			logger.Error("migrations", "err", err)
+			os.Exit(1)
+		}
+		logger.Info("migrations applied")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		logger.Error("db connect", "err", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	s := &server{queries: db.New(pool), logger: logger}
+	auth := s.authMiddleware()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", s.handleHealth)
+	mux.Handle("GET /api/notes", auth(http.HandlerFunc(s.handleListNotes)))
+	mux.Handle("POST /api/notes", auth(http.HandlerFunc(s.handleCreateNote)))
+
+	port := envOr("API_PORT", "8080")
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           securityHeaders(requestLogger(logger, mux)),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	go func() {
+		logger.Info("api listening", "port", port)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server error", "err", err)
+			os.Exit(1)
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("shutdown error", "err", err)
+	}
+	logger.Info("api stopped")
+}
+
+func runMigrations(dbURL string) error {
+	sqlDB, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		return err
+	}
+	defer sqlDB.Close()
+	goose.SetBaseFS(migrationsFS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
+	}
+	return goose.Up(sqlDB, "db/migrations")
+}
+
+// --- auth ---
+
+// authMiddleware returns the protection wrapper for /api routes. Default is
+// Clerk (verifies the session JWT). AUTH_MODE=dev swaps in a stub that trusts an
+// X-Dev-User header — for local/CI hermetic runs only, never production.
+func (s *server) authMiddleware() func(http.Handler) http.Handler {
+	if os.Getenv("AUTH_MODE") == "dev" {
+		s.logger.Warn("AUTH_MODE=dev: authentication is STUBBED — do not use in production")
+		return devAuth
+	}
+	clerk.SetKey(mustEnv("CLERK_SECRET_KEY"))
+	return clerkAuth
+}
+
+func devAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uid := r.Header.Get("X-Dev-User")
+		if uid == "" {
+			uid = "demo-user"
+		}
+		ctx := context.WithValue(r.Context(), userIDKey, uid)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func clerkAuth(next http.Handler) http.Handler {
+	require := clerkhttp.RequireHeaderAuthorization()
+	return require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := clerk.SessionClaimsFromContext(r.Context())
+		if !ok || claims.Subject == "" {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		ctx := context.WithValue(r.Context(), userIDKey, claims.Subject)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	}))
+}
+
+func userIDFrom(ctx context.Context) (string, bool) {
+	uid, ok := ctx.Value(userIDKey).(string)
+	return uid, ok && uid != ""
+}
+
+// --- handlers ---
+
+func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *server) handleListNotes(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFrom(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	notes, err := s.queries.ListNotes(r.Context(), userID)
+	if err != nil {
+		s.logger.Error("list notes", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusOK, notes)
+}
+
+func (s *server) handleCreateNote(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFrom(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	var in struct {
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	in.Body = strings.TrimSpace(in.Body)
+	if in.Body == "" {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "body is required"})
+		return
+	}
+	note, err := s.queries.CreateNote(r.Context(), db.CreateNoteParams{UserID: userID, Body: in.Body})
+	if err != nil {
+		s.logger.Error("create note", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, note)
+}
+
+// --- helpers & middleware ---
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		logger.Info("request", "method", r.Method, "path", r.URL.Path, "dur_ms", time.Since(start).Milliseconds())
+	})
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func mustEnv(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		slog.Error("missing required env var", "key", key)
+		os.Exit(1)
+	}
+	return v
+}

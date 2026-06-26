@@ -1,0 +1,21 @@
+# deps & build output
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+apps/api/bin/
+
+# test artifacts
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# misc
+*.log
+.DS_Store
+.idea/
