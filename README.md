@@ -2,11 +2,35 @@
 
 A clean, modern, full-stack monorepo — **React + Go + Postgres**, containerized end to end, where every feature ships with a visual end-to-end test. Built to be secure, fast, scalable, and cheap to host.
 
-This `main` branch is the reusable template. **Apps built on it live on their own branches** — browse them in the **[gallery](gallery/)** (each with a home-page screenshot). First one: [get-togethers](gallery/scheduler/README.md), a scheduling assistant, on `app/scheduler`.
+This `main` branch is the reusable template. **Every app built on it lives on its own branch** and is showcased below (full catalog in [`gallery/`](gallery/)).
+
+---
+
+## Apps
+
+Each app is built on this template and lives on its own branch. To run one, check it out and start the demo stack (`docker compose -f compose.demo.yaml up --build -d`, then http://localhost:8080 — dev auth, no Clerk needed).
+
+### get-togethers · `app/scheduler`
+
+A minimal scheduling assistant — host or attend dinners, drinks, movies, trivia and parties; set a time or poll for availability; answer quick per-event-type preference questions; add friends and see when they're free.
+
+[![get-togethers home](gallery/scheduler/screenshot.png)](gallery/scheduler/README.md)
+
+```bash
+git checkout app/scheduler   # details: gallery/scheduler/README.md
+```
+
+> _Adding an app: branch from `main`, build it, `make docs-shots`, then add a `gallery/<name>/` folder (screenshot + README) and a section here. See [`gallery/README.md`](gallery/README.md)._
+
+---
 
 > **Maintenance rule:** every code change must check this README. If behavior, features, routes, ports, or setup change, update the relevant section in the same commit. See [Keeping this README current](#keeping-this-readme-current).
 
 ---
+
+## The template
+
+Everything below documents the clSandbox scaffold itself — how to run it, its reference feature (Notes), architecture, and conventions. Apps inherit all of it.
 
 ## Run it (only Docker required)
 
