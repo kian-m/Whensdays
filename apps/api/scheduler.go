@@ -238,7 +238,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "title is required (max 140)"})
 		return
 	}
-	if !oneOf(in.EventType, "dinner", "drinks", "movie", "trivia", "party", "other") {
+	if !oneOf(in.EventType, "dinner", "drinks", "movie", "camping", "party", "trip", "other") {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid event_type"})
 		return
 	}

@@ -24,7 +24,7 @@ test.describe("docs screenshots", () => {
     await createFixed(page, "Sunday matinee", "movie", "2026-08-09T14:00");
     await createFixed(page, "Rooftop drinks", "drinks", "2026-08-14T18:30");
     await createFixed(page, "Friday dinner", "dinner", "2026-08-07T19:30");
-    await createPoll(page, "Trivia night", "trivia", ["2026-08-12T19:00", "2026-08-13T19:00"]);
+    await createPoll(page, "Camping weekend", "camping", ["2026-08-12T19:00", "2026-08-13T19:00"]);
 
     // Feature: home dashboard (this is the gallery home-page screenshot).
     await page.goto("/");

@@ -19,13 +19,17 @@ export const QUESTIONS: Record<EventType, Question[]> = {
     { key: "genre", prompt: "What genre are you in the mood for?", placeholder: "Horror, comedy, A24…" },
     { key: "seen", prompt: "Anything you've already seen?", placeholder: "So we don't pick it" },
   ],
-  trivia: [
-    { key: "team", prompt: "Team name ideas?", placeholder: "Quiz Khalifa, Les Quizerables…" },
-    { key: "category", prompt: "Your strongest category?", placeholder: "History, pop culture, science…" },
+  camping: [
+    { key: "sleep", prompt: "Tent, cabin, or RV?", placeholder: "Tent / cabin / RV" },
+    { key: "gear", prompt: "Bringing any gear?", placeholder: "Tent, cooler, chairs, marshmallows…" },
   ],
   party: [
     { key: "bringing", prompt: "Bringing anything?", placeholder: "Snacks, a +1, a playlist…" },
     { key: "song", prompt: "A song you need to hear?", placeholder: "Request away" },
+  ],
+  trip: [
+    { key: "destination", prompt: "Where are we headed?", placeholder: "Lake, city, mountains…" },
+    { key: "nights", prompt: "How many nights?", placeholder: "1, 2, a long weekend…" },
   ],
   other: [
     { key: "notes", prompt: "Anything the host should know?", placeholder: "Optional" },
@@ -36,8 +40,9 @@ export const EVENT_TYPES: { value: EventType; label: string; emoji: string }[] =
   { value: "dinner", label: "Dinner", emoji: "🍝" },
   { value: "drinks", label: "Drinks", emoji: "🍸" },
   { value: "movie", label: "Movie", emoji: "🎬" },
-  { value: "trivia", label: "Trivia", emoji: "🧠" },
+  { value: "camping", label: "Camping", emoji: "⛺" },
   { value: "party", label: "Party", emoji: "🎉" },
+  { value: "trip", label: "Trip", emoji: "✈️" },
   { value: "other", label: "Other", emoji: "✨" },
 ];
 

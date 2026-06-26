@@ -1,7 +1,7 @@
 # get-togethers (clSandbox app)
 
 **Plans, minus the group-chat chaos.** A minimal scheduling assistant for any
-get-together — dinner, drinks, movie night, trivia, parties. Host an event at
+get-together — dinner, drinks, movie night, camping, trips, parties. Host an event at
 your place or get help finding a venue, set a time or let everyone vote on
 availability, answer a couple of quick preference questions tuned to the event
 type, add friends, and see when they're free.
@@ -75,7 +75,7 @@ isn't fixed), the guest list, and a summary of everyone's preferences. Tap
 | Feature | Where | How to use it | Under the hood |
 |---|---|---|---|
 | **Profile (minimal)** | First run / **Profile** | Set a display name + unique handle; optionally mark when you're generally free | `PUT /api/profile`, `PUT /api/availability` — scoped to your user |
-| **Create an event** | **+ New event** | Title, type (dinner/drinks/movie/trivia/party/other), location (your place + address *or* "help me find a venue"), and one of three scheduling modes (below) | `POST /api/events` (+ time options for specific-time polls) |
+| **Create an event** | **+ New event** | Title, type (dinner/drinks/movie/camping/party/trip/other), location (your place + address *or* "help me find a venue"), and one of three scheduling modes (below) | `POST /api/events` (+ time options for specific-time polls) |
 | **Your plans** | Home | Events split into **Hosting** and **Going & invited** | `GET /api/events` |
 | **RSVP** | Event page | Going / Maybe / Can't | `POST /api/events/{id}/rsvp` |
 | **Scheduling — fixed time** | New event → "I'll set a time" | Host sets the date/time up front | `scheduling_mode: "fixed"` |

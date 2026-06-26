@@ -25,7 +25,7 @@ export function Home() {
         <div className="card empty stack" data-testid="events-empty">
           <div style={{ fontSize: "2.4rem" }}>🗓️</div>
           <h3>No plans yet</h3>
-          <p className="muted">Host a dinner, movie night or trivia — or wait for an invite.</p>
+          <p className="muted">Host a dinner, movie night or camping trip — or wait for an invite.</p>
           <div><Link to="/new" className="btn soft">Create your first event</Link></div>
         </div>
       )}

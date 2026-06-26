@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 
 // --- shared domain types (mirror the Go API JSON) ---
 
-export type EventType = "dinner" | "drinks" | "movie" | "trivia" | "party" | "other";
+export type EventType = "dinner" | "drinks" | "movie" | "camping" | "party" | "trip" | "other";
 
 export type Event = {
   id: string;

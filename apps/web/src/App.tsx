@@ -98,7 +98,7 @@ function Landing() {
         </div>
         <h1>Plans, minus the group chat chaos.</h1>
         <p className="muted" style={{ maxWidth: 440 }}>
-          Spin up dinner, drinks, movie night or trivia in seconds. Pick a time —
+          Spin up dinner, drinks, a movie night or a camping trip in seconds. Pick a time —
           or let everyone vote — and we'll sort out who's in.
         </p>
         <SignInButton mode="modal">
@@ -176,7 +176,7 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
             <NavLink to="/" end>Events</NavLink>
             <NavLink to="/friends">Friends</NavLink>
             <NavLink to="/profile">Profile</NavLink>
-            {DEV_AUTH && <span className="pill polling" title="dev user (?as=…)">dev: {DEV_USER}</span>}
+            {DEV_AUTH && DEV_USER !== "demo-user" && <span className="pill polling" title="dev user (?as=…)">dev: {DEV_USER}</span>}
             {!DEV_AUTH && <UserButton />}
           </div>
         )}
