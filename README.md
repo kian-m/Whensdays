@@ -1,6 +1,14 @@
-# clSandbox
+# get-togethers (clSandbox app)
 
-A clean, modern, full-stack monorepo — **React + Go + Postgres**, containerized end to end, where every feature ships with a visual end-to-end test. Built to be secure, fast, scalable, and cheap to host.
+**Plans, minus the group-chat chaos.** A minimal scheduling assistant for any
+get-together — dinner, drinks, movie night, trivia, parties. Host an event at
+your place or get help finding a venue, set a time or let everyone vote on
+availability, answer a couple of quick preference questions tuned to the event
+type, add friends, and see when they're free.
+
+Built on the **clSandbox** template — **React + Go + Postgres**, containerized
+end to end, where every feature ships with a visual end-to-end test. Secure,
+fast, scalable, and cheap to host. This app lives on the `app/scheduler` branch.
 
 > **Maintenance rule:** every code change must check this README. If behavior, features, routes, ports, or setup change, update the relevant section in the same commit. See [Keeping this README current](#keeping-this-readme-current).
 
@@ -42,25 +50,31 @@ Open **http://localhost:8080**. In dev mode you're automatically acting as the u
 
 > Screenshots below are generated automatically from the live app with `make docs-shots` — see [Keeping this README current](#keeping-this-readme-current).
 
-### Notes — empty state
+### Your plans — the dashboard
 
-The landing page: a note input and an empty list.
+The home page lists what you're hosting and what you've been invited to, with a
+**+ New event** button. First visit asks only for a name and a handle.
 
-![Notes empty state](docs/screenshots/01-notes-empty.png)
+![Scheduler home dashboard](docs/screenshots/01-scheduler-home.png)
 
-### Notes — adding & listing
+### An event — host view
 
-After adding notes, they appear newest-first.
+Each event has a shareable invite link, an availability poll (when the time
+isn't fixed), the guest list, and a summary of everyone's preferences. Tap
+**👀 Preview as guest** to see exactly what invitees see.
 
-![Notes list](docs/screenshots/02-notes-list.png)
+![Scheduler event page](docs/screenshots/02-scheduler-event.png)
 
-
-| Feature | Where | How to use it | What happens under the hood |
+| Feature | Where | How to use it | Under the hood |
 |---|---|---|---|
-| **View notes** | Main page, the list below the form | Notes you've added appear newest-first | `GET /api/notes` → Go API → Postgres, scoped to your user |
-| **Add a note** | Text box + **Add** button | Type text, click **Add** (or press Enter) | `POST /api/notes` → validated (non-empty, ≤64KB) → inserted → list refreshes |
-| **Empty / error states** | Below the form | Submitting nothing is rejected; if the API is down a red error appears | Client guards + API returns `422`/`500` with a JSON error |
-| **(Prod only) Sign in / account** | Top-right | In a Clerk build, a sign-in button and account menu appear | Clerk session; the API verifies the JWT and scopes notes per real user |
+| **Profile (minimal)** | First run / **Profile** | Set a display name + unique handle; optionally mark when you're generally free | `PUT /api/profile`, `PUT /api/availability` — scoped to your user |
+| **Create an event** | **+ New event** | Title, type (dinner/drinks/movie/trivia/party/other), location (your place + address *or* "help me find a venue"), and a fixed time *or* an availability poll | `POST /api/events` (+ time options for polls) |
+| **Your plans** | Home | Events split into **Hosting** and **Going & invited** | `GET /api/events` |
+| **RSVP** | Event page | Going / Maybe / Can't | `POST /api/events/{id}/rsvp` |
+| **Availability poll** | Event page (poll events) | Guests vote 👍/🤷/👎 on each proposed time; host **Picks** one to lock it in | `POST /api/events/{id}/votes`, `POST /api/events/{id}/finalize` |
+| **Preference questions** | Event page, after RSVP | One question at a time, tuned to the event type (e.g. dietary + cuisine for dinner) | `POST /api/events/{id}/preferences` |
+| **Host view + guest preview** | Event page (host only) | Invite link, poll results, guests, preference summary; toggle to preview the guest flow | role-aware `GET /api/events/{id}` |
+| **Friends** | **Friends** | Add by handle (request + accept), then view an accepted friend's weekly availability | `POST /api/friends`, `POST /api/friends/{id}/accept`, `GET /api/friends/{id}/availability` |
 
 ### API endpoints (try them directly)
 
@@ -68,20 +82,27 @@ After adding notes, they appear newest-first.
 # health (no auth)
 curl http://localhost:8080/healthz
 
-# list your notes
-curl http://localhost:8080/api/notes
-
-# add a note
-curl -X POST http://localhost:8080/api/notes \
+# set up your profile (dev mode trusts a stub user, demo-user)
+curl -X PUT http://localhost:8080/api/profile \
   -H 'Content-Type: application/json' \
-  -d '{"body":"hello"}'
+  -d '{"display_name":"Demo","handle":"demo"}'
+
+# list your events (hosting + attending)
+curl http://localhost:8080/api/events
+
+# create a fixed-time dinner at your place
+curl -X POST http://localhost:8080/api/events \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Dinner","event_type":"dinner","location_mode":"host_place","scheduling_mode":"fixed","starts_at":"2026-08-01T19:00:00Z"}'
 ```
 
-In dev mode the API trusts a stub user (`demo-user`). Override it with a header to simulate another user and see per-user scoping:
+In dev mode the API trusts a stub user (`demo-user`). Override it with a header to act as another user and see per-user scoping:
 
 ```bash
-curl http://localhost:8080/api/notes -H 'X-Dev-User: someone-else'   # returns []
+curl http://localhost:8080/api/events -H 'X-Dev-User: someone-else'   # their events only
 ```
+
+> A `/api/notes` endpoint from the template still exists (the E2E stack waits on it for readiness) but the UI is now the scheduler.
 
 ---
 
@@ -94,10 +115,10 @@ Browser ──► web (React, nginx)
               api (Go, stdlib router)  ──►  Postgres (Neon in prod)
 ```
 
-- **Frontend:** React 19 + TypeScript + Vite. Source in `apps/web/src`.
-- **Backend:** Go, minimal dependencies, served from a `scratch` container. `apps/api/main.go`.
-- **Database:** Postgres via `pgx`; queries are type-safe Go generated by `sqlc`; migrations via `goose` (`apps/api/db`).
-- **Auth:** Clerk in production; an opt-in dev stub for local/CI. Default is always Clerk.
+- **Frontend:** React 19 + TypeScript + Vite, client-side routing via `react-router-dom`. Source in `apps/web/src` (pages in `apps/web/src/pages`, preference questions in `apps/web/src/scheduler`).
+- **Backend:** Go, minimal dependencies, served from a `scratch` container. Routes wired in `apps/api/main.go`; scheduler handlers in `apps/api/scheduler.go`.
+- **Database:** Postgres via `pgx`; queries are type-safe Go generated by `sqlc`; migrations via `goose` (`apps/api/db`). Scheduler schema: `db/migrations/0002_scheduler.sql`.
+- **Auth:** Clerk in production; an opt-in dev stub for local/CI. Default is always Clerk. Invite links are a capability — any signed-in user with the link can view an event and RSVP; host-only actions are gated to the host.
 - **Hosting:** API → Cloud Run, web → Cloudflare Pages, DB → Neon. See `docs/DEPLOY.md`.
 
 For working in the codebase (commands, conventions, the feature workflow), see **`CLAUDE.md`**.

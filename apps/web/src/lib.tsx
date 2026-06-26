@@ -1,0 +1,85 @@
+import { createContext, useContext } from "react";
+
+// --- shared domain types (mirror the Go API JSON) ---
+
+export type EventType = "dinner" | "drinks" | "movie" | "trivia" | "party" | "other";
+
+export type Event = {
+  id: string;
+  host_id: string;
+  title: string;
+  event_type: EventType;
+  description: string;
+  location_mode: "host_place" | "find_venue";
+  location_address: string;
+  scheduling_mode: "fixed" | "poll";
+  starts_at: string | null;
+  status: "polling" | "scheduled" | "cancelled";
+  created_at: string;
+};
+
+export type TimeOption = { id: string; event_id: string; starts_at: string };
+export type Vote = { id: string; option_id: string; user_id: string; response: "yes" | "no" | "maybe" };
+export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined"; display_name: string | null };
+export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
+
+export type EventDetail = {
+  event: Event;
+  role: "host" | "guest";
+  viewer_id: string;
+  time_options: TimeOption[];
+  votes: Vote[];
+  attendees: Attendee[];
+  preference_answers: PrefAnswer[];
+};
+
+export type Profile = { user_id: string; display_name: string; handle: string; created_at: string };
+export type AvailabilitySlot = { user_id: string; weekday: number; part_of_day: string };
+export type Friend = { friend_id: string; display_name: string; handle: string };
+export type FriendRequest = { id: string; requester_id?: string; addressee_id?: string; display_name: string; handle: string };
+export type Commitment = { id: string; title: string; starts_at: string };
+
+// --- API context: a single fetch function that carries auth (Clerk or dev) ---
+
+export type ApiFn = (path: string, init?: RequestInit) => Promise<Response>;
+
+export const ApiContext = createContext<ApiFn>(async () => {
+  throw new Error("ApiContext not provided");
+});
+export const useApi = () => useContext(ApiContext);
+
+// Current user's profile (guaranteed present once past the ProfileGate).
+export const ProfileContext = createContext<Profile | null>(null);
+export const useProfile = () => useContext(ProfileContext);
+
+// JSON helpers on top of the api fetch.
+export async function getJSON<T>(api: ApiFn, path: string): Promise<T> {
+  const res = await api(path);
+  if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+export async function sendJSON(api: ApiFn, method: string, path: string, body: unknown): Promise<Response> {
+  return api(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// --- formatting ---
+
+export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const PARTS = ["morning", "afternoon", "evening"] as const;
+
+export function fmtDateTime(iso: string | null): string {
+  if (!iso) return "TBD";
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
+}
+
+export function fmtDate(iso: string | null): string {
+  if (!iso) return "Date TBD";
+  return new Date(iso).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+}

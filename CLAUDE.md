@@ -27,6 +27,15 @@ Priorities, in order, that drive every decision here: **security → speed → s
 
 All six foundational decisions are made; extend the app feature by feature from here.
 
+## This branch: the scheduler app (`app/scheduler`)
+
+This branch builds **get-togethers**, a minimal scheduling assistant, on the template. Each app in this repo is its own branch; `main` keeps the clean template plus a `gallery/` catalog (one entry + home-page screenshot per app).
+
+- **Schema:** `apps/api/db/migrations/0002_scheduler.sql` — `profiles`, `availability_slots`, `friendships`, `events`, `event_time_options`, `event_time_votes`, `event_attendees`, `event_preference_answers`.
+- **API:** handlers in `apps/api/scheduler.go` (wired in `main.go`): profile, availability, events (create/list/get/rsvp/votes/preferences/finalize), friends (request/accept/availability). Every read/write is scoped to `userIDFrom(ctx)`; invite access is capability-based (link = the event id), host-only actions gated to `host_id`.
+- **Web:** `react-router-dom` app — pages in `apps/web/src/pages`, shared types/contexts in `lib.tsx`, theme in `styles.css`, preference questions per event type in `apps/web/src/scheduler/questions.ts`.
+- **Tests:** `e2e/tests/scheduler.spec.ts` (behavior + visual baseline). The Notes UI was replaced by the scheduler; `/api/notes` stays only so the E2E stack's readiness check passes.
+
 ## Layout
 
 ```

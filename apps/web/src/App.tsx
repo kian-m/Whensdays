@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import {
   SignedIn,
   SignedOut,
@@ -6,107 +7,145 @@ import {
   UserButton,
   useAuth,
 } from "@clerk/clerk-react";
+import "./styles.css";
+import { ApiContext, ApiFn, Profile, ProfileContext, useApi } from "./lib";
+import { Home } from "./pages/Home";
+import { NewEvent } from "./pages/NewEvent";
+import { EventPage } from "./pages/EventPage";
+import { Friends } from "./pages/Friends";
+import { ProfilePage } from "./pages/Profile";
+import { ProfileSetup } from "./pages/ProfileSetup";
 
 // Build-time constant. When "dev", the app runs without Clerk (hermetic
 // local/CI runs). Default (prod) uses Clerk. See main.tsx.
 export const DEV_AUTH = import.meta.env.VITE_AUTH_MODE === "dev";
 
-type Note = { id: string; body: string; created_at: string };
-type Api = (path: string, init?: RequestInit) => Promise<Response>;
-
 export function App() {
   return (
-    <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "2rem auto", padding: "0 1rem" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1>clSandbox — Notes</h1>
-        {!DEV_AUTH && <UserButton />}
-      </header>
-
-      {DEV_AUTH ? <Notes api={(p, i) => fetch(p, i)} /> : <ClerkGate />}
-    </main>
+    <BrowserRouter>
+      {DEV_AUTH ? (
+        <ApiContext.Provider value={(p, i) => fetch(p, i)}>
+          <ProfileGate />
+        </ApiContext.Provider>
+      ) : (
+        <>
+          <SignedOut>
+            <Landing />
+          </SignedOut>
+          <SignedIn>
+            <ClerkApiProvider>
+              <ProfileGate />
+            </ClerkApiProvider>
+          </SignedIn>
+        </>
+      )}
+    </BrowserRouter>
   );
 }
 
-function ClerkGate() {
-  return (
-    <>
-      <SignedOut>
-        <p>
-          <SignInButton mode="modal">
-            <button data-testid="sign-in">Sign in to add notes</button>
-          </SignInButton>
-        </p>
-      </SignedOut>
-      <SignedIn>
-        <ClerkNotes />
-      </SignedIn>
-    </>
-  );
-}
-
-function ClerkNotes() {
+function ClerkApiProvider({ children }: { children?: React.ReactNode }) {
   const { getToken } = useAuth();
   // Every request carries the Clerk session token; the API verifies it.
-  const api: Api = async (path, init) => {
-    const token = await getToken();
-    return fetch(path, {
-      ...init,
-      headers: { ...init?.headers, Authorization: `Bearer ${token}` },
-    });
-  };
-  return <Notes api={api} />;
+  const api: ApiFn = useCallback(
+    async (path, init) => {
+      const token = await getToken();
+      return fetch(path, {
+        ...init,
+        headers: { ...init?.headers, Authorization: `Bearer ${token}` },
+      });
+    },
+    [getToken],
+  );
+  return <ApiContext.Provider value={api}>{children ?? <ProfileGate />}</ApiContext.Provider>;
 }
 
-function Notes({ api }: { api: Api }) {
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [body, setBody] = useState("");
-  const [error, setError] = useState<string | null>(null);
+function Landing() {
+  return (
+    <div className="app">
+      <div className="hero stack" style={{ alignItems: "center" }}>
+        <div className="brand" style={{ fontSize: "1.3rem" }}>
+          <span className="dot" /> get-togethers
+        </div>
+        <h1>Plans, minus the group chat chaos.</h1>
+        <p className="muted" style={{ maxWidth: 440 }}>
+          Spin up dinner, drinks, movie night or trivia in seconds. Pick a time —
+          or let everyone vote — and we'll sort out who's in.
+        </p>
+        <SignInButton mode="modal">
+          <button className="btn" data-testid="sign-in">Get started</button>
+        </SignInButton>
+      </div>
+    </div>
+  );
+}
 
-  async function load() {
-    const res = await api("/api/notes");
-    if (!res.ok) return setError("could not load notes");
-    setNotes(await res.json());
-  }
+// Ensures the signed-in user has a minimal profile (name + handle) before using
+// the app. A 404 from /api/profile means "not set up yet".
+function ProfileGate() {
+  const api = useApi();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [state, setState] = useState<"loading" | "needs-setup" | "ready">("loading");
 
   useEffect(() => {
-    load().catch(() => setError("could not reach api"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    let cancelled = false;
+    (async () => {
+      const res = await api("/api/profile");
+      if (cancelled) return;
+      if (res.status === 404) return setState("needs-setup");
+      if (!res.ok) return setState("needs-setup");
+      setProfile(await res.json());
+      setState("ready");
+    })().catch(() => !cancelled && setState("needs-setup"));
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
 
-  async function addNote(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    const res = await api("/api/notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body }),
-    });
-    if (!res.ok) return setError("could not save note");
-    setBody("");
-    await load();
-  }
+  if (state === "loading") return <div className="app"><p className="muted" style={{ marginTop: "3rem" }}>Loading…</p></div>;
+  if (state === "needs-setup")
+    return (
+      <Shell hideNav>
+        <ProfileSetup
+          onDone={(p) => {
+            setProfile(p);
+            setState("ready");
+          }}
+        />
+      </Shell>
+    );
 
   return (
-    <>
-      <form onSubmit={addNote} style={{ display: "flex", gap: 8 }}>
-        <input
-          aria-label="note body"
-          data-testid="note-input"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Write a note…"
-          style={{ flex: 1, padding: 8 }}
-        />
-        <button type="submit" data-testid="add-note">Add</button>
-      </form>
+    <ProfileContext.Provider value={profile}>
+      <Shell>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/new" element={<NewEvent />} />
+          <Route path="/e/:id" element={<EventPage />} />
+          <Route path="/friends" element={<Friends />} />
+          <Route path="/profile" element={<ProfilePage onUpdated={setProfile} />} />
+        </Routes>
+      </Shell>
+    </ProfileContext.Provider>
+  );
+}
 
-      {error && <p role="alert" style={{ color: "crimson" }}>{error}</p>}
-
-      <ul data-testid="note-list" style={{ marginTop: 16, paddingLeft: 18 }}>
-        {notes.map((n) => (
-          <li key={n.id}>{n.body}</li>
-        ))}
-      </ul>
-    </>
+function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boolean }) {
+  return (
+    <div className="app">
+      <nav className="nav">
+        <NavLink to="/" className="brand">
+          <span className="dot" /> get-togethers
+        </NavLink>
+        {!hideNav && (
+          <div className="nav-links">
+            <NavLink to="/" end>Events</NavLink>
+            <NavLink to="/friends">Friends</NavLink>
+            <NavLink to="/profile">Profile</NavLink>
+            {!DEV_AUTH && <UserButton />}
+          </div>
+        )}
+      </nav>
+      {children}
+    </div>
   );
 }

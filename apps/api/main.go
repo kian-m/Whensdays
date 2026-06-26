@@ -69,6 +69,23 @@ func main() {
 	mux.Handle("GET /api/notes", auth(http.HandlerFunc(s.handleListNotes)))
 	mux.Handle("POST /api/notes", auth(http.HandlerFunc(s.handleCreateNote)))
 
+	// Scheduler ("get-togethers") feature — see scheduler.go.
+	mux.Handle("GET /api/profile", auth(http.HandlerFunc(s.handleGetProfile)))
+	mux.Handle("PUT /api/profile", auth(http.HandlerFunc(s.handleUpsertProfile)))
+	mux.Handle("GET /api/availability", auth(http.HandlerFunc(s.handleGetAvailability)))
+	mux.Handle("PUT /api/availability", auth(http.HandlerFunc(s.handlePutAvailability)))
+	mux.Handle("GET /api/events", auth(http.HandlerFunc(s.handleListEvents)))
+	mux.Handle("POST /api/events", auth(http.HandlerFunc(s.handleCreateEvent)))
+	mux.Handle("GET /api/events/{id}", auth(http.HandlerFunc(s.handleGetEvent)))
+	mux.Handle("POST /api/events/{id}/rsvp", auth(http.HandlerFunc(s.handleRsvp)))
+	mux.Handle("POST /api/events/{id}/votes", auth(http.HandlerFunc(s.handleVotes)))
+	mux.Handle("POST /api/events/{id}/preferences", auth(http.HandlerFunc(s.handlePreferences)))
+	mux.Handle("POST /api/events/{id}/finalize", auth(http.HandlerFunc(s.handleFinalize)))
+	mux.Handle("GET /api/friends", auth(http.HandlerFunc(s.handleListFriends)))
+	mux.Handle("POST /api/friends", auth(http.HandlerFunc(s.handleAddFriend)))
+	mux.Handle("POST /api/friends/{id}/accept", auth(http.HandlerFunc(s.handleAcceptFriend)))
+	mux.Handle("GET /api/friends/{id}/availability", auth(http.HandlerFunc(s.handleFriendAvailability)))
+
 	port := envOr("API_PORT", "8080")
 	srv := &http.Server{
 		Addr:              ":" + port,
