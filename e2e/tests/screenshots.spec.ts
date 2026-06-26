@@ -35,6 +35,19 @@ test.describe("docs screenshots", () => {
     await page.getByTestId("event-row").first().click();
     await page.getByTestId("share-link").waitFor();
     await page.screenshot({ path: `${OUT}/02-scheduler-event.png`, fullPage: true });
+
+    // Feature: general-availability poll — the per-day time grid (guest view).
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill("Camping trip");
+    await page.getByTestId("type-camping").click();
+    await page.getByTestId("sched-general").click();
+    await page.getByTestId("create-event").click();
+    await page.getByTestId("preview-toggle").click(); // host → guest view shows the grid
+    for (const cell of ["gp-cell-5-evening", "gp-cell-6-afternoon", "gp-cell-6-evening", "gp-cell-0-noon"]) {
+      await page.getByTestId(cell).click();
+    }
+    await page.getByTestId("gp-month-0").click();
+    await page.screenshot({ path: `${OUT}/03-scheduler-general-poll.png`, fullPage: true });
   });
 });
 

@@ -72,6 +72,14 @@ isn't fixed), the guest list, and a summary of everyone's preferences. Tap
 
 ![Scheduler event page](docs/screenshots/02-scheduler-event.png)
 
+### General availability — pick times per day
+
+For a general poll, guests choose ideal months and tap a **per-day grid** of times
+of day (tap a day header or a row label to fill a whole column/row). The host sees
+the same grid as a heatmap.
+
+![General availability grid](docs/screenshots/03-scheduler-general-poll.png)
+
 | Feature | Where | How to use it | Under the hood |
 |---|---|---|---|
 | **Profile (minimal)** | First run / **Profile** | Set a display name + unique handle; optionally mark when you're generally free | `PUT /api/profile`, `PUT /api/availability` — scoped to your user |
@@ -80,7 +88,7 @@ isn't fixed), the guest list, and a summary of everyone's preferences. Tap
 | **RSVP** | Event page | Going / Maybe / Can't | `POST /api/events/{id}/rsvp` |
 | **Scheduling — fixed time** | New event → "I'll set a time" | Host sets the date/time up front | `scheduling_mode: "fixed"` |
 | **Scheduling — specific-times poll** | Event page (poll events) | Guests vote 👍/🤷/👎 on each proposed time; host **Picks** one to lock it in | `POST /api/events/{id}/votes`, `POST /api/events/{id}/finalize` |
-| **Scheduling — general availability poll** | Event page (general events) | Guests pick ideal **months, weekdays, and times of day** (early morning → night); host reads the aggregate and finalizes a time | `POST /api/events/{id}/general-votes`, `POST /api/events/{id}/finalize` |
+| **Scheduling — general availability poll** | Event page (general events) | Guests pick ideal **months** + a **per-day grid** of times of day (early morning → night); host reads the heatmap and finalizes a time | `POST /api/events/{id}/general-votes`, `POST /api/events/{id}/finalize` |
 | **Preference questions** | Event page, after RSVP | One question at a time, tuned to the event type (e.g. dietary + cuisine for dinner) | `POST /api/events/{id}/preferences` |
 | **Host view + guest preview** | Event page (host only) | Invite link, poll results, guests, preference summary; toggle to preview the guest flow | role-aware `GET /api/events/{id}` |
 | **Friends** | **Friends** | Add by handle (request + accept), then view an accepted friend's weekly availability | `POST /api/friends`, `POST /api/friends/{id}/accept`, `GET /api/friends/{id}/availability` |

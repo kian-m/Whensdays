@@ -20,7 +20,8 @@ export type Event = {
 
 export type TimeOption = { id: string; event_id: string; starts_at: string };
 export type Vote = { id: string; option_id: string; user_id: string; response: "yes" | "no" | "maybe" };
-export type GeneralVote = { user_id: string; dimension: "month" | "weekday" | "daypart"; value: string };
+// dimension 'month' -> value "YYYY-MM"; dimension 'slot' -> value "<weekday>:<daypart>".
+export type GeneralVote = { user_id: string; dimension: "month" | "slot"; value: string };
 export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined"; display_name: string | null };
 export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
 

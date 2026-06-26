@@ -79,12 +79,11 @@ test.describe("scheduler", () => {
 
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
-    // Preview as a guest: pick a month, a day, and a time of day, then save.
+    // Preview as a guest: pick a month and a per-day time cell (Sat evening), save.
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
     await page.getByTestId("gp-month-0").click();
-    await page.getByTestId("gp-weekday-6").click();
-    await page.getByTestId("gp-daypart-evening").click();
+    await page.getByTestId("gp-cell-6-evening").click();
     await page.getByTestId("save-general").click();
 
     // Back in the host view, the aggregate reflects the pick.

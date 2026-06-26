@@ -465,14 +465,16 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Months   []string `json:"months"`
-		Weekdays []int16  `json:"weekdays"`
-		Dayparts []string `json:"dayparts"`
+		Months []string `json:"months"`
+		Slots  []struct {
+			Weekday int16  `json:"weekday"`
+			Daypart string `json:"daypart"`
+		} `json:"slots"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if len(in.Months) > 24 || len(in.Weekdays) > 7 || len(in.Dayparts) > len(dayparts) {
+	if len(in.Months) > 24 || len(in.Slots) > 7*len(dayparts) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "too many selections"})
 		return
 	}
@@ -482,15 +484,9 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	for _, wd := range in.Weekdays {
-		if wd < 0 || wd > 6 {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid weekday"})
-			return
-		}
-	}
-	for _, dp := range in.Dayparts {
-		if !oneOf(dp, dayparts...) {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid daypart"})
+	for _, sl := range in.Slots {
+		if sl.Weekday < 0 || sl.Weekday > 6 || !oneOf(sl.Daypart, dayparts...) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid slot"})
 			return
 		}
 	}
@@ -513,21 +509,16 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	for _, wd := range in.Weekdays {
-		if !add("weekday", strconv.Itoa(int(wd))) {
-			return
-		}
-	}
-	for _, dp := range in.Dayparts {
-		if !add("daypart", dp) {
+	for _, sl := range in.Slots {
+		// value "<weekday>:<daypart>", e.g. "6:evening".
+		if !add("slot", strconv.Itoa(int(sl.Weekday))+":"+sl.Daypart) {
 			return
 		}
 	}
 	s.analytics.Capture(uid, "general_voted", map[string]any{
 		"event_id": r.PathValue("id"),
 		"months":   len(in.Months),
-		"weekdays": len(in.Weekdays),
-		"dayparts": len(in.Dayparts),
+		"slots":    len(in.Slots),
 	})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
