@@ -2,6 +2,8 @@
 
 A clean, modern, full-stack monorepo — **React + Go + Postgres**, containerized end to end, where every feature ships with a visual end-to-end test. Built to be secure, fast, scalable, and cheap to host.
 
+This `main` branch is the reusable template. **Apps built on it live on their own branches** — browse them in the **[gallery](gallery/)** (each with a home-page screenshot). First one: [get-togethers](gallery/scheduler/README.md), a scheduling assistant, on `app/scheduler`.
+
 > **Maintenance rule:** every code change must check this README. If behavior, features, routes, ports, or setup change, update the relevant section in the same commit. See [Keeping this README current](#keeping-this-readme-current).
 
 ---
