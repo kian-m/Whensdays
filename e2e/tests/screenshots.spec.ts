@@ -48,6 +48,14 @@ test.describe("docs screenshots", () => {
     }
     await page.getByTestId("gp-month-0").click();
     await page.screenshot({ path: `${OUT}/03-scheduler-general-poll.png`, fullPage: true });
+
+    // Feature: explicit date-based availability on the profile.
+    await page.goto("/profile");
+    await page.getByTestId("availability-grid").waitFor();
+    for (const c of ["avail-cell-1-evening", "avail-cell-2-noon", "avail-cell-2-afternoon", "avail-cell-5-morning", "avail-cell-6-evening"]) {
+      await page.getByTestId(c).click();
+    }
+    await page.screenshot({ path: `${OUT}/04-scheduler-availability.png`, fullPage: true });
   });
 });
 

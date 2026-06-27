@@ -53,6 +53,26 @@ func parseTS(s string) (pgtype.Timestamptz, bool) {
 	return ts, true
 }
 
+func parseDate(s string) (pgtype.Date, bool) {
+	var d pgtype.Date
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return d, false
+	}
+	d.Time = t
+	d.Valid = true
+	return d, true
+}
+
+// formatDays renders date-availability rows as plain {day, daypart} JSON.
+func formatDays(rows []db.ListAvailabilityDaysRow) []map[string]string {
+	out := make([]map[string]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, map[string]string{"day": r.Day.Time.Format("2006-01-02"), "daypart": r.Daypart})
+	}
+	return out
+}
+
 // dayparts are the coarse time-of-day buckets used by general-availability polls.
 var dayparts = []string{"early_morning", "morning", "noon", "afternoon", "evening", "night"}
 
@@ -229,6 +249,62 @@ func (s *server) handlePutAvailability(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- date-based availability (the explicit, concrete-dates view) ---
+
+func (s *server) handleGetAvailabilityDays(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	rows, err := s.queries.ListAvailabilityDays(r.Context(), uid)
+	if err != nil {
+		s.internal(w, "list availability days", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, formatDays(rows))
+}
+
+func (s *server) handlePutAvailabilityDays(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	var in struct {
+		Days []struct {
+			Day     string `json:"day"`
+			Daypart string `json:"daypart"`
+		} `json:"days"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if len(in.Days) > 31*len(dayparts) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "too many selections"})
+		return
+	}
+	type cell struct {
+		d  pgtype.Date
+		dp string
+	}
+	cells := make([]cell, 0, len(in.Days))
+	for _, c := range in.Days {
+		d, ok := parseDate(c.Day)
+		if !ok || !oneOf(c.Daypart, dayparts...) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid availability cell"})
+			return
+		}
+		cells = append(cells, cell{d, c.Daypart})
+	}
+	if err := s.queries.ClearAvailabilityDays(r.Context(), uid); err != nil {
+		s.internal(w, "clear availability days", err)
+		return
+	}
+	for _, c := range cells {
+		if err := s.queries.AddAvailabilityDay(r.Context(), db.AddAvailabilityDayParams{
+			UserID: uid, Day: c.d, Daypart: c.dp,
+		}); err != nil {
+			s.internal(w, "add availability day", err)
+			return
+		}
+	}
+	s.analytics.Capture(uid, "availability_updated", map[string]any{"cells": len(cells)})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -718,7 +794,7 @@ func (s *server) handleFriendAvailability(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not friends"})
 		return
 	}
-	slots, err := s.queries.ListAvailability(r.Context(), friendID)
+	days, err := s.queries.ListAvailabilityDays(r.Context(), friendID)
 	if err != nil {
 		s.internal(w, "friend availability", err)
 		return
@@ -728,5 +804,5 @@ func (s *server) handleFriendAvailability(w http.ResponseWriter, r *http.Request
 		s.internal(w, "friend commitments", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"slots": slots, "commitments": commitments})
+	writeJSON(w, http.StatusOK, map[string]any{"days": formatDays(days), "commitments": commitments})
 }

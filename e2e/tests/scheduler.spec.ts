@@ -128,13 +128,14 @@ test.describe("scheduler", () => {
     await expect(page.getByText("Confirmed")).toBeVisible();
   });
 
-  test("edit profile and weekly availability", async ({ page }) => {
+  test("edit profile and date-based availability", async ({ page }) => {
     await ensureProfile(page);
     await page.goto("/profile");
     await page.getByTestId("profile-name").fill("Demo Host");
     await page.getByTestId("save-profile").click();
-    await page.getByTestId("cell-1-morning").click();
-    await page.getByTestId("cell-3-evening").click();
+    // Explicit calendar: tomorrow evening, day-after noon.
+    await page.getByTestId("avail-cell-1-evening").click();
+    await page.getByTestId("avail-cell-2-noon").click();
     await page.getByTestId("save-availability").click();
     await expect(page.getByText("Availability saved ✓")).toBeVisible();
   });
@@ -163,7 +164,7 @@ test.describe("scheduler", () => {
       await ensureUser(ben, "ben", "Ben", "ben");
       // Ben marks some availability so Amy has something to see.
       await ben.goto("/profile");
-      await ben.getByTestId("cell-2-afternoon").click();
+      await ben.getByTestId("avail-cell-2-afternoon").click();
       await ben.getByTestId("save-availability").click();
       await expect(ben.getByText("Availability saved ✓")).toBeVisible();
 

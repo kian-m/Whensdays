@@ -114,6 +114,7 @@ textarea.input { resize: vertical; min-height: 64px; }
   height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer;
 }
 .cell.on { background: var(--accent); border-color: var(--accent); }
+.cell.busy { background: rgba(207, 94, 94, 0.18); border-color: transparent; cursor: not-allowed; }
 /* clickable row/column labels in the availability grid */
 .gp-head { background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
 .gp-head:hover { color: var(--accent); }

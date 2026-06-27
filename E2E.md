@@ -32,7 +32,7 @@ v1.49.1 · pinned `timezoneId: UTC`, `locale: en-US`.
 | `scheduler.spec.ts` | create a general-availability poll and respond | behavior | ✅ pass | 834 ms |
 | `scheduler.spec.ts` | create form visual baseline | visual (`new-event-form.png`) | ✅ pass | 531 ms |
 | `scheduler.spec.ts` | specific-times poll: vote and finalize | behavior | ✅ pass | 1.0 s |
-| `scheduler.spec.ts` | edit profile and weekly availability | behavior | ✅ pass | 481 ms |
+| `scheduler.spec.ts` | edit profile and date-based availability | behavior | ✅ pass | 481 ms |
 | `scheduler.spec.ts` | upload a profile photo | behavior | ✅ pass | 425 ms |
 | `scheduler.spec.ts` | friends: request, accept, and view availability | behavior (2 users) | ✅ pass | 863 ms |
 | `screenshots.spec.ts` | capture scheduler pages | — (docs capture) | ⏭️ skipped | — |
@@ -43,7 +43,7 @@ Running 8 tests using 2 workers
   ✓  create a general-availability poll and respond (834ms)
   ✓  create form visual baseline (531ms)
   ✓  specific-times poll: vote and finalize (1.0s)
-  ✓  edit profile and weekly availability (481ms)
+  ✓  edit profile and date-based availability (481ms)
   ✓  upload a profile photo (425ms)
   ✓  friends: request, accept, and view availability (863ms)
   1 skipped
@@ -54,7 +54,7 @@ Running 8 tests using 2 workers
 
 | Behavior | Covered by |
 |---|---|
-| Profile setup + edit, weekly availability | edit profile and weekly availability |
+| Profile setup + edit, explicit date availability | edit profile and date-based availability |
 | Profile photo upload (client resize → data URL) | upload a profile photo |
 | Create event (fixed) + RSVP + preference Q&A | create an event, respond as a guest… |
 | Specific-times poll: vote + host finalize | specific-times poll: vote and finalize |
@@ -100,9 +100,9 @@ Create a poll with two candidate times → preview as guest → vote 👍 on bot
 host **Picks** the first option → assert the event flips to **Confirmed**.
 Exercises `POST /api/events/{id}/votes` and `POST /api/events/{id}/finalize`.
 
-### `scheduler.spec.ts` › edit profile and weekly availability
-Edit the name, toggle weekly availability cells, save. Exercises `PUT /api/profile`
-and `PUT /api/availability`.
+### `scheduler.spec.ts` › edit profile and date-based availability
+Edit the name, toggle cells on the rolling 2-week date calendar, save. Exercises
+`PUT /api/profile` and `PUT /api/availability/days`.
 
 ### `scheduler.spec.ts` › upload a profile photo
 Upload a PNG via the file input; the client resizes it to a JPEG data URL and

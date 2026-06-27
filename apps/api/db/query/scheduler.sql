@@ -40,6 +40,23 @@ INSERT INTO availability_slots (user_id, weekday, part_of_day)
 VALUES ($1, $2, $3)
 ON CONFLICT DO NOTHING;
 
+-- ===================== date-based availability ====================
+
+-- name: ListAvailabilityDays :many
+SELECT day, daypart
+FROM availability_days
+WHERE user_id = $1 AND day >= CURRENT_DATE
+ORDER BY day, daypart;
+
+-- name: ClearAvailabilityDays :exec
+DELETE FROM availability_days
+WHERE user_id = $1;
+
+-- name: AddAvailabilityDay :exec
+INSERT INTO availability_days (user_id, day, daypart)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING;
+
 -- ========================= friendships ============================
 
 -- name: CreateFriendRequest :one

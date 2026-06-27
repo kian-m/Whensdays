@@ -36,6 +36,23 @@ func (q *Queries) AcceptFriendRequest(ctx context.Context, arg AcceptFriendReque
 	return i, err
 }
 
+const addAvailabilityDay = `-- name: AddAvailabilityDay :exec
+INSERT INTO availability_days (user_id, day, daypart)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING
+`
+
+type AddAvailabilityDayParams struct {
+	UserID  string      `json:"user_id"`
+	Day     pgtype.Date `json:"day"`
+	Daypart string      `json:"daypart"`
+}
+
+func (q *Queries) AddAvailabilityDay(ctx context.Context, arg AddAvailabilityDayParams) error {
+	_, err := q.db.Exec(ctx, addAvailabilityDay, arg.UserID, arg.Day, arg.Daypart)
+	return err
+}
+
 const addAvailabilitySlot = `-- name: AddAvailabilitySlot :exec
 INSERT INTO availability_slots (user_id, weekday, part_of_day)
 VALUES ($1, $2, $3)
@@ -124,6 +141,16 @@ WHERE user_id = $1
 
 func (q *Queries) ClearAvailability(ctx context.Context, userID string) error {
 	_, err := q.db.Exec(ctx, clearAvailability, userID)
+	return err
+}
+
+const clearAvailabilityDays = `-- name: ClearAvailabilityDays :exec
+DELETE FROM availability_days
+WHERE user_id = $1
+`
+
+func (q *Queries) ClearAvailabilityDays(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, clearAvailabilityDays, userID)
 	return err
 }
 
@@ -422,6 +449,40 @@ func (q *Queries) ListAvailability(ctx context.Context, userID string) ([]Availa
 	for rows.Next() {
 		var i AvailabilitySlot
 		if err := rows.Scan(&i.UserID, &i.Weekday, &i.PartOfDay); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAvailabilityDays = `-- name: ListAvailabilityDays :many
+
+SELECT day, daypart
+FROM availability_days
+WHERE user_id = $1 AND day >= CURRENT_DATE
+ORDER BY day, daypart
+`
+
+type ListAvailabilityDaysRow struct {
+	Day     pgtype.Date `json:"day"`
+	Daypart string      `json:"daypart"`
+}
+
+// ===================== date-based availability ====================
+func (q *Queries) ListAvailabilityDays(ctx context.Context, userID string) ([]ListAvailabilityDaysRow, error) {
+	rows, err := q.db.Query(ctx, listAvailabilityDays, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAvailabilityDaysRow{}
+	for rows.Next() {
+		var i ListAvailabilityDaysRow
+		if err := rows.Scan(&i.Day, &i.Daypart); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

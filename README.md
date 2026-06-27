@@ -82,7 +82,8 @@ the same grid as a heatmap.
 
 | Feature | Where | How to use it | Under the hood |
 |---|---|---|---|
-| **Profile (minimal)** | First run / **Profile** | Set a display name + unique handle, a **profile photo**, and optionally mark when you're generally free | `PUT /api/profile`, `PUT /api/profile/avatar`, `PUT /api/availability` — scoped to your user |
+| **Profile** | First run / **Profile** | Set a display name + unique handle, a **profile photo**, and your **explicit availability** — which dayparts you're free on concrete upcoming dates (next 2 weeks) | `PUT /api/profile`, `PUT /api/profile/avatar`, `PUT /api/availability/days` — scoped to your user |
+| **See friends' availability** | **Friends** | Open an accepted friend to see their real upcoming free dates/times (+ what they're booked for) | `GET /api/friends/{id}/availability` |
 | **Create an event** | **+ New event** | Title, type (dinner/drinks/movie/camping/party/trip/other), location (your place + address *or* "help me find a venue"), and one of three scheduling modes (below) | `POST /api/events` (+ time options for specific-time polls) |
 | **Your plans** | Home | Events split into **Hosting** and **Going & invited** | `GET /api/events` |
 | **RSVP** | Event page | Going / Maybe / Can't | `POST /api/events/{id}/rsvp` |

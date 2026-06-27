@@ -1,16 +1,16 @@
 import { useState } from "react";
 import {
-  AvailabilitySlot,
+  AvailabilityDay,
   Commitment,
   Friend,
   FriendRequest,
-  WEEKDAYS,
   fmtDateTime,
   getJSON,
+  nextDays,
   sendJSON,
   useApi,
 } from "../lib";
-import { Avatar, Loading, useAsync } from "../ui";
+import { Avatar, DayGrid, Loading, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 type FriendsResp = { friends: Friend[]; incoming: FriendRequest[]; outgoing: FriendRequest[] };
@@ -89,7 +89,7 @@ export function Friends() {
 function FriendCard({ friend }: { friend: Friend }) {
   const api = useApi();
   const [open, setOpen] = useState(false);
-  const [avail, setAvail] = useState<{ slots: AvailabilitySlot[]; commitments: Commitment[] } | null>(null);
+  const [avail, setAvail] = useState<{ days: AvailabilityDay[]; commitments: Commitment[] } | null>(null);
 
   async function toggle() {
     if (!open) {
@@ -102,7 +102,7 @@ function FriendCard({ friend }: { friend: Friend }) {
     setOpen((o) => !o);
   }
 
-  const free = new Set((avail?.slots ?? []).map((s) => `${s.weekday}-${s.part_of_day}`));
+  const free = new Set((avail?.days ?? []).map((d) => `${d.day}:${d.daypart}`));
 
   return (
     <div className="card stack">
@@ -117,13 +117,7 @@ function FriendCard({ friend }: { friend: Friend }) {
       </div>
       {open && avail && (
         <div className="stack">
-          <div className="grid" data-testid="friend-availability">
-            <div />
-            {["morning", "afternoon", "evening"].map((p) => <div key={p} className="hd">{p}</div>)}
-            {WEEKDAYS.map((d, wd) => (
-              <Row key={wd} day={d} wd={wd} free={free} />
-            ))}
-          </div>
+          <DayGrid dates={nextDays(14)} selected={free} readOnly testid="friend-availability" />
           {avail.commitments.length > 0 && (
             <div className="small">
               <span className="muted">Booked: </span>
@@ -133,16 +127,5 @@ function FriendCard({ friend }: { friend: Friend }) {
         </div>
       )}
     </div>
-  );
-}
-
-function Row({ day, wd, free }: { day: string; wd: number; free: Set<string> }) {
-  return (
-    <>
-      <div className="day">{day}</div>
-      {["morning", "afternoon", "evening"].map((p) => (
-        <div key={p} className={`cell ${free.has(`${wd}-${p}`) ? "on" : ""}`} />
-      ))}
-    </>
   );
 }

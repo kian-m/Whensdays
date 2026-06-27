@@ -8,6 +8,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AvailabilityDay struct {
+	UserID  string      `json:"user_id"`
+	Day     pgtype.Date `json:"day"`
+	Daypart string      `json:"daypart"`
+}
+
 type AvailabilitySlot struct {
 	UserID    string `json:"user_id"`
 	Weekday   int16  `json:"weekday"`

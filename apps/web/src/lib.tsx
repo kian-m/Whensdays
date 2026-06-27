@@ -75,15 +75,27 @@ export async function sendJSON(api: ApiFn, method: string, path: string, body: u
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const PARTS = ["morning", "afternoon", "evening"] as const;
 
-// Coarse time-of-day buckets for general-availability polls (value + label).
-export const DAYPARTS: { value: string; label: string }[] = [
-  { value: "early_morning", label: "Early morning" },
-  { value: "morning", label: "Morning" },
-  { value: "noon", label: "Noon" },
-  { value: "afternoon", label: "Afternoon" },
-  { value: "evening", label: "Evening" },
-  { value: "night", label: "Night" },
+// Coarse time-of-day buckets (value + full label + short label for tight grids).
+export const DAYPARTS: { value: string; label: string; short: string }[] = [
+  { value: "early_morning", label: "Early morning", short: "Early" },
+  { value: "morning", label: "Morning", short: "Morn" },
+  { value: "noon", label: "Noon", short: "Noon" },
+  { value: "afternoon", label: "Afternoon", short: "Aft" },
+  { value: "evening", label: "Evening", short: "Eve" },
+  { value: "night", label: "Night", short: "Night" },
 ];
+
+export type AvailabilityDay = { day: string; daypart: string };
+
+// The next n calendar days as { value: "YYYY-MM-DD", label: "Fri Jun 27" }.
+export function nextDays(n: number): { value: string; label: string }[] {
+  const now = new Date();
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return { value, label: d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) };
+  });
+}
 
 // The next n calendar months as { value: "YYYY-MM", label: "Aug 2026" }.
 export function nextMonths(n: number): { value: string; label: string }[] {

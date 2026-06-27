@@ -87,6 +87,8 @@ func main() {
 	mux.Handle("PUT /api/profile/avatar", auth(http.HandlerFunc(s.handleSetAvatar)))
 	mux.Handle("GET /api/availability", auth(http.HandlerFunc(s.handleGetAvailability)))
 	mux.Handle("PUT /api/availability", auth(http.HandlerFunc(s.handlePutAvailability)))
+	mux.Handle("GET /api/availability/days", auth(http.HandlerFunc(s.handleGetAvailabilityDays)))
+	mux.Handle("PUT /api/availability/days", auth(http.HandlerFunc(s.handlePutAvailabilityDays)))
 	mux.Handle("GET /api/events", auth(http.HandlerFunc(s.handleListEvents)))
 	mux.Handle("POST /api/events", auth(http.HandlerFunc(s.handleCreateEvent)))
 	mux.Handle("GET /api/events/{id}", auth(http.HandlerFunc(s.handleGetEvent)))
