@@ -24,23 +24,45 @@ diff before committing).
 **Run:** 2026-06-26 · `make e2e-docker` · Chromium (Desktop Chrome), Playwright
 v1.49.1 · pinned `timezoneId: UTC`, `locale: en-US`.
 
-**Summary: ✅ 3 passed · 1 skipped · 0 failed · 0 flaky** (assertion pass)
+**Summary: ✅ 7 passed · 1 skipped · 0 failed · 0 flaky** (assertion pass)
 
 | Spec | Test | Asserts | Result | Time |
 |---|---|---|---|---|
-| `scheduler.spec.ts` | create an event, respond as a guest, host sees preferences | behavior | ✅ pass | 1.5 s |
-| `scheduler.spec.ts` | create a general-availability poll and respond | behavior | ✅ pass | 1.3 s |
-| `scheduler.spec.ts` | create form visual baseline | visual (`new-event-form.png`) | ✅ pass | 856 ms |
+| `scheduler.spec.ts` | create an event, respond as a guest, host sees preferences | behavior | ✅ pass | 1.2 s |
+| `scheduler.spec.ts` | create a general-availability poll and respond | behavior | ✅ pass | 834 ms |
+| `scheduler.spec.ts` | create form visual baseline | visual (`new-event-form.png`) | ✅ pass | 531 ms |
+| `scheduler.spec.ts` | specific-times poll: vote and finalize | behavior | ✅ pass | 1.0 s |
+| `scheduler.spec.ts` | edit profile and weekly availability | behavior | ✅ pass | 481 ms |
+| `scheduler.spec.ts` | upload a profile photo | behavior | ✅ pass | 425 ms |
+| `scheduler.spec.ts` | friends: request, accept, and view availability | behavior (2 users) | ✅ pass | 863 ms |
 | `screenshots.spec.ts` | capture scheduler pages | — (docs capture) | ⏭️ skipped | — |
 
 ```
-Running 4 tests using 2 workers
-  ✓  scheduler.spec.ts:41:3 › scheduler › create an event, respond as a guest, host sees preferences (1.5s)
-  ✓  scheduler.spec.ts:70:3 › scheduler › create a general-availability poll and respond (1.3s)
-  ✓  scheduler.spec.ts:96:3 › scheduler › create form visual baseline (856ms)
+Running 8 tests using 2 workers
+  ✓  create an event, respond as a guest, host sees preferences (1.2s)
+  ✓  create a general-availability poll and respond (834ms)
+  ✓  create form visual baseline (531ms)
+  ✓  specific-times poll: vote and finalize (1.0s)
+  ✓  edit profile and weekly availability (481ms)
+  ✓  upload a profile photo (425ms)
+  ✓  friends: request, accept, and view availability (863ms)
   1 skipped
-  3 passed (5.8s)
+  7 passed (7.3s)
 ```
+
+### Coverage map (behavior → test)
+
+| Behavior | Covered by |
+|---|---|
+| Profile setup + edit, weekly availability | edit profile and weekly availability |
+| Profile photo upload (client resize → data URL) | upload a profile photo |
+| Create event (fixed) + RSVP + preference Q&A | create an event, respond as a guest… |
+| Specific-times poll: vote + host finalize | specific-times poll: vote and finalize |
+| General availability poll (per-day grid) + aggregate | create a general-availability poll and respond |
+| Friends: add by handle, accept, view availability | friends: request, accept, and view availability |
+| Create form appearance | create form visual baseline |
+
+Not E2E-covered (by design): the **Clerk** sign-in path (E2E runs dev-auth; Clerk has its own testing token path in non-dev runs), and **analytics** delivery (disabled in E2E; the no-op path is exercised).
 
 ## What each test covers
 
@@ -73,9 +95,30 @@ Navigates to `/new`, selects a known event type, and snapshots the create form
 (`new-event-form.png`). A deterministic region (no dates/accumulated data), so the
 pixel baseline is stable across machines and CI.
 
-> The two scheduler tests share the dev stub user (`demo-user`) and its profile, so
-> the spec is configured `mode: "serial"` — they run in order instead of racing two
-> workers over the same first-run setup.
+### `scheduler.spec.ts` › specific-times poll: vote and finalize
+Create a poll with two candidate times → preview as guest → vote 👍 on both →
+host **Picks** the first option → assert the event flips to **Confirmed**.
+Exercises `POST /api/events/{id}/votes` and `POST /api/events/{id}/finalize`.
+
+### `scheduler.spec.ts` › edit profile and weekly availability
+Edit the name, toggle weekly availability cells, save. Exercises `PUT /api/profile`
+and `PUT /api/availability`.
+
+### `scheduler.spec.ts` › upload a profile photo
+Upload a PNG via the file input; the client resizes it to a JPEG data URL and
+saves it. Asserts the avatar renders with a `data:image/…` src. Exercises
+`PUT /api/profile/avatar`.
+
+### `scheduler.spec.ts` › friends: request, accept, and view availability
+Two browser contexts (two dev users via `?as=`): Ben sets availability, Amy adds
+Ben by handle, Ben accepts, Amy opens Ben's availability. Exercises
+`POST /api/friends`, `POST /api/friends/{id}/accept`,
+`GET /api/friends/{id}/availability`.
+
+> The scheduler tests share the dev stub user (`demo-user`) and its profile, so the
+> spec is configured `mode: "serial"` — they run in order instead of racing workers
+> over the same first-run setup. The friends test uses its own `amy`/`ben` users in
+> separate contexts.
 
 ### `screenshots.spec.ts` › capture scheduler pages
 Not an assertion test — it regenerates the README/gallery screenshots

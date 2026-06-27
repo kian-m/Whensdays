@@ -17,7 +17,7 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, emojiFor, labelFor, questionLabel } from "../scheduler/questions";
-import { BackLink, Loading, Pill, useAsync } from "../ui";
+import { Avatar, BackLink, Loading, Pill, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 export function EventPage() {
@@ -347,7 +347,7 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
   return (
     <div className="card stack">
       <h3>Availability</h3>
-      {data.time_options.map((o) => {
+      {data.time_options.map((o, i) => {
         const yes = data.votes.filter((v) => v.option_id === o.id && v.response === "yes").length;
         return (
           <div key={o.id} className="stack" style={{ gap: 4 }}>
@@ -355,7 +355,7 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
               <span className="small">{fmtDateTime(o.starts_at)}</span>
               <div className="row">
                 <span className="muted small">{yes} available</span>
-                <button className="btn sm" data-testid={`finalize-${o.id}`} onClick={() => finalize(o)}>Pick</button>
+                <button className="btn sm" data-testid={`finalize-${i}`} onClick={() => finalize(o)}>Pick</button>
               </div>
             </div>
             <div className="tally"><span style={{ width: `${(yes / voters) * 100}%` }} /></div>
@@ -457,7 +457,10 @@ function Guests({ attendees }: { attendees: Attendee[] }) {
       {attendees.length === 0 && <p className="muted small">No responses yet.</p>}
       {attendees.map((a) => (
         <div key={a.user_id} className="row between">
-          <span>{a.display_name || "Someone"}</span>
+          <span className="row" style={{ gap: 8 }}>
+            <Avatar url={a.avatar_url} name={a.display_name} size={28} />
+            <span>{a.display_name || "Someone"}</span>
+          </span>
           <Pill kind={a.rsvp}>{a.rsvp}</Pill>
         </div>
       ))}

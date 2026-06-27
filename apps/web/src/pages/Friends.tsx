@@ -10,7 +10,7 @@ import {
   sendJSON,
   useApi,
 } from "../lib";
-import { Loading, useAsync } from "../ui";
+import { Avatar, Loading, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 type FriendsResp = { friends: Friend[]; incoming: FriendRequest[]; outgoing: FriendRequest[] };
@@ -107,14 +107,17 @@ function FriendCard({ friend }: { friend: Friend }) {
   return (
     <div className="card stack">
       <div className="row between">
-        <span>{friend.display_name} <span className="muted small">@{friend.handle}</span></span>
+        <span className="row" style={{ gap: 8 }}>
+          <Avatar url={friend.avatar_url} name={friend.display_name} size={32} />
+          <span>{friend.display_name} <span className="muted small">@{friend.handle}</span></span>
+        </span>
         <button className="btn ghost sm" data-testid={`view-avail-${friend.handle}`} onClick={toggle}>
           {open ? "Hide" : "Availability"}
         </button>
       </div>
       {open && avail && (
         <div className="stack">
-          <div className="grid">
+          <div className="grid" data-testid="friend-availability">
             <div />
             {["morning", "afternoon", "evening"].map((p) => <div key={p} className="hd">{p}</div>)}
             {WEEKDAYS.map((d, wd) => (

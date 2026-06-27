@@ -309,44 +309,62 @@ func (q *Queries) GetEvent(ctx context.Context, id pgtype.UUID) (Event, error) {
 
 const getProfile = `-- name: GetProfile :one
 
-SELECT user_id, display_name, handle, created_at
+SELECT user_id, display_name, handle, avatar_url, created_at
 FROM profiles
 WHERE user_id = $1
 `
 
+type GetProfileRow struct {
+	UserID      string             `json:"user_id"`
+	DisplayName string             `json:"display_name"`
+	Handle      string             `json:"handle"`
+	AvatarUrl   string             `json:"avatar_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 // ============================ profiles ============================
-func (q *Queries) GetProfile(ctx context.Context, userID string) (Profile, error) {
+func (q *Queries) GetProfile(ctx context.Context, userID string) (GetProfileRow, error) {
 	row := q.db.QueryRow(ctx, getProfile, userID)
-	var i Profile
+	var i GetProfileRow
 	err := row.Scan(
 		&i.UserID,
 		&i.DisplayName,
 		&i.Handle,
+		&i.AvatarUrl,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getProfileByHandle = `-- name: GetProfileByHandle :one
-SELECT user_id, display_name, handle, created_at
+SELECT user_id, display_name, handle, avatar_url, created_at
 FROM profiles
 WHERE handle = $1
 `
 
-func (q *Queries) GetProfileByHandle(ctx context.Context, handle string) (Profile, error) {
+type GetProfileByHandleRow struct {
+	UserID      string             `json:"user_id"`
+	DisplayName string             `json:"display_name"`
+	Handle      string             `json:"handle"`
+	AvatarUrl   string             `json:"avatar_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetProfileByHandle(ctx context.Context, handle string) (GetProfileByHandleRow, error) {
 	row := q.db.QueryRow(ctx, getProfileByHandle, handle)
-	var i Profile
+	var i GetProfileByHandleRow
 	err := row.Scan(
 		&i.UserID,
 		&i.DisplayName,
 		&i.Handle,
+		&i.AvatarUrl,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listAttendees = `-- name: ListAttendees :many
-SELECT a.user_id, a.rsvp, p.display_name
+SELECT a.user_id, a.rsvp, p.display_name, p.avatar_url
 FROM event_attendees a
 LEFT JOIN profiles p ON p.user_id = a.user_id
 WHERE a.event_id = $1
@@ -357,6 +375,7 @@ type ListAttendeesRow struct {
 	UserID      string      `json:"user_id"`
 	Rsvp        string      `json:"rsvp"`
 	DisplayName pgtype.Text `json:"display_name"`
+	AvatarUrl   pgtype.Text `json:"avatar_url"`
 }
 
 func (q *Queries) ListAttendees(ctx context.Context, eventID pgtype.UUID) ([]ListAttendeesRow, error) {
@@ -368,7 +387,12 @@ func (q *Queries) ListAttendees(ctx context.Context, eventID pgtype.UUID) ([]Lis
 	items := []ListAttendeesRow{}
 	for rows.Next() {
 		var i ListAttendeesRow
-		if err := rows.Scan(&i.UserID, &i.Rsvp, &i.DisplayName); err != nil {
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Rsvp,
+			&i.DisplayName,
+			&i.AvatarUrl,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -493,7 +517,8 @@ const listFriends = `-- name: ListFriends :many
 SELECT
     (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END)::text AS friend_id,
     p.display_name,
-    p.handle
+    p.handle,
+    p.avatar_url
 FROM friendships f
 JOIN profiles p
     ON p.user_id = CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END
@@ -506,6 +531,7 @@ type ListFriendsRow struct {
 	FriendID    string `json:"friend_id"`
 	DisplayName string `json:"display_name"`
 	Handle      string `json:"handle"`
+	AvatarUrl   string `json:"avatar_url"`
 }
 
 func (q *Queries) ListFriends(ctx context.Context, requesterID string) ([]ListFriendsRow, error) {
@@ -517,7 +543,12 @@ func (q *Queries) ListFriends(ctx context.Context, requesterID string) ([]ListFr
 	items := []ListFriendsRow{}
 	for rows.Next() {
 		var i ListFriendsRow
-		if err := rows.Scan(&i.FriendID, &i.DisplayName, &i.Handle); err != nil {
+		if err := rows.Scan(
+			&i.FriendID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -774,6 +805,38 @@ func (q *Queries) ListVotesForEvent(ctx context.Context, eventID pgtype.UUID) ([
 	return items, nil
 }
 
+const setAvatar = `-- name: SetAvatar :one
+UPDATE profiles SET avatar_url = $2
+WHERE user_id = $1
+RETURNING user_id, display_name, handle, avatar_url, created_at
+`
+
+type SetAvatarParams struct {
+	UserID    string `json:"user_id"`
+	AvatarUrl string `json:"avatar_url"`
+}
+
+type SetAvatarRow struct {
+	UserID      string             `json:"user_id"`
+	DisplayName string             `json:"display_name"`
+	Handle      string             `json:"handle"`
+	AvatarUrl   string             `json:"avatar_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) SetAvatar(ctx context.Context, arg SetAvatarParams) (SetAvatarRow, error) {
+	row := q.db.QueryRow(ctx, setAvatar, arg.UserID, arg.AvatarUrl)
+	var i SetAvatarRow
+	err := row.Scan(
+		&i.UserID,
+		&i.DisplayName,
+		&i.Handle,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const upsertPreferenceAnswer = `-- name: UpsertPreferenceAnswer :one
 
 INSERT INTO event_preference_answers (event_id, user_id, question_key, answer)
@@ -815,7 +878,7 @@ VALUES ($1, $2, $3)
 ON CONFLICT (user_id) DO UPDATE
     SET display_name = EXCLUDED.display_name,
         handle       = EXCLUDED.handle
-RETURNING user_id, display_name, handle, created_at
+RETURNING user_id, display_name, handle, avatar_url, created_at
 `
 
 type UpsertProfileParams struct {
@@ -824,13 +887,22 @@ type UpsertProfileParams struct {
 	Handle      string `json:"handle"`
 }
 
-func (q *Queries) UpsertProfile(ctx context.Context, arg UpsertProfileParams) (Profile, error) {
+type UpsertProfileRow struct {
+	UserID      string             `json:"user_id"`
+	DisplayName string             `json:"display_name"`
+	Handle      string             `json:"handle"`
+	AvatarUrl   string             `json:"avatar_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UpsertProfile(ctx context.Context, arg UpsertProfileParams) (UpsertProfileRow, error) {
 	row := q.db.QueryRow(ctx, upsertProfile, arg.UserID, arg.DisplayName, arg.Handle)
-	var i Profile
+	var i UpsertProfileRow
 	err := row.Scan(
 		&i.UserID,
 		&i.DisplayName,
 		&i.Handle,
+		&i.AvatarUrl,
 		&i.CreatedAt,
 	)
 	return i, err

@@ -93,7 +93,7 @@ Leave the keys empty and analytics stays disabled (the API logs
 - **Authoritative business events** (reliable, ad-blocker-proof): `event_created`,
   `event_viewed`, `rsvp_submitted`, `poll_voted`, `general_voted`,
   `preferences_submitted`, `event_finalized`, `friend_requested`,
-  `friend_accepted`, `profile_updated`.
+  `friend_accepted`, `profile_updated`, `avatar_updated`.
 - **Identify** — person properties (`handle`, `name`) on profile update.
 
 Every event also carries `service` (`api`/`web`), `environment`, and `release`.

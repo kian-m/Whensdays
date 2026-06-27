@@ -85,4 +85,5 @@ type Profile struct {
 	DisplayName string             `json:"display_name"`
 	Handle      string             `json:"handle"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	AvatarUrl   string             `json:"avatar_url"`
 }

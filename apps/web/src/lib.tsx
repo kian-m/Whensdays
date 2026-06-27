@@ -22,7 +22,7 @@ export type TimeOption = { id: string; event_id: string; starts_at: string };
 export type Vote = { id: string; option_id: string; user_id: string; response: "yes" | "no" | "maybe" };
 // dimension 'month' -> value "YYYY-MM"; dimension 'slot' -> value "<weekday>:<daypart>".
 export type GeneralVote = { user_id: string; dimension: "month" | "slot"; value: string };
-export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined"; display_name: string | null };
+export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined"; display_name: string | null; avatar_url: string | null };
 export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
 
 export type EventDetail = {
@@ -36,9 +36,9 @@ export type EventDetail = {
   preference_answers: PrefAnswer[];
 };
 
-export type Profile = { user_id: string; display_name: string; handle: string; created_at: string };
+export type Profile = { user_id: string; display_name: string; handle: string; avatar_url: string; created_at: string };
 export type AvailabilitySlot = { user_id: string; weekday: number; part_of_day: string };
-export type Friend = { friend_id: string; display_name: string; handle: string };
+export type Friend = { friend_id: string; display_name: string; handle: string; avatar_url: string };
 export type FriendRequest = { id: string; requester_id?: string; addressee_id?: string; display_name: string; handle: string };
 export type Commitment = { id: string; title: string; starts_at: string };
 

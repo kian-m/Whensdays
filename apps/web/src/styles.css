@@ -118,6 +118,10 @@ textarea.input { resize: vertical; min-height: 64px; }
 .gp-head { background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
 .gp-head:hover { color: var(--accent); }
 
+/* avatars */
+.avatar { border-radius: 50%; object-fit: cover; flex: none; display: inline-grid; place-items: center; }
+.avatar-fallback { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+
 /* misc */
 .empty { text-align: center; color: var(--muted); padding: 2.2rem 1rem; }
 .section-h { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 1.4rem 0 0.2rem; }

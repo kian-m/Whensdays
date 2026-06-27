@@ -1,12 +1,12 @@
 -- ============================ profiles ============================
 
 -- name: GetProfile :one
-SELECT user_id, display_name, handle, created_at
+SELECT user_id, display_name, handle, avatar_url, created_at
 FROM profiles
 WHERE user_id = $1;
 
 -- name: GetProfileByHandle :one
-SELECT user_id, display_name, handle, created_at
+SELECT user_id, display_name, handle, avatar_url, created_at
 FROM profiles
 WHERE handle = $1;
 
@@ -16,7 +16,12 @@ VALUES ($1, $2, $3)
 ON CONFLICT (user_id) DO UPDATE
     SET display_name = EXCLUDED.display_name,
         handle       = EXCLUDED.handle
-RETURNING user_id, display_name, handle, created_at;
+RETURNING user_id, display_name, handle, avatar_url, created_at;
+
+-- name: SetAvatar :one
+UPDATE profiles SET avatar_url = $2
+WHERE user_id = $1
+RETURNING user_id, display_name, handle, avatar_url, created_at;
 
 -- ======================== availability ============================
 
@@ -53,7 +58,8 @@ RETURNING id, requester_id, addressee_id, status, created_at;
 SELECT
     (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END)::text AS friend_id,
     p.display_name,
-    p.handle
+    p.handle,
+    p.avatar_url
 FROM friendships f
 JOIN profiles p
     ON p.user_id = CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END
@@ -182,7 +188,7 @@ ON CONFLICT (event_id, user_id) DO UPDATE
 RETURNING id, event_id, user_id, rsvp, created_at;
 
 -- name: ListAttendees :many
-SELECT a.user_id, a.rsvp, p.display_name
+SELECT a.user_id, a.rsvp, p.display_name, p.avatar_url
 FROM event_attendees a
 LEFT JOIN profiles p ON p.user_id = a.user_id
 WHERE a.event_id = $1

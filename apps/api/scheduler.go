@@ -146,6 +146,39 @@ func (s *server) handleUpsertProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, p)
 }
 
+// handleSetAvatar stores a profile picture: a resized image data URL (default
+// from the web client) or an https URL. Bigger body limit than other endpoints
+// to fit a small base64 image; the stored value is still capped.
+func (s *server) handleSetAvatar(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	var in struct {
+		AvatarURL string `json:"avatar_url"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	if len(in.AvatarURL) > 300_000 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "image too large (max ~300KB)"})
+		return
+	}
+	if in.AvatarURL != "" && !strings.HasPrefix(in.AvatarURL, "data:image/") && !strings.HasPrefix(in.AvatarURL, "https://") {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "avatar must be an image data URL or https URL"})
+		return
+	}
+	p, err := s.queries.SetAvatar(r.Context(), db.SetAvatarParams{UserID: uid, AvatarUrl: in.AvatarURL})
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "set up your profile first"})
+		return
+	}
+	if err != nil {
+		s.internal(w, "set avatar", err)
+		return
+	}
+	s.analytics.Capture(uid, "avatar_updated", map[string]any{"has_photo": in.AvatarURL != ""})
+	writeJSON(w, http.StatusOK, p)
+}
+
 func validHandle(h string) bool {
 	for _, c := range h {
 		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-') {

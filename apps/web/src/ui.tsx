@@ -40,3 +40,11 @@ export function BackLink() {
 export function Pill({ kind, children }: { kind: string; children: React.ReactNode }) {
   return <span className={`pill ${kind}`}>{children}</span>;
 }
+
+// Round avatar: shows the photo if present, otherwise a colored initial.
+export function Avatar({ url, name, size = 36 }: { url?: string | null; name?: string | null; size?: number }) {
+  const style = { width: size, height: size, fontSize: size * 0.42 } as React.CSSProperties;
+  if (url) return <img className="avatar" style={style} src={url} alt={name ?? ""} data-testid="avatar-img" />;
+  const initial = (name ?? "?").trim().charAt(0).toUpperCase() || "?";
+  return <span className="avatar avatar-fallback" style={style} aria-hidden>{initial}</span>;
+}

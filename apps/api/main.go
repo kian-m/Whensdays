@@ -84,6 +84,7 @@ func main() {
 	// Scheduler ("get-togethers") feature — see scheduler.go.
 	mux.Handle("GET /api/profile", auth(http.HandlerFunc(s.handleGetProfile)))
 	mux.Handle("PUT /api/profile", auth(http.HandlerFunc(s.handleUpsertProfile)))
+	mux.Handle("PUT /api/profile/avatar", auth(http.HandlerFunc(s.handleSetAvatar)))
 	mux.Handle("GET /api/availability", auth(http.HandlerFunc(s.handleGetAvailability)))
 	mux.Handle("PUT /api/availability", auth(http.HandlerFunc(s.handlePutAvailability)))
 	mux.Handle("GET /api/events", auth(http.HandlerFunc(s.handleListEvents)))

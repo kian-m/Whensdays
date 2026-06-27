@@ -8,7 +8,8 @@ import {
   useAuth,
 } from "@clerk/clerk-react";
 import "./styles.css";
-import { ApiContext, ApiFn, Profile, ProfileContext, useApi } from "./lib";
+import { ApiContext, ApiFn, Profile, ProfileContext, useApi, useProfile } from "./lib";
+import { Avatar } from "./ui";
 import { analytics } from "./analytics";
 import { Home } from "./pages/Home";
 import { NewEvent } from "./pages/NewEvent";
@@ -165,6 +166,7 @@ function ProfileGate() {
 }
 
 function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boolean }) {
+  const profile = useProfile();
   return (
     <div className="app">
       <nav className="nav">
@@ -177,6 +179,11 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
             <NavLink to="/friends">Friends</NavLink>
             <NavLink to="/profile">Profile</NavLink>
             {DEV_AUTH && DEV_USER !== "demo-user" && <span className="pill polling" title="dev user (?as=…)">dev: {DEV_USER}</span>}
+            {DEV_AUTH && profile && (
+              <NavLink to="/profile" title={profile.display_name}>
+                <Avatar url={profile.avatar_url} name={profile.display_name} size={30} />
+              </NavLink>
+            )}
             {!DEV_AUTH && <UserButton />}
           </div>
         )}
