@@ -259,10 +259,10 @@ test.describe("scheduler", () => {
       await ownerPage.goto("/?as=gowner");
       await ownerPage.goto("/groups");
 
-      // Create a fresh group. testId is stable across runs and the dev DB
-      // persists (two-pass e2e), so pick .first() to survive duplicates.
+      // Unique per run (testId is identical across the two e2e passes + the DB
+      // persists), so the group name can't collide → no ambiguous .first().
       const testId = test.info().testId;
-      const groupName = `Crew ${testId}`;
+      const groupName = `Crew ${testId}-${Date.now()}`;
       await ownerPage.getByTestId("group-name").fill(groupName);
       await ownerPage.getByTestId("group-create").click();
 
@@ -770,6 +770,52 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("event-title")).toHaveText(title);
   });
 
+  test("people you may know: suggested from a shared event", async ({ browser }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    const hCtx = await browser.newContext();
+    const aCtx = await browser.newContext();
+    const bCtx = await browser.newContext();
+    try {
+      const host = await hCtx.newPage(); const a = await aCtx.newPage(); const b = await bCtx.newPage();
+      await ensureUser(host, "rechost", "Rec Host", "rechost");
+      await ensureUser(a, "reca", "Rec Ay", "reca");
+      await ensureUser(b, "recb", "Rec Bee", "recb");
+
+      // Host runs an event; A and B both RSVP going (co-attendance).
+      await host.getByTestId("new-event").click();
+      const title = `Shared ${test.info().testId}`;
+      await host.getByTestId("event-title").fill(title);
+      await host.getByTestId("type-dinner").click();
+      await host.getByTestId("wiz-next").click();
+      await host.getByTestId("wiz-next").click();
+      await host.getByTestId("sched-fixed").click();
+      await host.getByTestId("fixed-time").fill("2026-10-10T19:00");
+      await host.getByTestId("wiz-next").click();
+      await host.getByTestId("create-event").click();
+      await expect(host.getByTestId("event-title")).toHaveText(title);
+      const url = host.url();
+
+      for (const p of [a, b]) {
+        await p.goto(url);
+        await p.getByTestId("rsvp-going").click();
+        await expect(p.getByTestId("event-title")).toHaveText(title);
+      }
+
+      // A now sees B under "People you may know", and can add them. Clear any
+      // leftover pending request from a previous pass first (persistent DB).
+      await a.goto("/friends");
+      await a.getByTestId("friend-handle").waitFor();
+      const leftover = a.getByTestId("cancel-req-recb");
+      if (await leftover.isVisible().catch(() => false)) await leftover.click();
+      await expect(a.getByTestId("suggest-add-recb")).toBeVisible();
+      await a.getByTestId("suggest-add-recb").click();
+      // A pending request now exists → B drops out of suggestions.
+      await expect(a.getByTestId("suggest-add-recb")).toHaveCount(0);
+    } finally {
+      await hCtx.close(); await aCtx.close(); await bCtx.close();
+    }
+  });
+
   test("cron reminders endpoint is key-gated", async ({ request }) => {
     const noKey = await request.post("/api/cron/reminders");
     expect(noKey.status()).toBe(401); // no CRON_KEY configured/matched
@@ -910,6 +956,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("save-profile").click();
     await expect(page.getByTestId("profile-view")).toBeVisible(); // back to read-only
     // Explicit calendar: tomorrow evening, day-after noon.
+    await page.getByTestId("avail-edit").click();
     await page.getByTestId("avail-cell-1-evening").click();
     await page.getByTestId("avail-cell-2-noon").click();
     await page.getByTestId("save-availability").click();
@@ -920,7 +967,8 @@ test.describe("scheduler", () => {
     await ensureProfile(page);
     await page.goto("/profile");
 
-    // Recurring weekly mode: pick Monday morning + Friday evening, save.
+    // Recurring weekly mode: enter edit, pick Monday morning + Friday evening, save.
+    await page.getByTestId("avail-edit").click();
     await page.getByTestId("avail-mode-weekly").click();
     await expect(page.getByTestId("weekly-grid")).toBeVisible();
     await page.getByTestId("wk-cell-1-morning").click();
@@ -928,7 +976,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("save-weekly").click();
     await expect(page.getByText("Availability saved ✓")).toBeVisible();
 
-    // Specific dates: paginate further into the future, then mark a cell there.
+    // Specific dates: re-enter edit, paginate into the future, mark a cell.
+    await page.getByTestId("avail-edit").click();
     await page.getByTestId("avail-mode-specific").click();
     await expect(page.getByTestId("avail-earlier")).toBeDisabled(); // present is the floor
     const firstRange = await page.getByTestId("avail-range").textContent();
@@ -945,6 +994,7 @@ test.describe("scheduler", () => {
     // A fresh user with no saved availability → deterministic empty grid.
     await ensureUser(page, "availviz", "Avail Viz", "availviz");
     await page.goto("/profile");
+    await page.getByTestId("avail-edit").click();
     await page.getByTestId("avail-mode-weekly").click();
     await expect(page.getByTestId("weekly-grid")).toBeVisible();
     await expect(page.getByTestId("weekly-grid")).toHaveScreenshot("weekly-grid.png");
@@ -997,6 +1047,7 @@ test.describe("scheduler", () => {
       await ensureUser(ben, "ben", "Ben", "ben");
       // Ben marks some availability so Amy has something to see.
       await ben.goto("/profile");
+      await ben.getByTestId("avail-edit").click();
       await ben.getByTestId("avail-cell-2-afternoon").click();
       await ben.getByTestId("save-availability").click();
       await expect(ben.getByText("Availability saved ✓")).toBeVisible();

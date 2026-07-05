@@ -120,6 +120,18 @@ export function fileToAvatar(file: File, size = 160): Promise<string> {
   });
 }
 
+// Auto-dismissing confirmation toast (prominent + mobile-visible). Renders
+// nothing when msg is empty; call onDone after it fades to clear the message.
+export function Toast({ msg, onDone }: { msg: string | null; onDone: () => void }) {
+  useEffect(() => {
+    if (!msg) return;
+    const t = setTimeout(onDone, 2400);
+    return () => clearTimeout(t);
+  }, [msg, onDone]);
+  if (!msg) return null;
+  return <div className="toast" data-testid="toast" role="status">{msg}</div>;
+}
+
 // Round avatar: shows the photo if present, otherwise a colored initial.
 export function Avatar({ url, name, size = 36 }: { url?: string | null; name?: string | null; size?: number }) {
   const style = { width: size, height: size, fontSize: size * 0.42 } as React.CSSProperties;

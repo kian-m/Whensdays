@@ -336,6 +336,76 @@ func (q *Queries) ListFriendsEvents(ctx context.Context, dollar_1 string) ([]Lis
 	return items, nil
 }
 
+const listPeopleYouMayKnow = `-- name: ListPeopleYouMayKnow :many
+SELECT
+    other.user_id AS friend_id,
+    p.display_name,
+    p.handle,
+    p.avatar_url,
+    SUM(
+        (CASE e.visibility WHEN 'public' THEN 1 WHEN 'friends' THEN 3 ELSE 4 END)
+        + (CASE WHEN me.rsvp = 'going' AND other.rsvp = 'going'
+                THEN (CASE e.visibility WHEN 'public' THEN 1 WHEN 'friends' THEN 3 ELSE 4 END)
+                ELSE 0 END)
+    )::int AS score,
+    COUNT(DISTINCT e.id)::int AS shared_events
+FROM event_attendees me
+JOIN event_attendees other ON other.event_id = me.event_id AND other.user_id <> me.user_id
+JOIN events e ON e.id = me.event_id
+JOIN profiles p ON p.user_id = other.user_id
+WHERE me.user_id = $1
+  AND me.rsvp IN ('going', 'maybe')
+  AND other.rsvp IN ('going', 'maybe')
+  AND other.user_id NOT LIKE 'guest_%'
+  AND NOT EXISTS (
+      SELECT 1 FROM friendships f
+      WHERE (f.requester_id = $1 AND f.addressee_id = other.user_id)
+         OR (f.addressee_id = $1 AND f.requester_id = other.user_id))
+GROUP BY other.user_id, p.display_name, p.handle, p.avatar_url
+ORDER BY score DESC, shared_events DESC
+LIMIT 12
+`
+
+type ListPeopleYouMayKnowRow struct {
+	FriendID     string `json:"friend_id"`
+	DisplayName  string `json:"display_name"`
+	Handle       string `json:"handle"`
+	AvatarUrl    string `json:"avatar_url"`
+	Score        int32  `json:"score"`
+	SharedEvents int32  `json:"shared_events"`
+}
+
+// Suggests people you've co-attended events with, ranked by how meaningful the
+// overlap is: a shared public event is the weakest signal; both being "going"
+// to a friends-only or invite-only (link) event is the strongest. Excludes
+// yourself, guests, and anyone you already have a friendship/request with.
+func (q *Queries) ListPeopleYouMayKnow(ctx context.Context, userID string) ([]ListPeopleYouMayKnowRow, error) {
+	rows, err := q.db.Query(ctx, listPeopleYouMayKnow, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPeopleYouMayKnowRow{}
+	for rows.Next() {
+		var i ListPeopleYouMayKnowRow
+		if err := rows.Scan(
+			&i.FriendID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.Score,
+			&i.SharedEvents,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublicEvents = `-- name: ListPublicEvents :many
 
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,

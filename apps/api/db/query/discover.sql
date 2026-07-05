@@ -116,3 +116,36 @@ WHERE e.status IN ('polling', 'scheduled')
       WHERE f.status = 'accepted' AND (f.requester_id = $1 OR f.addressee_id = $1))
 ORDER BY e.starts_at NULLS LAST
 LIMIT 100;
+
+-- name: ListPeopleYouMayKnow :many
+-- Suggests people you've co-attended events with, ranked by how meaningful the
+-- overlap is: a shared public event is the weakest signal; both being "going"
+-- to a friends-only or invite-only (link) event is the strongest. Excludes
+-- yourself, guests, and anyone you already have a friendship/request with.
+SELECT
+    other.user_id AS friend_id,
+    p.display_name,
+    p.handle,
+    p.avatar_url,
+    SUM(
+        (CASE e.visibility WHEN 'public' THEN 1 WHEN 'friends' THEN 3 ELSE 4 END)
+        + (CASE WHEN me.rsvp = 'going' AND other.rsvp = 'going'
+                THEN (CASE e.visibility WHEN 'public' THEN 1 WHEN 'friends' THEN 3 ELSE 4 END)
+                ELSE 0 END)
+    )::int AS score,
+    COUNT(DISTINCT e.id)::int AS shared_events
+FROM event_attendees me
+JOIN event_attendees other ON other.event_id = me.event_id AND other.user_id <> me.user_id
+JOIN events e ON e.id = me.event_id
+JOIN profiles p ON p.user_id = other.user_id
+WHERE me.user_id = $1
+  AND me.rsvp IN ('going', 'maybe')
+  AND other.rsvp IN ('going', 'maybe')
+  AND other.user_id NOT LIKE 'guest_%'
+  AND NOT EXISTS (
+      SELECT 1 FROM friendships f
+      WHERE (f.requester_id = $1 AND f.addressee_id = other.user_id)
+         OR (f.addressee_id = $1 AND f.requester_id = other.user_id))
+GROUP BY other.user_id, p.display_name, p.handle, p.avatar_url
+ORDER BY score DESC, shared_events DESC
+LIMIT 12;

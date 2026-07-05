@@ -983,7 +983,14 @@ func (s *server) handleListFriends(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "list outgoing", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"friends": friends, "incoming": incoming, "outgoing": outgoing})
+	suggestions, err := s.queries.ListPeopleYouMayKnow(r.Context(), uid)
+	if err != nil {
+		s.internal(w, "list suggestions", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"friends": friends, "incoming": incoming, "outgoing": outgoing, "suggestions": suggestions,
+	})
 }
 
 func (s *server) handleAddFriend(w http.ResponseWriter, r *http.Request) {

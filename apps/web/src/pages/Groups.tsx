@@ -37,7 +37,7 @@ export function Groups() {
     reload();
   }
 
-  if (loading) return <Loading />;
+  if (loading && !data) return <Loading />;
 
   return (
     <div className="stack">
@@ -126,7 +126,7 @@ export function GroupPage() {
     reload();
   }
 
-  if (loading) return <Loading />;
+  if (loading && !data) return <Loading />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Group not found.</p></div>;
 
   const { group, members, events, is_owner } = data;

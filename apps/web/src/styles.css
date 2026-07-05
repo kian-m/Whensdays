@@ -184,6 +184,18 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .emoji-strip .chip { flex: none; }
 
+/* toast: prominent, mobile-visible save confirmation (auto-dismiss) */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 60;
+  background: var(--go); color: #fff; font-weight: 700; font-size: 0.92rem;
+  padding: 0.6rem 1.1rem; border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(31, 157, 107, 0.35);
+  animation: toast-in 0.18s ease;
+}
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (min-width: 641px) { .toast { bottom: 24px; } }
+
 /* calendar view (month/week/day) */
 .cal-month {
   display: grid; grid-template-columns: repeat(7, 1fr);

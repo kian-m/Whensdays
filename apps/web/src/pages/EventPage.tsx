@@ -31,7 +31,7 @@ export function EventPage() {
   const { data, loading, reload } = useAsync<EventDetail>((api) => getJSON(api, `/api/events/${id}`), [id]);
   const [preview, setPreview] = useState(false);
 
-  if (loading) return <Loading />;
+  if (loading && !data) return <Loading />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Event not found.</p></div>;
 
   const showManage = data.can_manage && !preview;

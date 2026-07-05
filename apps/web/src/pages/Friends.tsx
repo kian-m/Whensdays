@@ -13,7 +13,8 @@ import {
 import { Avatar, DayGrid, Loading, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
-type FriendsResp = { friends: Friend[]; incoming: FriendRequest[]; outgoing: FriendRequest[] };
+type Suggestion = { friend_id: string; display_name: string; handle: string; avatar_url: string; score: number; shared_events: number };
+type FriendsResp = { friends: Friend[]; incoming: FriendRequest[]; outgoing: FriendRequest[]; suggestions: Suggestion[] };
 
 export function Friends() {
   const api = useApi();
@@ -34,6 +35,13 @@ export function Friends() {
     reload();
   }
 
+  // Add a suggested person by their handle, then refresh (drops them from the
+  // list since a pending request now exists).
+  async function addByHandle(h: string) {
+    await sendJSON(api, "POST", "/api/friends", { handle: h });
+    reload();
+  }
+
   async function accept(id: string) {
     await sendJSON(api, "POST", `/api/friends/${id}/accept`, {});
     reload();
@@ -46,7 +54,7 @@ export function Friends() {
     reload();
   }
 
-  if (loading) return <Loading />;
+  if (loading && !data) return <Loading />;
 
   return (
     <div className="stack">
@@ -80,6 +88,25 @@ export function Friends() {
       <div className="section-h">Your friends</div>
       {data && data.friends.length === 0 && <p className="muted small">No friends yet — add someone above.</p>}
       {data?.friends.map((f) => <FriendCard key={f.friend_id} friend={f} onRemove={() => remove(f.id)} />)}
+
+      {data && data.suggestions.length > 0 && (
+        <>
+          <div className="section-h">People you may know</div>
+          <p className="muted small" style={{ marginTop: -4 }}>From events you've both been to — the more it was a close, invite-only plan, the higher up.</p>
+          {data.suggestions.map((s) => (
+            <div key={s.friend_id} className="card row between" data-testid="suggestion">
+              <span className="row" style={{ gap: 8 }}>
+                <Avatar url={s.avatar_url} name={s.display_name} size={32} />
+                <span className="stack" style={{ gap: 0 }}>
+                  <span>{s.display_name} <span className="muted small">@{s.handle}</span></span>
+                  <span className="muted small">{s.shared_events} event{s.shared_events > 1 ? "s" : ""} together</span>
+                </span>
+              </span>
+              <button className="btn soft sm" data-testid={`suggest-add-${s.handle}`} onClick={() => addByHandle(s.handle)}>Add</button>
+            </div>
+          ))}
+        </>
+      )}
 
       {data && data.outgoing.length > 0 && (
         <>

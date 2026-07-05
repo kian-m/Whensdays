@@ -15,7 +15,7 @@ import {
   useProfile,
 } from "../lib";
 import { useSearchParams } from "react-router-dom";
-import { Avatar, DayGrid, Loading, fileToAvatar, useAsync } from "../ui";
+import { Avatar, DayGrid, Loading, Toast, fileToAvatar, useAsync } from "../ui";
 import { CalendarConnections } from "./Calendars";
 
 const PAGE = 14; // days of explicit availability shown per page
@@ -54,6 +54,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
 
   // Availability: a mode toggle plus the two data sets.
   const [mode, setMode] = useState<"specific" | "weekly">("specific");
+  const [editingAvail, setEditingAvail] = useState(false);
   const [pageOffset, setPageOffset] = useState(0);
   const dates = daysFrom(pageOffset, PAGE);
 
@@ -149,6 +150,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
     });
     await sendJSON(api, "PUT", "/api/availability/days", { days: payload });
     setSavedMsg("Availability saved ✓");
+    setEditingAvail(false);
   }
 
   async function saveWeekly() {
@@ -158,6 +160,14 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
     });
     await sendJSON(api, "PUT", "/api/availability", { slots: slotsPayload });
     setSavedMsg("Availability saved ✓");
+    setEditingAvail(false);
+  }
+
+  // Discard edits: restore both grids from the last-loaded server data.
+  function cancelAvail() {
+    if (days) setFree(new Set(days.map((d) => `${d.day}:${d.daypart}`)));
+    if (slots) setWeek(new Set(slots.map((sl) => `${sl.weekday}:${sl.part_of_day}`)));
+    setEditingAvail(false);
   }
 
   if (loading && !days) return <Loading />;
@@ -222,25 +232,36 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
       <div className="card stack">
         <div className="row between">
           <h3 style={{ margin: 0 }}>Your availability</h3>
-          <div className="row" style={{ gap: 6 }}>
-            <button type="button" className={mode === "weekly" ? "btn sm" : "btn ghost sm"}
-              data-testid="avail-mode-weekly" onClick={() => setMode("weekly")}>Recurring weekly</button>
-            <button type="button" className={mode === "specific" ? "btn sm" : "btn ghost sm"}
-              data-testid="avail-mode-specific" onClick={() => setMode("specific")}>Specific dates</button>
-          </div>
+          {!editingAvail ? (
+            <button type="button" className="btn ghost sm" data-testid="avail-edit"
+              onClick={() => setEditingAvail(true)}>Edit availability</button>
+          ) : (
+            <div className="row" style={{ gap: 6 }}>
+              <button type="button" className={mode === "weekly" ? "btn sm" : "btn ghost sm"}
+                data-testid="avail-mode-weekly" onClick={() => setMode("weekly")}>Recurring weekly</button>
+              <button type="button" className={mode === "specific" ? "btn sm" : "btn ghost sm"}
+                data-testid="avail-mode-specific" onClick={() => setMode("specific")}>Specific dates</button>
+            </div>
+          )}
         </div>
+
+        {!editingAvail && (
+          <p className="muted small" data-testid="avail-readonly">
+            {(mode === "weekly" ? week.size : free.size) === 0
+              ? "You haven't set your availability yet. Tap Edit to add the times you're free — friends can see this."
+              : "The times you're free (friends can see this). Tap Edit to change."}
+          </p>
+        )}
 
         {mode === "weekly" ? (
           <>
-            <p className="muted small">Tap the times you're usually free each week. Friends can see this.</p>
-            <DayGrid dates={WEEK_ROWS} selected={week} cols={WEEK_PARTS} idPrefix="wk"
+            {editingAvail && <p className="muted small">Tap the times you're usually free each week.</p>}
+            <DayGrid dates={WEEK_ROWS} selected={week} cols={WEEK_PARTS} idPrefix="wk" readOnly={!editingAvail}
               onToggle={toggleWeekCell} onToggleRow={toggleWeekRow} onToggleCol={toggleWeekCol} testid="weekly-grid" />
-            <button className="btn soft" style={{ alignSelf: "flex-start" }} data-testid="save-weekly"
-              onClick={saveWeekly}>Save availability</button>
           </>
         ) : (
           <>
-            <p className="muted small">Tap the times you're free on each date (tap a date or column header to fill it). Friends can see this.</p>
+            {editingAvail && <p className="muted small">Tap the times you're free on each date (tap a date or column header to fill it).</p>}
             <div className="row between" style={{ alignItems: "center" }}>
               <button type="button" className="btn ghost sm" data-testid="avail-earlier"
                 disabled={pageOffset === 0} onClick={() => setPageOffset((o) => Math.max(0, o - PAGE))}>← Earlier</button>
@@ -248,16 +269,23 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
               <button type="button" className="btn ghost sm" data-testid="avail-later"
                 disabled={pageOffset >= MAX_OFFSET} onClick={() => setPageOffset((o) => Math.min(MAX_OFFSET, o + PAGE))}>Later →</button>
             </div>
-            <DayGrid dates={dates} selected={free} busy={busyCells} onToggle={toggleCell} onToggleRow={toggleRow} onToggleCol={toggleCol} testid="availability-grid" />
-            <button className="btn soft" style={{ alignSelf: "flex-start" }} data-testid="save-availability"
-              onClick={saveAvailability}>Save availability</button>
+            <DayGrid dates={dates} selected={free} busy={busyCells} readOnly={!editingAvail}
+              onToggle={toggleCell} onToggleRow={toggleRow} onToggleCol={toggleCol} testid="availability-grid" />
           </>
+        )}
+
+        {editingAvail && (
+          <div className="row">
+            <button className="btn" data-testid={mode === "weekly" ? "save-weekly" : "save-availability"}
+              onClick={() => (mode === "weekly" ? saveWeekly() : saveAvailability())}>Save availability</button>
+            <button type="button" className="btn ghost sm" data-testid="avail-cancel" onClick={cancelAvail}>Cancel</button>
+          </div>
         )}
       </div>
 
       <CalendarConnections />
 
-      {savedMsg && <p className="muted small" data-testid="calendar-msg-profile">{savedMsg}</p>}
+      <Toast msg={savedMsg} onDone={() => setSavedMsg(null)} />
     </div>
   );
 }

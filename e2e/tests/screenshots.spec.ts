@@ -54,6 +54,7 @@ test.describe("docs screenshots", () => {
 
     // Feature: explicit date-based availability on the profile.
     await page.goto("/profile");
+    await page.getByTestId("avail-edit").click();
     await page.getByTestId("availability-grid").waitFor();
     for (const c of ["avail-cell-1-evening", "avail-cell-2-noon", "avail-cell-2-afternoon", "avail-cell-5-morning", "avail-cell-6-evening"]) {
       await page.getByTestId(c).click();
