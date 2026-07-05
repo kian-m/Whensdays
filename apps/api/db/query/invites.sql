@@ -15,8 +15,11 @@ ORDER BY i.created_at;
 -- name: CountUnseenInvites :one
 SELECT count(*)::int FROM event_invites WHERE user_id = $1 AND NOT seen;
 
--- name: MarkInvitesSeen :exec
-UPDATE event_invites SET seen = true WHERE user_id = $1 AND NOT seen;
+-- name: MarkOneInviteSeen :exec
+UPDATE event_invites SET seen = true WHERE event_id = $1 AND user_id = $2;
+
+-- name: ListUnseenInviteEventIDs :many
+SELECT event_id FROM event_invites WHERE user_id = $1 AND NOT seen;
 
 -- name: CountPendingIncoming :one
 SELECT count(*)::int FROM friendships WHERE addressee_id = $1 AND status = 'pending';

@@ -3,7 +3,20 @@ import { Event, TYPE_COLORS, fmtDateTime, getJSON } from "../lib";
 import { eventEmoji, eventLabel } from "../scheduler/questions";
 import { Loading, Pill, useAsync } from "../ui";
 
-type EventsResp = { hosting: Event[]; attending: Event[] };
+type EventsResp = { hosting: Event[]; attending: Event[]; unseen: string[] };
+
+const DAY = 86_400_000;
+
+// Relative "how soon" label for upcoming events (Today / Tomorrow / in N days).
+function soonLabel(iso: string): string {
+  const d = new Date(iso);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - startOfToday.getTime()) / DAY);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `In ${days} days`;
+}
 
 export function Home() {
   const nav = useNavigate();
@@ -12,7 +25,23 @@ export function Home() {
   if (loading) return <Loading />;
   const hosting = data?.hosting ?? [];
   const attending = data?.attending ?? [];
+  const unseen = new Set(data?.unseen ?? []);
   const empty = hosting.length === 0 && attending.length === 0;
+  const open = (id: string) => nav(`/e/${id}`);
+
+  // "Coming up": every event you're part of that's scheduled within the next
+  // week, soonest first — the thing you actually want to see on landing.
+  const now = Date.now();
+  const seen = new Set<string>();
+  const upcoming = [...hosting, ...attending]
+    .filter((e) => {
+      if (e.status !== "scheduled" || !e.starts_at || seen.has(e.id)) return false;
+      const t = new Date(e.starts_at).getTime();
+      if (t < now || t > now + 7 * DAY) return false;
+      seen.add(e.id);
+      return true;
+    })
+    .sort((a, b) => new Date(a.starts_at!).getTime() - new Date(b.starts_at!).getTime());
 
   return (
     <div className="stack">
@@ -36,11 +65,22 @@ export function Home() {
         </div>
       )}
 
+      {upcoming.length > 0 && (
+        <>
+          <div className="section-h">Coming up</div>
+          <div className="stack" data-testid="coming-up">
+            {upcoming.map((e) => (
+              <EventRow key={e.id} e={e} isNew={unseen.has(e.id)} soon={soonLabel(e.starts_at!)} onClick={() => open(e.id)} />
+            ))}
+          </div>
+        </>
+      )}
+
       {hosting.length > 0 && (
         <>
           <div className="section-h">Hosting</div>
           <div className="stack">
-            {hosting.map((e) => <EventRow key={e.id} e={e} onClick={() => nav(`/e/${e.id}`)} />)}
+            {hosting.map((e) => <EventRow key={e.id} e={e} isNew={unseen.has(e.id)} onClick={() => open(e.id)} />)}
           </div>
         </>
       )}
@@ -49,7 +89,7 @@ export function Home() {
         <>
           <div className="section-h">Going & invited</div>
           <div className="stack">
-            {attending.map((e) => <EventRow key={e.id} e={e} onClick={() => nav(`/e/${e.id}`)} />)}
+            {attending.map((e) => <EventRow key={e.id} e={e} isNew={unseen.has(e.id)} onClick={() => open(e.id)} />)}
           </div>
         </>
       )}
@@ -57,16 +97,20 @@ export function Home() {
   );
 }
 
-function EventRow({ e, onClick }: { e: Event; onClick: () => void }) {
+function EventRow({ e, onClick, isNew, soon }: { e: Event; onClick: () => void; isNew?: boolean; soon?: string }) {
+  const color = TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other;
   return (
-    <div className="card ev tile" data-testid="event-row" onClick={onClick}
-      style={{ borderLeftColor: TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other }}>
-      <div className="emoji" style={{ background: `${TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other}22` }}>{eventEmoji(e)}</div>
+    <div className="card ev tile" data-testid="event-row" onClick={onClick} style={{ borderLeftColor: color }}>
+      <div className="emoji" style={{ background: `${color}22` }}>{eventEmoji(e)}</div>
       <div style={{ flex: 1 }}>
         <div className="row between">
-          <span className="title">{e.title}</span>
-          {e.status === "polling"
-            ? <Pill kind="polling">Polling</Pill>
+          <span className="title row" style={{ gap: 6 }}>
+            {e.title}
+            {isNew && <span className="dot-badge" data-testid="event-new" title="You haven't opened this yet">NEW</span>}
+          </span>
+          {soon ? <Pill kind="scheduled">{soon}</Pill>
+            : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
+            : e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
             : <Pill kind="scheduled">Set</Pill>}
         </div>
         <div className="muted small">

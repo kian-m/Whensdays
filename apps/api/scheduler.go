@@ -411,9 +411,19 @@ func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	attending = append(attending, invited...)
-	// Listing the dashboard counts as seeing your invites (clears the badge).
-	_ = s.queries.MarkInvitesSeen(r.Context(), uid)
-	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending})
+	// Per-event "new" markers: ids of invited events the user hasn't opened yet.
+	// (Cleared one at a time in handleGetEvent, not en masse here — so the alert
+	// stays on each event until it's actually opened.)
+	unseenRows, err := s.queries.ListUnseenInviteEventIDs(r.Context(), uid)
+	if err != nil {
+		s.internal(w, "list unseen invites", err)
+		return
+	}
+	unseen := make([]string, 0, len(unseenRows))
+	for _, u := range unseenRows {
+		unseen = append(unseen, uuidStr(u))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending, "unseen": unseen})
 }
 
 // requireActiveEvent loads an event and rejects writes against cancelled ones
@@ -690,6 +700,8 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Opening the event clears its "new" invite marker (per-event, persistent).
+	_ = s.queries.MarkOneInviteSeen(r.Context(), db.MarkOneInviteSeenParams{EventID: id, UserID: uid})
 	s.analytics.Capture(uid, "event_viewed", map[string]any{
 		"event_id": uuidStr(ev.ID),
 		"role":     role,

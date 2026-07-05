@@ -247,9 +247,12 @@ function Landing() {
         </p>
         <div className="row">
           <a href="/start" className="btn" data-testid="start-plan">Start a plan — no account needed</a>
-          <SignInButton mode="modal">
-            <button className="btn ghost" data-testid="sign-in">Sign in</button>
-          </SignInButton>
+          {/* Clerk isn't mounted in dev/E2E; the sign-in modal only exists in prod. */}
+          {!DEV_AUTH && (
+            <SignInButton mode="modal">
+              <button className="btn ghost" data-testid="sign-in">Sign in</button>
+            </SignInButton>
+          )}
         </div>
       </div>
     </div>
@@ -364,11 +367,15 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
       {profile?.user_id.startsWith("guest_") && (
         <div className="card row between" data-testid="guest-banner" style={{ marginBottom: "0.9rem" }}>
           <span className="small">You're in as a guest — sign up to keep your plans on any device.</span>
-          {!DEV_AUTH && (
-            <SignInButton mode="modal">
-              <button className="btn sm">Sign up</button>
-            </SignInButton>
-          )}
+          <span className="row" style={{ gap: 6 }}>
+            <button className="btn ghost sm" data-testid="guest-reset"
+              onClick={() => { localStorage.removeItem(GUEST_KEY); location.href = "/"; }}>Start over</button>
+            {!DEV_AUTH && (
+              <SignInButton mode="modal">
+                <button className="btn sm">Sign up</button>
+              </SignInButton>
+            )}
+          </span>
         </div>
       )}
       {children}

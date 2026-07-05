@@ -139,11 +139,40 @@ func (q *Queries) ListEventsInvited(ctx context.Context, userID string) ([]Event
 	return items, nil
 }
 
-const markInvitesSeen = `-- name: MarkInvitesSeen :exec
-UPDATE event_invites SET seen = true WHERE user_id = $1 AND NOT seen
+const listUnseenInviteEventIDs = `-- name: ListUnseenInviteEventIDs :many
+SELECT event_id FROM event_invites WHERE user_id = $1 AND NOT seen
 `
 
-func (q *Queries) MarkInvitesSeen(ctx context.Context, userID string) error {
-	_, err := q.db.Exec(ctx, markInvitesSeen, userID)
+func (q *Queries) ListUnseenInviteEventIDs(ctx context.Context, userID string) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listUnseenInviteEventIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var event_id pgtype.UUID
+		if err := rows.Scan(&event_id); err != nil {
+			return nil, err
+		}
+		items = append(items, event_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markOneInviteSeen = `-- name: MarkOneInviteSeen :exec
+UPDATE event_invites SET seen = true WHERE event_id = $1 AND user_id = $2
+`
+
+type MarkOneInviteSeenParams struct {
+	EventID pgtype.UUID `json:"event_id"`
+	UserID  string      `json:"user_id"`
+}
+
+func (q *Queries) MarkOneInviteSeen(ctx context.Context, arg MarkOneInviteSeenParams) error {
+	_, err := q.db.Exec(ctx, markOneInviteSeen, arg.EventID, arg.UserID)
 	return err
 }

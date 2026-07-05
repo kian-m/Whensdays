@@ -648,13 +648,26 @@ test.describe("scheduler", () => {
       await expect(page.getByTestId("event-title")).toHaveText(title);
       await expect(page.getByText("Invited: Inv Bee")).toBeVisible();
 
-      // B: red count on Events, the event on the dashboard WITHOUT any link,
-      // and the badge clears once the dashboard has been seen.
+      // B: red count on Events + the event on the dashboard (no link needed),
+      // marked NEW. The alert PERSISTS across dashboard views — it only clears
+      // when B actually opens that event.
       await b.goto("/friends");
       await expect(b.getByTestId("nav-badge-events")).toBeVisible();
+      const bTile = b.getByTestId("event-row").filter({ hasText: title }).first();
       await b.goto("/");
-      await expect(b.getByTestId("event-row").filter({ hasText: title }).first()).toBeVisible();
+      await expect(bTile).toBeVisible();
+      await expect(bTile.getByTestId("event-new")).toBeVisible();
+      // Viewing the dashboard again does NOT clear it.
       await b.goto("/friends");
+      await b.goto("/");
+      await expect(bTile).toBeVisible();
+      await expect(b.getByTestId("nav-badge-events")).toBeVisible();
+      // Open the event → marker + badge clear.
+      await bTile.click();
+      await expect(b.getByTestId("event-title")).toHaveText(title);
+      await b.goto("/");
+      await expect(b.getByTestId("event-row").filter({ hasText: title }).first()
+        .getByTestId("event-new")).toHaveCount(0);
       await expect(b.getByTestId("nav-badge-events")).toHaveCount(0);
     } finally {
       await bCtx.close();
