@@ -32,6 +32,20 @@ Architecture in prod: browser → Cloudflare Pages (static React) → `/api/*` p
 2. Store secrets for Cloud Run: `gcloud secrets create POSTHOG_API_KEY --data-file=-` and `gcloud secrets create POSTHOG_PERSONAL_API_KEY --data-file=-`. Grant the runtime SA `secretAccessor`.
 3. Or manage all of the above in **Doppler** and use its **GCP Secret Manager** integration to populate those secrets (the source-of-truth path; see `ANALYTICS.md`).
 
+### 5b. Calendar import (optional)
+Enables the **Calendars** page to connect a user's Google/Apple calendar. Skip it and the feature simply shows "not configured" for Google; Apple iCal URLs still work without any setup. **Never set `CALENDAR_MODE=stub` in production** — it disables real providers.
+1. **Google OAuth client:** Google Cloud Console → APIs & Services. Enable the **Google Calendar API**. Create an **OAuth 2.0 Client ID** (Web application) with authorized redirect URI `https://<your-origin>/api/calendar/google/callback`. The `calendar.readonly` scope is "sensitive": while unverified it works for **test users** you add (up to 100) — submit for verification before a public launch.
+2. Generate the token-encryption key: `openssl rand -base64 32`.
+3. Store secrets for Cloud Run and grant the runtime SA `secretAccessor`:
+   `gcloud secrets create GOOGLE_OAUTH_CLIENT_ID --data-file=-`,
+   `gcloud secrets create GOOGLE_OAUTH_CLIENT_SECRET --data-file=-`,
+   `gcloud secrets create CALENDAR_TOKEN_KEY --data-file=-`.
+4. Set `APP_ORIGIN` (e.g. `https://app.example.com`) as a plain env var on the Cloud Run service so the redirect URI and post-auth return URL resolve.
+
+### 5c. Reminder emails (optional)
+1. Set `EMAIL_API_KEY`/`EMAIL_FROM` (Resend-compatible) and a random `CRON_KEY` as Cloud Run secrets.
+2. Create a Cloud Scheduler job (hourly is plenty): `POST https://<api>/api/cron/reminders` with header `X-Cron-Key: <CRON_KEY>`. Idempotent — each event is reminded once.
+
 ### 6. GitHub repo secrets
 | Secret | Value |
 |---|---|

@@ -15,6 +15,146 @@ export type Event = {
   scheduling_mode: "fixed" | "poll" | "general";
   starts_at: string | null;
   status: "polling" | "scheduled" | "cancelled";
+  comments_enabled: boolean;
+  group_id: string | null;
+  series_id: string | null;
+  recurrence: "" | "weekly" | "biweekly" | "monthly";
+  visibility: "private" | "friends" | "public";
+  topic: string;
+  city: string;
+  custom_emoji: string;
+  custom_label: string;
+  created_at: string;
+};
+
+// A public event as shown on Discover/Feed (only host-published fields).
+export type PublicEvent = {
+  id: string;
+  title: string;
+  event_type: EventType;
+  starts_at: string;
+  topic: string;
+  city: string;
+  host_id: string;
+  host_name: string | null;
+  host_avatar: string | null;
+  friends_going: number;
+  viewer_rsvp: string;
+  from_friend: boolean;
+  custom_emoji: string;
+  custom_label: string;
+};
+
+// Friendly per-type accent for event tiles (left edge + emoji tint).
+export const TYPE_COLORS: Record<EventType, string> = {
+  dinner: "#e8912d",
+  drinks: "#8e5bd6",
+  movie: "#d65b8e",
+  camping: "#1f9d6b",
+  party: "#e0559b",
+  trip: "#2a9d8f",
+  other: "#8a879a",
+};
+export type Follow = { kind: "host" | "topic"; value: string };
+
+// Discovery categories — the ONLY topics allowed (server-enforced, ranking.go).
+export const CATEGORIES: { slug: string; label: string; emoji: string }[] = [
+  { slug: "gaming", label: "Gaming", emoji: "🎮" },
+  { slug: "streams", label: "Streams & shows", emoji: "📺" },
+  { slug: "sports", label: "Sports & fitness", emoji: "🏃" },
+  { slug: "tabletop", label: "Tabletop & RPGs", emoji: "🎲" },
+  { slug: "books", label: "Books & learning", emoji: "📚" },
+  { slug: "music", label: "Music & nightlife", emoji: "🎵" },
+  { slug: "food-drink", label: "Food & drink", emoji: "🍜" },
+  { slug: "outdoors", label: "Outdoors & travel", emoji: "🌲" },
+  { slug: "arts", label: "Arts & crafts", emoji: "🎨" },
+  { slug: "tech", label: "Tech & business", emoji: "💻" },
+  { slug: "wellness", label: "Wellness", emoji: "🧘" },
+  { slug: "social", label: "Community & social", emoji: "👥" },
+  { slug: "other", label: "Other", emoji: "✨" },
+];
+
+// Metro regions — filtering by one matches all its member cities (the API
+// expands them server-side; see apps/api/regions.go — keep the names in sync).
+export const REGIONS = [
+  "Bay Area, CA", "Orange County, CA", "Greater LA, CA", "Inland Empire, CA",
+  "San Diego County, CA", "Sacramento Metro, CA", "NYC Metro", "Greater Boston, MA",
+  "Philly Metro, PA", "DC Metro (DMV)", "Chicagoland, IL", "Seattle Area, WA",
+  "Portland Metro, OR", "Denver Metro, CO", "Phoenix Valley, AZ", "Salt Lake Valley, UT",
+  "Las Vegas Valley, NV", "DFW, TX", "Houston Metro, TX", "Austin Metro, TX",
+  "Twin Cities, MN", "Detroit Metro, MI", "Atlanta Metro, GA", "South Florida",
+  "Tampa Bay, FL", "Research Triangle, NC",
+];
+
+// Curated city list for the <datalist> autocomplete — no external geo API by
+// design (privacy, rate limits, deterministic E2E). Extend freely.
+export const CITIES = [
+  "New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia",
+  "San Antonio", "San Diego", "Dallas", "Austin", "San Jose", "San Francisco",
+  "Seattle", "Denver", "Boston", "Portland", "Miami", "Atlanta", "Washington",
+  "Nashville", "Detroit", "Minneapolis", "New Orleans", "Las Vegas", "Salt Lake City",
+  "Kansas City", "St. Louis", "Pittsburgh", "Charlotte", "Raleigh", "Columbus",
+  "Indianapolis", "Milwaukee", "Sacramento", "Orlando", "Tampa", "San Juan",
+  "Anchorage", "Honolulu", "Toronto", "Vancouver", "Montreal", "London", "Paris",
+  "Berlin", "Amsterdam", "Madrid", "Barcelona", "Rome", "Dublin", "Lisbon",
+  "Stockholm", "Copenhagen", "Oslo", "Helsinki", "Zurich", "Vienna", "Prague",
+  "Warsaw", "Athens", "Istanbul", "Dubai", "Mumbai", "Delhi", "Bangalore",
+  "Singapore", "Hong Kong", "Tokyo", "Osaka", "Seoul", "Taipei", "Bangkok",
+  "Manila", "Jakarta", "Sydney", "Melbourne", "Auckland", "Mexico City",
+  "Guadalajara", "Bogotá", "Lima", "Santiago", "Buenos Aires", "São Paulo",
+  "Rio de Janeiro", "Cape Town", "Johannesburg", "Nairobi", "Lagos", "Cairo",
+  "Tel Aviv",
+];
+
+// What the city datalists offer: regions first, then cities.
+export const CITY_OPTIONS = [...REGIONS, ...CITIES];
+
+// Best-effort city prefill from the browser timezone — zero network, zero
+// permission prompts (vs. geolocation + a reverse-geocoding API).
+const TZ_CITY: Record<string, string> = {
+  "America/New_York": "New York", "America/Chicago": "Chicago",
+  "America/Denver": "Denver", "America/Phoenix": "Phoenix",
+  "America/Los_Angeles": "Los Angeles", "America/Anchorage": "Anchorage",
+  "Pacific/Honolulu": "Honolulu", "America/Toronto": "Toronto",
+  "America/Vancouver": "Vancouver", "America/Mexico_City": "Mexico City",
+  "America/Sao_Paulo": "São Paulo", "America/Argentina/Buenos_Aires": "Buenos Aires",
+  "Europe/London": "London", "Europe/Paris": "Paris", "Europe/Berlin": "Berlin",
+  "Europe/Amsterdam": "Amsterdam", "Europe/Madrid": "Madrid", "Europe/Rome": "Rome",
+  "Europe/Dublin": "Dublin", "Europe/Lisbon": "Lisbon", "Europe/Stockholm": "Stockholm",
+  "Europe/Warsaw": "Warsaw", "Europe/Istanbul": "Istanbul", "Asia/Dubai": "Dubai",
+  "Asia/Kolkata": "Mumbai", "Asia/Singapore": "Singapore", "Asia/Hong_Kong": "Hong Kong",
+  "Asia/Tokyo": "Tokyo", "Asia/Seoul": "Seoul", "Asia/Bangkok": "Bangkok",
+  "Australia/Sydney": "Sydney", "Australia/Melbourne": "Melbourne",
+  "Pacific/Auckland": "Auckland", "Africa/Johannesburg": "Johannesburg",
+  "Africa/Lagos": "Lagos", "Africa/Cairo": "Cairo", "Asia/Jerusalem": "Tel Aviv",
+};
+export function guessCity(): string {
+  try {
+    return TZ_CITY[Intl.DateTimeFormat().resolvedOptions().timeZone] ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export type SeriesItem = { id: string; starts_at: string; status: string };
+export type Group = { id: string; owner_id: string; name: string; emoji: string; created_at: string; icon_url: string };
+export type GroupMember = { user_id: string; display_name: string | null; handle: string | null; avatar_url: string | null };
+export type GroupDetail = { group: Group; members: GroupMember[]; events: Event[]; is_owner: boolean };
+
+export type Comment = {
+  id: string;
+  event_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+  display_name: string | null;
+  avatar_url: string | null;
+};
+export type Cohost = {
+  user_id: string;
+  display_name: string | null;
+  handle: string | null;
+  avatar_url: string | null;
   created_at: string;
 };
 
@@ -27,20 +167,38 @@ export type PrefAnswer = { user_id: string; question_key: string; answer: string
 
 export type EventDetail = {
   event: Event;
-  role: "host" | "guest";
+  role: "host" | "cohost" | "guest";
+  can_manage: boolean;
   viewer_id: string;
   time_options: TimeOption[];
   votes: Vote[];
   general_votes: GeneralVote[];
   attendees: Attendee[];
   preference_answers: PrefAnswer[];
+  comments: Comment[];
+  cohosts: Cohost[];
+  series: SeriesItem[] | null;
+  invites: { user_id: string; inviter_id: string; display_name: string | null }[];
 };
 
-export type Profile = { user_id: string; display_name: string; handle: string; avatar_url: string; created_at: string };
+export type Badges = { invites: number; friend_requests: number };
+
+export type Profile = { user_id: string; display_name: string; handle: string; avatar_url: string; created_at: string; email: string };
 export type AvailabilitySlot = { user_id: string; weekday: number; part_of_day: string };
-export type Friend = { friend_id: string; display_name: string; handle: string; avatar_url: string };
+export type Friend = { id: string; friend_id: string; display_name: string; handle: string; avatar_url: string };
 export type FriendRequest = { id: string; requester_id?: string; addressee_id?: string; display_name: string; handle: string };
 export type Commitment = { id: string; title: string; starts_at: string };
+
+export type CalendarProvider = "google" | "apple_ical";
+export type CalendarConnection = { provider: CalendarProvider; account_label: string; created_at: string };
+export type ImportedEvent = {
+  provider: CalendarProvider;
+  title: string;
+  starts_at: string;
+  ends_at?: string;
+  all_day: boolean;
+  location: string;
+};
 
 // --- API context: a single fetch function that carries auth (Clerk or dev) ---
 
@@ -73,7 +231,15 @@ export async function sendJSON(api: ApiFn, method: string, path: string, body: u
 // --- formatting ---
 
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const WEEKDAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 export const PARTS = ["morning", "afternoon", "evening"] as const;
+
+// Columns for the recurring weekly availability grid (coarser than DAYPARTS).
+export const WEEK_PARTS: { value: string; short: string }[] = [
+  { value: "morning", short: "Morn" },
+  { value: "afternoon", short: "Aft" },
+  { value: "evening", short: "Eve" },
+];
 
 // Coarse time-of-day buckets (value + full label + short label for tight grids).
 export const DAYPARTS: { value: string; label: string; short: string }[] = [
@@ -87,14 +253,21 @@ export const DAYPARTS: { value: string; label: string; short: string }[] = [
 
 export type AvailabilityDay = { day: string; daypart: string };
 
-// The next n calendar days as { value: "YYYY-MM-DD", label: "Fri Jun 27" }.
-export function nextDays(n: number): { value: string; label: string }[] {
+// n calendar days starting `startOffset` days from today, as
+// { value: "YYYY-MM-DD", label: "Fri Jun 27" }. Used for paginating the explicit
+// availability calendar further into the future.
+export function daysFrom(startOffset: number, n: number): { value: string; label: string }[] {
   const now = new Date();
   return Array.from({ length: n }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + startOffset + i);
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     return { value, label: d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) };
   });
+}
+
+// The next n calendar days from today.
+export function nextDays(n: number): { value: string; label: string }[] {
+  return daysFrom(0, n);
 }
 
 // The next n calendar months as { value: "YYYY-MM", label: "Aug 2026" }.
@@ -105,6 +278,48 @@ export function nextMonths(n: number): { value: string; label: string }[] {
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     return { value, label: d.toLocaleDateString(undefined, { month: "short", year: "numeric" }) };
   });
+}
+
+// --- imported-calendar busy mapping (calendar as moat) ---
+
+// Hour → coarse daypart bucket (mirrors the API's daypart vocabulary).
+export function hourToDaypart(h: number): string {
+  if (h < 8) return "early_morning";
+  if (h < 11) return "morning";
+  if (h < 14) return "noon";
+  if (h < 17) return "afternoon";
+  if (h < 21) return "evening";
+  return "night";
+}
+
+// Map imported events to a busy Set<"YYYY-MM-DD:daypart"> for DayGrid overlays,
+// plus raw [start,end) intervals for conflict badges. Untimed/all-day events
+// block the whole day; timed events default to 2h when no end is given.
+export function importedBusy(events: ImportedEvent[]): { cells: Set<string>; intervals: { start: Date; end: Date; title: string }[] } {
+  const cells = new Set<string>();
+  const intervals: { start: Date; end: Date; title: string }[] = [];
+  for (const e of events) {
+    const start = new Date(e.starts_at);
+    const end = e.ends_at ? new Date(e.ends_at) : new Date(start.getTime() + 2 * 3600_000);
+    const day = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+    if (e.all_day) {
+      DAYPARTS.forEach((dp) => cells.add(`${day}:${dp.value}`));
+    } else {
+      for (let t = start.getTime(); t < end.getTime(); t += 3600_000) {
+        cells.add(`${day}:${hourToDaypart(new Date(t).getHours())}`);
+      }
+      intervals.push({ start, end, title: e.title });
+    }
+  }
+  return { cells, intervals };
+}
+
+// The imported event (if any) that overlaps [when, when+2h).
+export function busyConflict(intervals: { start: Date; end: Date; title: string }[], whenISO: string): string | null {
+  const s = new Date(whenISO).getTime();
+  const e = s + 2 * 3600_000;
+  const hit = intervals.find((iv) => iv.start.getTime() < e && s < iv.end.getTime());
+  return hit ? hit.title : null;
 }
 
 export function fmtDateTime(iso: string | null): string {

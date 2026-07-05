@@ -1,72 +1,110 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AvailabilityDay,
+  AvailabilitySlot,
   DAYPARTS,
+  ImportedEvent,
   Profile,
+  WEEKDAYS_FULL,
+  WEEK_PARTS,
+  daysFrom,
   getJSON,
-  nextDays,
+  importedBusy,
   sendJSON,
   useApi,
   useProfile,
 } from "../lib";
-import { Avatar, DayGrid, Loading, useAsync } from "../ui";
+import { useSearchParams } from "react-router-dom";
+import { Avatar, DayGrid, Loading, fileToAvatar, useAsync } from "../ui";
+import { CalendarConnections } from "./Calendars";
 
-const HORIZON = 14; // days of explicit availability to show
+const PAGE = 14; // days of explicit availability shown per page
+const MAX_OFFSET = 70; // furthest page start: 70..83 days out (~12 weeks ahead)
 
-// Resize an image File to a small square JPEG data URL (cover crop), client-side
-// — keeps avatars tiny so they can live as a data URL in the DB (no object store).
-function fileToAvatar(file: File, size = 160): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = size;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return reject(new Error("no canvas"));
-      const s = Math.min(img.width, img.height);
-      ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
-      resolve(canvas.toDataURL("image/jpeg", 0.85));
-    };
-    img.onerror = () => reject(new Error("bad image"));
-    img.src = URL.createObjectURL(file);
-  });
-}
+// Rows for the recurring weekly grid: Sunday…Saturday, keyed by weekday index.
+const WEEK_ROWS = WEEKDAYS_FULL.map((label, i) => ({ value: String(i), label }));
 
-// The whole profile: name, handle, photo, and an explicit date-based availability
-// for the next two weeks (which dayparts you're free on concrete dates).
+// The whole profile: name, handle, photo, and availability — either a recurring
+// weekly pattern OR explicit availability on concrete upcoming dates (paginated).
 export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) {
   const api = useApi();
   const profile = useProfile();
-  const dates = nextDays(HORIZON);
 
   const [displayName, setDisplayName] = useState(profile?.display_name ?? "");
   const [handle, setHandle] = useState(profile?.handle ?? "");
+  const [email, setEmail] = useState(profile?.email ?? "");
+  // The profile tile is read-only until Edit is pressed; Save flips it back.
+  const [editing, setEditing] = useState(false);
+
+  // Landing back from a calendar OAuth round-trip (?connected=google).
+  const [sp, setSp] = useSearchParams();
+  useEffect(() => {
+    const connected = sp.get("connected");
+    if (!connected) return;
+    setSavedMsg(sp.get("status") ? "Calendar connection failed — try again." : "Calendar connected ✓");
+    sp.delete("connected");
+    sp.delete("status");
+    setSp(sp, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [avatar, setAvatar] = useState(profile?.avatar_url ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Availability: a mode toggle plus the two data sets.
+  const [mode, setMode] = useState<"specific" | "weekly">("specific");
+  const [pageOffset, setPageOffset] = useState(0);
+  const dates = daysFrom(pageOffset, PAGE);
+
+  // Explicit date-based availability (the full set across all pages).
   const { data: days, loading } = useAsync<AvailabilityDay[]>((a) => getJSON(a, "/api/availability/days"));
   const [free, setFree] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (days) setFree(new Set(days.map((d) => `${d.day}:${d.daypart}`)));
   }, [days]);
 
-  function mutateFree(fn: (s: Set<string>) => void) {
-    setFree((prev) => {
+  // Recurring weekly availability.
+  const { data: slots } = useAsync<AvailabilitySlot[]>((a) => getJSON(a, "/api/availability"));
+
+  // Imported-calendar busy times overlay the specific-dates grid (read-only).
+  const { data: cal } = useAsync<{ events: ImportedEvent[] }>((a) => getJSON(a, "/api/calendar/events"));
+  const busyCells = importedBusy(cal?.events ?? []).cells;
+  const [week, setWeek] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (slots) setWeek(new Set(slots.map((s) => `${s.weekday}:${s.part_of_day}`)));
+  }, [slots]);
+
+  function mutate(setter: typeof setFree, fn: (s: Set<string>) => void) {
+    setter((prev) => {
       const next = new Set(prev);
       fn(next);
       return next;
     });
   }
-  const toggleCell = (day: string, dp: string) => mutateFree((s) => (s.has(`${day}:${dp}`) ? s.delete(`${day}:${dp}`) : s.add(`${day}:${dp}`)));
-  const toggleRow = (day: string) => mutateFree((s) => {
+
+  // --- explicit-date grid handlers (operate on `free`) ---
+  const toggleCell = (day: string, dp: string) => mutate(setFree, (s) => (s.has(`${day}:${dp}`) ? s.delete(`${day}:${dp}`) : s.add(`${day}:${dp}`)));
+  const toggleRow = (day: string) => mutate(setFree, (s) => {
     const keys = DAYPARTS.map((dp) => `${day}:${dp.value}`);
     const full = keys.every((k) => s.has(k));
     keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
   });
-  const toggleCol = (dp: string) => mutateFree((s) => {
+  const toggleCol = (dp: string) => mutate(setFree, (s) => {
     const keys = dates.map((d) => `${d.value}:${dp}`);
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
+
+  // --- weekly grid handlers (operate on `week`, keyed "weekday:part") ---
+  const toggleWeekCell = (wd: string, dp: string) => mutate(setWeek, (s) => (s.has(`${wd}:${dp}`) ? s.delete(`${wd}:${dp}`) : s.add(`${wd}:${dp}`)));
+  const toggleWeekRow = (wd: string) => mutate(setWeek, (s) => {
+    const keys = WEEK_PARTS.map((p) => `${wd}:${p.value}`);
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
+  const toggleWeekCol = (dp: string) => mutate(setWeek, (s) => {
+    const keys = WEEK_ROWS.map((r) => `${r.value}:${dp}`);
     const full = keys.every((k) => s.has(k));
     keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
   });
@@ -94,13 +132,14 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const res = await sendJSON(api, "PUT", "/api/profile", { display_name: displayName, handle });
+    const res = await sendJSON(api, "PUT", "/api/profile", { display_name: displayName, handle, email });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
       return setError(b.error || "could not save");
     }
     onUpdated(await res.json());
     setSavedMsg("Profile saved ✓");
+    setEditing(false);
   }
 
   async function saveAvailability() {
@@ -112,12 +151,37 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
     setSavedMsg("Availability saved ✓");
   }
 
-  if (loading) return <Loading />;
+  async function saveWeekly() {
+    const slotsPayload = [...week].map((k) => {
+      const [wd, part_of_day] = k.split(":");
+      return { weekday: Number(wd), part_of_day };
+    });
+    await sendJSON(api, "PUT", "/api/availability", { slots: slotsPayload });
+    setSavedMsg("Availability saved ✓");
+  }
+
+  if (loading && !days) return <Loading />;
 
   return (
     <div className="stack">
       <h1>Profile</h1>
 
+      {!editing ? (
+        <div className="card stack" data-testid="profile-view">
+          <div className="row between">
+            <span className="row" style={{ gap: 14 }}>
+              <Avatar url={avatar} name={displayName} size={64} />
+              <span className="stack" style={{ gap: 2 }}>
+                <strong>{displayName}</strong>
+                <span className="muted small">@{handle}</span>
+                {email && <span className="muted small">{email}</span>}
+              </span>
+            </span>
+            <button type="button" className="btn ghost sm" data-testid="profile-edit"
+              onClick={() => setEditing(true)}>Edit</button>
+          </div>
+        </div>
+      ) : (
       <form className="card stack" onSubmit={saveProfile}>
         <div className="row" style={{ gap: 14 }}>
           <Avatar url={avatar} name={displayName} size={64} />
@@ -141,21 +205,59 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
           <input id="hd" className="input" data-testid="profile-handle" value={handle}
             onChange={(e) => setHandle(e.target.value)} />
         </div>
+        <div>
+          <label className="field" htmlFor="em">Email <span className="muted small">(optional — for reminders & updates)</span></label>
+          <input id="em" className="input" type="email" data-testid="profile-email" value={email}
+            placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} />
+        </div>
         {error && <p className="err">{error}</p>}
-        <button className="btn" style={{ alignSelf: "flex-start" }} data-testid="save-profile">Save</button>
+        <div className="row">
+          <button className="btn" data-testid="save-profile">Save</button>
+          <button type="button" className="btn ghost sm" data-testid="profile-cancel"
+            onClick={() => setEditing(false)}>Cancel</button>
+        </div>
       </form>
+      )}
 
       <div className="card stack">
-        <div>
-          <h3>Your availability — next two weeks</h3>
-          <p className="muted small">Tap the times you're free on each date (tap a date or a column header to fill it). Friends can see this.</p>
+        <div className="row between">
+          <h3 style={{ margin: 0 }}>Your availability</h3>
+          <div className="row" style={{ gap: 6 }}>
+            <button type="button" className={mode === "weekly" ? "btn sm" : "btn ghost sm"}
+              data-testid="avail-mode-weekly" onClick={() => setMode("weekly")}>Recurring weekly</button>
+            <button type="button" className={mode === "specific" ? "btn sm" : "btn ghost sm"}
+              data-testid="avail-mode-specific" onClick={() => setMode("specific")}>Specific dates</button>
+          </div>
         </div>
-        <DayGrid dates={dates} selected={free} onToggle={toggleCell} onToggleRow={toggleRow} onToggleCol={toggleCol} testid="availability-grid" />
-        <button className="btn soft" style={{ alignSelf: "flex-start" }} data-testid="save-availability"
-          onClick={saveAvailability}>Save availability</button>
+
+        {mode === "weekly" ? (
+          <>
+            <p className="muted small">Tap the times you're usually free each week. Friends can see this.</p>
+            <DayGrid dates={WEEK_ROWS} selected={week} cols={WEEK_PARTS} idPrefix="wk"
+              onToggle={toggleWeekCell} onToggleRow={toggleWeekRow} onToggleCol={toggleWeekCol} testid="weekly-grid" />
+            <button className="btn soft" style={{ alignSelf: "flex-start" }} data-testid="save-weekly"
+              onClick={saveWeekly}>Save availability</button>
+          </>
+        ) : (
+          <>
+            <p className="muted small">Tap the times you're free on each date (tap a date or column header to fill it). Friends can see this.</p>
+            <div className="row between" style={{ alignItems: "center" }}>
+              <button type="button" className="btn ghost sm" data-testid="avail-earlier"
+                disabled={pageOffset === 0} onClick={() => setPageOffset((o) => Math.max(0, o - PAGE))}>← Earlier</button>
+              <span className="muted small" data-testid="avail-range">{dates[0].label} – {dates[dates.length - 1].label}</span>
+              <button type="button" className="btn ghost sm" data-testid="avail-later"
+                disabled={pageOffset >= MAX_OFFSET} onClick={() => setPageOffset((o) => Math.min(MAX_OFFSET, o + PAGE))}>Later →</button>
+            </div>
+            <DayGrid dates={dates} selected={free} busy={busyCells} onToggle={toggleCell} onToggleRow={toggleRow} onToggleCol={toggleCol} testid="availability-grid" />
+            <button className="btn soft" style={{ alignSelf: "flex-start" }} data-testid="save-availability"
+              onClick={saveAvailability}>Save availability</button>
+          </>
+        )}
       </div>
 
-      {savedMsg && <p className="muted small">{savedMsg}</p>}
+      <CalendarConnections />
+
+      {savedMsg && <p className="muted small" data-testid="calendar-msg-profile">{savedMsg}</p>}
     </div>
   );
 }

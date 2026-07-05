@@ -1,0 +1,12 @@
+{
+  "name": "Whensdays",
+  "short_name": "Whensdays",
+  "description": "Plans, minus the group-chat chaos.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#5b54e6",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,19 +1,28 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Event, EventType, sendJSON, useApi } from "../lib";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { CATEGORIES, CITY_OPTIONS, Event, EventType, Friend, getJSON, guessCity, sendJSON, useApi } from "../lib";
+// (custom types: saved per user, offered as chips next to the presets)
 import { EVENT_TYPES } from "../scheduler/questions";
+import { Avatar, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
-// Stage one of an event's life: the host creates it, picks a location style, and
-// either sets a fixed time or opens an availability poll with candidate times.
+// Event creation is a one-step-at-a-time wizard (à la Airtable forms): What →
+// Where → When → Who, with Back/Next. The Who step covers visibility AND lets
+// the host invite friends before the event even exists.
+const STEPS = ["What", "Where", "When", "Who"] as const;
+
 export function NewEvent() {
   const api = useApi();
   const nav = useNavigate();
+  // Arriving from a group page (?group=<id>) attaches the event to that group.
+  const [params] = useSearchParams();
+  const groupId = params.get("group") || "";
 
   useEffect(() => {
     analytics.capture(EVENTS.createEventOpened);
   }, []);
 
+  const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
   const [type, setType] = useState<EventType>("dinner");
   const [description, setDescription] = useState("");
@@ -21,16 +30,59 @@ export function NewEvent() {
   const [address, setAddress] = useState("");
   const [schedulingMode, setSchedulingMode] = useState<"fixed" | "poll" | "general">("fixed");
   const [startsAt, setStartsAt] = useState("");
+  const [repeat, setRepeat] = useState<"" | "weekly" | "biweekly" | "monthly">("");
+  const [repeatCount, setRepeatCount] = useState(4);
+  const [visibility, setVisibility] = useState<"private" | "friends" | "public">("private");
+  const [topic, setTopic] = useState("");
+  const [city, setCity] = useState(guessCity());
   const [options, setOptions] = useState<string[]>([""]);
+  const [invitees, setInvitees] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const { data: fr } = useAsync<{ friends: Friend[] }>((a) => getJSON(a, "/api/friends"));
+  const friends = fr?.friends ?? [];
+  const { data: ct } = useAsync<{ types: { label: string; emoji: string }[] }>((a) => getJSON(a, "/api/event-types"));
+  const savedTypes = ct?.types ?? [];
+
+  // User-defined type: emoji + short name (server caps at 10 chars).
+  const [custom, setCustom] = useState<{ emoji: string; label: string } | null>(null);
+  const [addingType, setAddingType] = useState(false);
+  const [newEmoji, setNewEmoji] = useState("🌀");
+  const [newName, setNewName] = useState("");
+  const CUSTOM_EMOJIS = [
+    "🌀", "🎳", "🎤", "🎧", "🎹", "🎸", "🥁", "🎻", "🎭", "🎪", "🎨", "🖌️", "📸", "🎬",
+    "🧑‍🍳", "🍕", "🌮", "🍣", "🥘", "🧁", "🍦", "☕️", "🍵", "🥂", "🍷", "🫕", "🥩", "🥗",
+    "🛶", "🏓", "🎾", "⚽️", "🏀", "🏈", "⚾️", "🏐", "🏸", "🥏", "🎿", "🏂", "⛸️", "🛼",
+    "🚴", "🏃", "🧗", "🏋️", "🧘", "🤸", "🏹", "🎣", "🏇", "🏄", "🤿", "🛹", "⛳️", "🥾",
+    "🐕", "🐈", "🐎", "🦜", "🌊", "🏔️", "🏕️", "🌅", "🌸", "🍂", "❄️", "🔥", "⭐️", "🌙",
+    "🧺", "🎡", "🎢", "🎯", "🎰", "🃏", "♟️", "🧩", "🪁", "🪅", "📚", "✍️", "🔭", "🔬",
+    "🚗", "✈️", "🚂", "⛵️", "🎫", "🗺️", "🏛️", "⛪️", "💃", "🕺", "👾", "🤖", "🛍️", "💐",
+  ];
 
   function setOption(i: number, v: string) {
     setOptions((o) => o.map((x, j) => (j === i ? v : x)));
   }
+  function toggleInvite(id: string) {
+    setInvitees((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  // Per-step validation gates Next/Create.
+  function stepValid(i: number): boolean {
+    if (i === 0) return title.trim() !== "";
+    if (i === 2) {
+      if (schedulingMode === "fixed") return startsAt !== "";
+      if (schedulingMode === "poll") return options.some((o) => o.trim() !== "");
+    }
+    return true;
+  }
+
+  async function submit() {
     setError(null);
     setSaving(true);
     const body: Record<string, unknown> = {
@@ -41,8 +93,22 @@ export function NewEvent() {
       location_address: locationMode === "host_place" ? address : "",
       scheduling_mode: schedulingMode,
     };
+    if (groupId) body.group_id = groupId;
+    if (custom) {
+      body.custom_emoji = custom.emoji;
+      body.custom_label = custom.label;
+    }
+    body.visibility = visibility;
+    if (visibility === "public") {
+      body.topic = topic; // a preset category slug (or empty)
+      body.city = city.trim();
+    }
     if (schedulingMode === "fixed") {
       body.starts_at = startsAt ? new Date(startsAt).toISOString() : "";
+      if (repeat) {
+        body.repeat = repeat;
+        body.repeat_count = repeatCount;
+      }
     } else if (schedulingMode === "poll") {
       body.time_options = options
         .filter((o) => o.trim() !== "")
@@ -50,98 +116,233 @@ export function NewEvent() {
     }
     // general: no extra fields — guests submit month/weekday/daypart after creation.
     const res = await sendJSON(api, "POST", "/api/events", body);
-    setSaving(false);
     if (!res.ok) {
+      setSaving(false);
       const b = await res.json().catch(() => ({}));
       return setError(b.error || "could not create event");
     }
     const ev: Event = await res.json();
+    // Fire the wizard-selected invites (best-effort; the event page can retry).
+    for (const friendId of invitees) {
+      await sendJSON(api, "POST", `/api/events/${ev.id}/invites`, { friend_id: friendId }).catch(() => {});
+    }
     nav(`/e/${ev.id}`);
   }
 
   return (
     <div className="stack">
-      <h1>New event</h1>
-      <form className="card stack" onSubmit={submit}>
-        <div>
-          <label className="field" htmlFor="t">What's the plan?</label>
-          <input id="t" className="input" data-testid="event-title" value={title}
-            onChange={(e) => setTitle(e.target.value)} placeholder="Friday dinner" />
-        </div>
+      <div className="row between">
+        <h1>New event</h1>
+        <span className="muted small" data-testid="wiz-progress">Step {step + 1} of {STEPS.length} · {STEPS[step]}</span>
+      </div>
+      <div className="row" style={{ gap: 5 }}>
+        {STEPS.map((s, i) => (
+          <span key={s} style={{
+            flex: 1, height: 4, borderRadius: 999,
+            background: i <= step ? "var(--accent)" : "var(--line)",
+          }} />
+        ))}
+      </div>
 
-        <div>
-          <label className="field">Type</label>
-          <div className="row wrap">
-            {EVENT_TYPES.map((et) => (
-              <button type="button" key={et.value}
-                className={`chip ${type === et.value ? "on" : ""}`}
-                data-testid={`type-${et.value}`}
-                onClick={() => setType(et.value)}>
-                {et.emoji} {et.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="field" htmlFor="d">Details <span className="muted small">(optional)</span></label>
-          <textarea id="d" className="input" value={description}
-            onChange={(e) => setDescription(e.target.value)} placeholder="Anything guests should know" />
-        </div>
-
-        <div>
-          <label className="field">Where</label>
-          <div className="row wrap">
-            <button type="button" className={`chip ${locationMode === "host_place" ? "on" : ""}`}
-              data-testid="loc-host" onClick={() => setLocationMode("host_place")}>🏠 My place</button>
-            <button type="button" className={`chip ${locationMode === "find_venue" ? "on" : ""}`}
-              data-testid="loc-venue" onClick={() => setLocationMode("find_venue")}>📍 Help me find a venue</button>
-          </div>
-          {locationMode === "host_place" ? (
-            <input className="input" style={{ marginTop: 8 }} value={address}
-              onChange={(e) => setAddress(e.target.value)} placeholder="Address (optional)" />
-          ) : (
-            <p className="muted small" style={{ marginTop: 8 }}>We'll help pick a spot once the group is set.</p>
-          )}
-        </div>
-
-        <div>
-          <label className="field">When</label>
-          <div className="row wrap">
-            <button type="button" className={`chip ${schedulingMode === "fixed" ? "on" : ""}`}
-              data-testid="sched-fixed" onClick={() => setSchedulingMode("fixed")}>I'll set a time</button>
-            <button type="button" className={`chip ${schedulingMode === "poll" ? "on" : ""}`}
-              data-testid="sched-poll" onClick={() => setSchedulingMode("poll")}>Poll specific times</button>
-            <button type="button" className={`chip ${schedulingMode === "general" ? "on" : ""}`}
-              data-testid="sched-general" onClick={() => setSchedulingMode("general")}>Poll general availability</button>
-          </div>
-
-          {schedulingMode === "fixed" && (
-            <input type="datetime-local" className="input" style={{ marginTop: 8 }}
-              data-testid="fixed-time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
-          )}
-          {schedulingMode === "poll" && (
-            <div className="stack" style={{ marginTop: 8 }}>
-              {options.map((o, i) => (
-                <input key={i} type="datetime-local" className="input" data-testid={`poll-option-${i}`}
-                  value={o} onChange={(e) => setOption(i, e.target.value)} />
-              ))}
-              <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
-                data-testid="add-option" onClick={() => setOptions((o) => [...o, ""])}>+ Add time</button>
+      <form className="card stack" style={{ minHeight: 460 }} onSubmit={(e) => e.preventDefault()}>
+        {step === 0 && (
+          <>
+            <div>
+              <label className="field" htmlFor="t">What's the plan?</label>
+              <input id="t" className="input" data-testid="event-title" value={title}
+                onChange={(e) => setTitle(e.target.value)} placeholder="Friday dinner" autoFocus />
             </div>
-          )}
-          {schedulingMode === "general" && (
-            <p className="muted small" style={{ marginTop: 8 }}>
-              Guests pick their ideal months, days of the week, and times of day
-              (early morning → night). You'll lock in a time from the results.
-            </p>
-          )}
-        </div>
+            <div>
+              <label className="field">Type</label>
+              <div className="row wrap">
+                {EVENT_TYPES.map((et) => (
+                  <button type="button" key={et.value}
+                    className={`chip ${type === et.value && !custom ? "on" : ""}`}
+                    data-testid={`type-${et.value}`}
+                    onClick={() => { setType(et.value); setCustom(null); }}>
+                    {et.emoji} {et.label}
+                  </button>
+                ))}
+                {custom && !savedTypes.some((t) => t.label === custom.label) && (
+                  <button type="button" className="chip on"
+                    data-testid={`custom-${custom.label.toLowerCase()}`}
+                    onClick={() => setAddingType(true)}>
+                    {custom.emoji} {custom.label}
+                  </button>
+                )}
+                {savedTypes.map((t) => (
+                  <button type="button" key={t.label}
+                    className={`chip ${custom?.label === t.label ? "on" : ""}`}
+                    data-testid={`custom-${t.label.toLowerCase()}`}
+                    onClick={() => { setType("other"); setCustom({ emoji: t.emoji, label: t.label }); }}>
+                    {t.emoji} {t.label}
+                  </button>
+                ))}
+                <button type="button" className={`chip ${addingType ? "on" : ""}`} data-testid="type-add"
+                  onClick={() => setAddingType((a) => !a)}>＋</button>
+              </div>
+              {addingType && (
+                <div className="stack" style={{ marginTop: 8, gap: 6 }}>
+                  <div className="emoji-strip" data-testid="newtype-emojis">
+                    {CUSTOM_EMOJIS.map((em) => (
+                      <button key={em} type="button" className={`chip sm ${newEmoji === em ? "on" : ""}`}
+                        data-testid={`newtype-emoji-${em}`} onClick={() => setNewEmoji(em)}>{em}</button>
+                    ))}
+                  </div>
+                  <div className="row">
+                    <input className="input" data-testid="newtype-name" value={newName} maxLength={20}
+                      placeholder="Name" onChange={(e) => setNewName(e.target.value)} />
+                    <button type="button" className="btn sm" data-testid="newtype-save"
+                      disabled={!newName.trim()}
+                      onClick={() => {
+                        setType("other");
+                        setCustom({ emoji: newEmoji, label: newName.trim() });
+                        setAddingType(false);
+                        setNewName("");
+                      }}>Use it</button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+            <div>
+              <label className="field" htmlFor="d">Details <span className="muted small">(optional)</span></label>
+              <textarea id="d" className="input" value={description}
+                onChange={(e) => setDescription(e.target.value)} placeholder="Anything guests should know" />
+            </div>
+          </>
+        )}
+
+        {step === 1 && (
+          <div>
+            <label className="field">Where</label>
+            <div className="row wrap">
+              <button type="button" className={`chip ${locationMode === "host_place" ? "on" : ""}`}
+                data-testid="loc-host" onClick={() => setLocationMode("host_place")}>📍 I’ll set the address</button>
+              <button type="button" className={`chip ${locationMode === "find_venue" ? "on" : ""}`}
+                data-testid="loc-venue" onClick={() => setLocationMode("find_venue")}>📍 Help me find a venue</button>
+            </div>
+            {locationMode === "host_place" ? (
+              <input className="input" style={{ marginTop: 8 }} value={address}
+                onChange={(e) => setAddress(e.target.value)} placeholder="Address" />
+            ) : (
+              <p className="muted small" style={{ marginTop: 8 }}>We'll help pick a spot once the group is set.</p>
+            )}
+          </div>
+        )}
+
+        {step === 2 && (
+          <div>
+            <label className="field">When</label>
+            <div className="row wrap">
+              <button type="button" className={`chip ${schedulingMode === "fixed" ? "on" : ""}`}
+                data-testid="sched-fixed" onClick={() => setSchedulingMode("fixed")}>I'll set a time</button>
+              <button type="button" className={`chip ${schedulingMode === "poll" ? "on" : ""}`}
+                data-testid="sched-poll" onClick={() => setSchedulingMode("poll")}>Poll specific times</button>
+              <button type="button" className={`chip ${schedulingMode === "general" ? "on" : ""}`}
+                data-testid="sched-general" onClick={() => setSchedulingMode("general")}>Poll general availability</button>
+            </div>
+
+            {schedulingMode === "fixed" && (
+              <div className="stack" style={{ marginTop: 8 }}>
+                <input type="datetime-local" className="input"
+                  data-testid="fixed-time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+                <div className="row wrap" style={{ gap: 6 }}>
+                  <span className="muted small">Repeats:</span>
+                  {([["", "Never"], ["weekly", "Weekly"], ["biweekly", "Every 2 weeks"], ["monthly", "Monthly"]] as const).map(([v, l]) => (
+                    <button key={v} type="button" className={`chip sm ${repeat === v ? "on" : ""}`}
+                      data-testid={`repeat-${v || "never"}`} onClick={() => setRepeat(v)}>{l}</button>
+                  ))}
+                  {repeat && (
+                    <select className="input" style={{ width: "auto" }} data-testid="repeat-count"
+                      value={repeatCount} onChange={(e) => setRepeatCount(Number(e.target.value))}>
+                      {[2, 3, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{n} times</option>)}
+                    </select>
+                  )}
+                </div>
+              </div>
+            )}
+            {schedulingMode === "poll" && (
+              <div className="stack" style={{ marginTop: 8 }}>
+                {options.map((o, i) => (
+                  <input key={i} type="datetime-local" className="input" data-testid={`poll-option-${i}`}
+                    value={o} onChange={(e) => setOption(i, e.target.value)} />
+                ))}
+                <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
+                  data-testid="add-option" onClick={() => setOptions((o) => [...o, ""])}>+ Add another time</button>
+              </div>
+            )}
+            {schedulingMode === "general" && (
+              <p className="muted small" style={{ marginTop: 8 }}>
+                Guests pick their ideal months, days of the week, and times of day
+                (early morning → night). You'll lock in a time from the results.
+              </p>
+            )}
+          </div>
+        )}
+
+        {step === 3 && (
+          <>
+            <div>
+              <label className="field">Who can find it?</label>
+              <div className="row wrap">
+                <button type="button" className={`chip ${visibility === "private" ? "on" : ""}`}
+                  data-testid="vis-private" onClick={() => setVisibility("private")}>🔒 Invite-only</button>
+                <button type="button" className={`chip ${visibility === "friends" ? "on" : ""}`}
+                  data-testid="vis-friends" onClick={() => setVisibility("friends")}>🤝 Friends</button>
+                <button type="button" className={`chip ${visibility === "public" ? "on" : ""}`}
+                  data-testid="vis-public" onClick={() => setVisibility("public")}>🌎 Public (on Discover)</button>
+              </div>
+              {visibility === "public" && (
+                <div className="stack" style={{ marginTop: 8, gap: 8 }}>
+                  <div className="row wrap" style={{ gap: 4 }}>
+                    {CATEGORIES.map((c) => (
+                      <button key={c.slug} type="button" className={`chip sm ${topic === c.slug ? "on" : ""}`}
+                        data-testid={`cat-${c.slug}`}
+                        onClick={() => setTopic(topic === c.slug ? "" : c.slug)}>{c.emoji} {c.label}</button>
+                    ))}
+                  </div>
+                  <input className="input" data-testid="event-city" list="city-list" value={city}
+                    placeholder="city (optional)" onChange={(e) => setCity(e.target.value)} />
+                  <datalist id="city-list">
+                    {CITY_OPTIONS.map((c) => <option key={c} value={c} />)}
+                  </datalist>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="field">Invite friends? <span className="muted small">(optional — they'll see it on their dashboard)</span></label>
+              {friends.length === 0 && <p className="muted small">No friends yet — add some on the Friends page, or share the invite link after creating.</p>}
+              <div className="row wrap" style={{ gap: 6 }}>
+                {friends.map((f) => (
+                  <button key={f.friend_id} type="button"
+                    className={`chip sm ${invitees.has(f.friend_id) ? "on" : ""}`}
+                    data-testid={`winvite-${f.handle}`}
+                    onClick={() => toggleInvite(f.friend_id)}>
+                    <Avatar url={f.avatar_url} name={f.display_name} size={18} /> {f.display_name}
+                  </button>
+                ))}
+              </div>
+              {invitees.size > 0 && <p className="muted small" style={{ marginTop: 6 }}>{invitees.size} to invite</p>}
+            </div>
+          </>
+        )}
 
         {error && <p className="err">{error}</p>}
-        <button className="btn btn-block" data-testid="create-event" disabled={saving}>
-          {saving ? "Creating…" : "Create event"}
-        </button>
+
+        <div className="row between">
+          <button type="button" className="btn ghost sm" data-testid="wiz-back"
+            disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>← Back</button>
+          {step < STEPS.length - 1 ? (
+            <button type="button" className="btn" data-testid="wiz-next"
+              disabled={!stepValid(step)} onClick={() => setStep((s) => s + 1)}>Next →</button>
+          ) : (
+            <button type="button" className="btn" data-testid="create-event"
+              disabled={saving || !stepValid(2)} onClick={submit}>
+              {saving ? "Creating…" : "Create event"}
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );

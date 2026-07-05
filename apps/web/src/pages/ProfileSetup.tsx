@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Profile, sendJSON, useApi } from "../lib";
 
-// First-run gate: capture the two attributes the app actually needs — a display
-// name and a unique handle friends use to find you.
+// First-run gate: one field — a name. The handle is optional (we derive one
+// server-side when left blank).
 export function ProfileSetup({ onDone }: { onDone: (p: Profile) => void }) {
   const api = useApi();
   const [displayName, setDisplayName] = useState("");
@@ -26,7 +26,7 @@ export function ProfileSetup({ onDone }: { onDone: (p: Profile) => void }) {
   return (
     <div className="stack" style={{ maxWidth: 420, margin: "2rem auto" }}>
       <h1>Welcome 👋</h1>
-      <p className="muted">Two quick things and you're in.</p>
+      <p className="muted">Just your name and you're in.</p>
       <form className="card stack" onSubmit={save}>
         <div>
           <label className="field" htmlFor="dn">Your name</label>
@@ -40,7 +40,7 @@ export function ProfileSetup({ onDone }: { onDone: (p: Profile) => void }) {
           />
         </div>
         <div>
-          <label className="field" htmlFor="hd">Handle</label>
+          <label className="field" htmlFor="hd">Handle <span className="muted small">(optional — we’ll pick one)</span></label>
           <input
             id="hd"
             className="input"

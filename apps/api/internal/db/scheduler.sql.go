@@ -134,6 +134,51 @@ func (q *Queries) AreFriends(ctx context.Context, arg AreFriendsParams) (bool, e
 	return are_friends, err
 }
 
+const cancelEvent = `-- name: CancelEvent :one
+UPDATE events SET status = 'cancelled'
+WHERE id = $1
+RETURNING id, host_id, title, event_type, description,
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
+`
+
+func (q *Queries) CancelEvent(ctx context.Context, id pgtype.UUID) (Event, error) {
+	row := q.db.QueryRow(ctx, cancelEvent, id)
+	var i Event
+	err := row.Scan(
+		&i.ID,
+		&i.HostID,
+		&i.Title,
+		&i.EventType,
+		&i.Description,
+		&i.LocationMode,
+		&i.LocationAddress,
+		&i.SchedulingMode,
+		&i.StartsAt,
+		&i.Status,
+		&i.CreatedAt,
+		&i.CommentsEnabled,
+		&i.GroupID,
+		&i.SeriesID,
+		&i.Recurrence,
+		&i.ReminderSent,
+		&i.Visibility,
+		&i.Topic,
+		&i.City,
+		&i.CustomEmoji,
+		&i.CustomLabel,
+	)
+	return i, err
+}
+
+const cancelSeries = `-- name: CancelSeries :exec
+UPDATE events SET status = 'cancelled' WHERE series_id = $1
+`
+
+func (q *Queries) CancelSeries(ctx context.Context, seriesID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, cancelSeries, seriesID)
+	return err
+}
+
 const clearAvailability = `-- name: ClearAvailability :exec
 DELETE FROM availability_slots
 WHERE user_id = $1
@@ -175,11 +220,12 @@ const createEvent = `-- name: CreateEvent :one
 
 INSERT INTO events (
     host_id, title, event_type, description,
-    location_mode, location_address, scheduling_mode, starts_at, status
+    location_mode, location_address, scheduling_mode, starts_at, status, group_id, series_id, recurrence,
+    visibility, topic, city, custom_emoji, custom_label
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
 `
 
 type CreateEventParams struct {
@@ -192,6 +238,14 @@ type CreateEventParams struct {
 	SchedulingMode  string             `json:"scheduling_mode"`
 	StartsAt        pgtype.Timestamptz `json:"starts_at"`
 	Status          string             `json:"status"`
+	GroupID         pgtype.UUID        `json:"group_id"`
+	SeriesID        pgtype.UUID        `json:"series_id"`
+	Recurrence      string             `json:"recurrence"`
+	Visibility      string             `json:"visibility"`
+	Topic           string             `json:"topic"`
+	City            string             `json:"city"`
+	CustomEmoji     string             `json:"custom_emoji"`
+	CustomLabel     string             `json:"custom_label"`
 }
 
 // =========================== events ===============================
@@ -206,6 +260,14 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event
 		arg.SchedulingMode,
 		arg.StartsAt,
 		arg.Status,
+		arg.GroupID,
+		arg.SeriesID,
+		arg.Recurrence,
+		arg.Visibility,
+		arg.Topic,
+		arg.City,
+		arg.CustomEmoji,
+		arg.CustomLabel,
 	)
 	var i Event
 	err := row.Scan(
@@ -220,6 +282,16 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event
 		&i.StartsAt,
 		&i.Status,
 		&i.CreatedAt,
+		&i.CommentsEnabled,
+		&i.GroupID,
+		&i.SeriesID,
+		&i.Recurrence,
+		&i.ReminderSent,
+		&i.Visibility,
+		&i.Topic,
+		&i.City,
+		&i.CustomEmoji,
+		&i.CustomLabel,
 	)
 	return i, err
 }
@@ -251,22 +323,44 @@ func (q *Queries) CreateFriendRequest(ctx context.Context, arg CreateFriendReque
 	return i, err
 }
 
+const deleteFriendship = `-- name: DeleteFriendship :exec
+DELETE FROM friendships WHERE id = $1
+`
+
+func (q *Queries) DeleteFriendship(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteFriendship, id)
+	return err
+}
+
+const deleteGroup = `-- name: DeleteGroup :exec
+DELETE FROM groups WHERE id = $1 AND owner_id = $2
+`
+
+type DeleteGroupParams struct {
+	ID      pgtype.UUID `json:"id"`
+	OwnerID string      `json:"owner_id"`
+}
+
+func (q *Queries) DeleteGroup(ctx context.Context, arg DeleteGroupParams) error {
+	_, err := q.db.Exec(ctx, deleteGroup, arg.ID, arg.OwnerID)
+	return err
+}
+
 const finalizeEvent = `-- name: FinalizeEvent :one
 UPDATE events
-SET starts_at = $3, status = 'scheduled'
-WHERE id = $1 AND host_id = $2
+SET starts_at = $2, status = 'scheduled'
+WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
 `
 
 type FinalizeEventParams struct {
 	ID       pgtype.UUID        `json:"id"`
-	HostID   string             `json:"host_id"`
 	StartsAt pgtype.Timestamptz `json:"starts_at"`
 }
 
 func (q *Queries) FinalizeEvent(ctx context.Context, arg FinalizeEventParams) (Event, error) {
-	row := q.db.QueryRow(ctx, finalizeEvent, arg.ID, arg.HostID, arg.StartsAt)
+	row := q.db.QueryRow(ctx, finalizeEvent, arg.ID, arg.StartsAt)
 	var i Event
 	err := row.Scan(
 		&i.ID,
@@ -280,6 +374,16 @@ func (q *Queries) FinalizeEvent(ctx context.Context, arg FinalizeEventParams) (E
 		&i.StartsAt,
 		&i.Status,
 		&i.CreatedAt,
+		&i.CommentsEnabled,
+		&i.GroupID,
+		&i.SeriesID,
+		&i.Recurrence,
+		&i.ReminderSent,
+		&i.Visibility,
+		&i.Topic,
+		&i.City,
+		&i.CustomEmoji,
+		&i.CustomLabel,
 	)
 	return i, err
 }
@@ -310,7 +414,7 @@ func (q *Queries) GetAttendee(ctx context.Context, arg GetAttendeeParams) (Event
 
 const getEvent = `-- name: GetEvent :one
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
 FROM events
 WHERE id = $1
 `
@@ -330,13 +434,42 @@ func (q *Queries) GetEvent(ctx context.Context, id pgtype.UUID) (Event, error) {
 		&i.StartsAt,
 		&i.Status,
 		&i.CreatedAt,
+		&i.CommentsEnabled,
+		&i.GroupID,
+		&i.SeriesID,
+		&i.Recurrence,
+		&i.ReminderSent,
+		&i.Visibility,
+		&i.Topic,
+		&i.City,
+		&i.CustomEmoji,
+		&i.CustomLabel,
+	)
+	return i, err
+}
+
+const getFriendship = `-- name: GetFriendship :one
+SELECT id, requester_id, addressee_id, status, created_at
+FROM friendships
+WHERE id = $1
+`
+
+func (q *Queries) GetFriendship(ctx context.Context, id pgtype.UUID) (Friendship, error) {
+	row := q.db.QueryRow(ctx, getFriendship, id)
+	var i Friendship
+	err := row.Scan(
+		&i.ID,
+		&i.RequesterID,
+		&i.AddresseeID,
+		&i.Status,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getProfile = `-- name: GetProfile :one
 
-SELECT user_id, display_name, handle, avatar_url, created_at
+SELECT user_id, display_name, handle, avatar_url, created_at, email
 FROM profiles
 WHERE user_id = $1
 `
@@ -347,6 +480,7 @@ type GetProfileRow struct {
 	Handle      string             `json:"handle"`
 	AvatarUrl   string             `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Email       string             `json:"email"`
 }
 
 // ============================ profiles ============================
@@ -359,12 +493,13 @@ func (q *Queries) GetProfile(ctx context.Context, userID string) (GetProfileRow,
 		&i.Handle,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.Email,
 	)
 	return i, err
 }
 
 const getProfileByHandle = `-- name: GetProfileByHandle :one
-SELECT user_id, display_name, handle, avatar_url, created_at
+SELECT user_id, display_name, handle, avatar_url, created_at, email
 FROM profiles
 WHERE handle = $1
 `
@@ -375,6 +510,7 @@ type GetProfileByHandleRow struct {
 	Handle      string             `json:"handle"`
 	AvatarUrl   string             `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Email       string             `json:"email"`
 }
 
 func (q *Queries) GetProfileByHandle(ctx context.Context, handle string) (GetProfileByHandleRow, error) {
@@ -386,6 +522,7 @@ func (q *Queries) GetProfileByHandle(ctx context.Context, handle string) (GetPro
 		&i.Handle,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.Email,
 	)
 	return i, err
 }
@@ -495,10 +632,11 @@ func (q *Queries) ListAvailabilityDays(ctx context.Context, userID string) ([]Li
 
 const listEventsAttending = `-- name: ListEventsAttending :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label
 FROM events e
 JOIN event_attendees a ON a.event_id = e.id
 WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled'
+  AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = e.id AND ch.user_id = $1)
 ORDER BY e.created_at DESC
 `
 
@@ -523,6 +661,67 @@ func (q *Queries) ListEventsAttending(ctx context.Context, userID string) ([]Eve
 			&i.StartsAt,
 			&i.Status,
 			&i.CreatedAt,
+			&i.CommentsEnabled,
+			&i.GroupID,
+			&i.SeriesID,
+			&i.Recurrence,
+			&i.ReminderSent,
+			&i.Visibility,
+			&i.Topic,
+			&i.City,
+			&i.CustomEmoji,
+			&i.CustomLabel,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEventsCohosting = `-- name: ListEventsCohosting :many
+SELECT e.id, e.host_id, e.title, e.event_type, e.description,
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label
+FROM events e
+JOIN event_cohosts ch ON ch.event_id = e.id
+WHERE ch.user_id = $1 AND e.status <> 'cancelled'
+ORDER BY e.created_at DESC
+`
+
+func (q *Queries) ListEventsCohosting(ctx context.Context, userID string) ([]Event, error) {
+	rows, err := q.db.Query(ctx, listEventsCohosting, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Event{}
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.HostID,
+			&i.Title,
+			&i.EventType,
+			&i.Description,
+			&i.LocationMode,
+			&i.LocationAddress,
+			&i.SchedulingMode,
+			&i.StartsAt,
+			&i.Status,
+			&i.CreatedAt,
+			&i.CommentsEnabled,
+			&i.GroupID,
+			&i.SeriesID,
+			&i.Recurrence,
+			&i.ReminderSent,
+			&i.Visibility,
+			&i.Topic,
+			&i.City,
+			&i.CustomEmoji,
+			&i.CustomLabel,
 		); err != nil {
 			return nil, err
 		}
@@ -536,7 +735,7 @@ func (q *Queries) ListEventsAttending(ctx context.Context, userID string) ([]Eve
 
 const listEventsHosting = `-- name: ListEventsHosting :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
 FROM events
 WHERE host_id = $1 AND status <> 'cancelled'
 ORDER BY created_at DESC
@@ -563,6 +762,16 @@ func (q *Queries) ListEventsHosting(ctx context.Context, hostID string) ([]Event
 			&i.StartsAt,
 			&i.Status,
 			&i.CreatedAt,
+			&i.CommentsEnabled,
+			&i.GroupID,
+			&i.SeriesID,
+			&i.Recurrence,
+			&i.ReminderSent,
+			&i.Visibility,
+			&i.Topic,
+			&i.City,
+			&i.CustomEmoji,
+			&i.CustomLabel,
 		); err != nil {
 			return nil, err
 		}
@@ -576,6 +785,7 @@ func (q *Queries) ListEventsHosting(ctx context.Context, hostID string) ([]Event
 
 const listFriends = `-- name: ListFriends :many
 SELECT
+    f.id,
     (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END)::text AS friend_id,
     p.display_name,
     p.handle,
@@ -589,10 +799,11 @@ ORDER BY p.display_name
 `
 
 type ListFriendsRow struct {
-	FriendID    string `json:"friend_id"`
-	DisplayName string `json:"display_name"`
-	Handle      string `json:"handle"`
-	AvatarUrl   string `json:"avatar_url"`
+	ID          pgtype.UUID `json:"id"`
+	FriendID    string      `json:"friend_id"`
+	DisplayName string      `json:"display_name"`
+	Handle      string      `json:"handle"`
+	AvatarUrl   string      `json:"avatar_url"`
 }
 
 func (q *Queries) ListFriends(ctx context.Context, requesterID string) ([]ListFriendsRow, error) {
@@ -605,6 +816,7 @@ func (q *Queries) ListFriends(ctx context.Context, requesterID string) ([]ListFr
 	for rows.Next() {
 		var i ListFriendsRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.FriendID,
 			&i.DisplayName,
 			&i.Handle,
@@ -772,6 +984,39 @@ func (q *Queries) ListPreferenceAnswersForEvent(ctx context.Context, eventID pgt
 	return items, nil
 }
 
+const listSeriesEvents = `-- name: ListSeriesEvents :many
+SELECT id, starts_at, status
+FROM events
+WHERE series_id = $1 AND status <> 'cancelled'
+ORDER BY starts_at
+`
+
+type ListSeriesEventsRow struct {
+	ID       pgtype.UUID        `json:"id"`
+	StartsAt pgtype.Timestamptz `json:"starts_at"`
+	Status   string             `json:"status"`
+}
+
+func (q *Queries) ListSeriesEvents(ctx context.Context, seriesID pgtype.UUID) ([]ListSeriesEventsRow, error) {
+	rows, err := q.db.Query(ctx, listSeriesEvents, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSeriesEventsRow{}
+	for rows.Next() {
+		var i ListSeriesEventsRow
+		if err := rows.Scan(&i.ID, &i.StartsAt, &i.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTimeOptions = `-- name: ListTimeOptions :many
 SELECT id, event_id, starts_at
 FROM event_time_options
@@ -869,7 +1114,7 @@ func (q *Queries) ListVotesForEvent(ctx context.Context, eventID pgtype.UUID) ([
 const setAvatar = `-- name: SetAvatar :one
 UPDATE profiles SET avatar_url = $2
 WHERE user_id = $1
-RETURNING user_id, display_name, handle, avatar_url, created_at
+RETURNING user_id, display_name, handle, avatar_url, created_at, email
 `
 
 type SetAvatarParams struct {
@@ -883,6 +1128,7 @@ type SetAvatarRow struct {
 	Handle      string             `json:"handle"`
 	AvatarUrl   string             `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Email       string             `json:"email"`
 }
 
 func (q *Queries) SetAvatar(ctx context.Context, arg SetAvatarParams) (SetAvatarRow, error) {
@@ -894,6 +1140,79 @@ func (q *Queries) SetAvatar(ctx context.Context, arg SetAvatarParams) (SetAvatar
 		&i.Handle,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.Email,
+	)
+	return i, err
+}
+
+const setCommentsEnabled = `-- name: SetCommentsEnabled :exec
+UPDATE events SET comments_enabled = $2 WHERE id = $1
+`
+
+type SetCommentsEnabledParams struct {
+	ID              pgtype.UUID `json:"id"`
+	CommentsEnabled bool        `json:"comments_enabled"`
+}
+
+func (q *Queries) SetCommentsEnabled(ctx context.Context, arg SetCommentsEnabledParams) error {
+	_, err := q.db.Exec(ctx, setCommentsEnabled, arg.ID, arg.CommentsEnabled)
+	return err
+}
+
+const updateEvent = `-- name: UpdateEvent :one
+UPDATE events
+SET title = $2, description = $3, location_mode = $4, location_address = $5,
+    visibility = $6, topic = $7, city = $8
+WHERE id = $1
+RETURNING id, host_id, title, event_type, description,
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
+`
+
+type UpdateEventParams struct {
+	ID              pgtype.UUID `json:"id"`
+	Title           string      `json:"title"`
+	Description     string      `json:"description"`
+	LocationMode    string      `json:"location_mode"`
+	LocationAddress string      `json:"location_address"`
+	Visibility      string      `json:"visibility"`
+	Topic           string      `json:"topic"`
+	City            string      `json:"city"`
+}
+
+func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Event, error) {
+	row := q.db.QueryRow(ctx, updateEvent,
+		arg.ID,
+		arg.Title,
+		arg.Description,
+		arg.LocationMode,
+		arg.LocationAddress,
+		arg.Visibility,
+		arg.Topic,
+		arg.City,
+	)
+	var i Event
+	err := row.Scan(
+		&i.ID,
+		&i.HostID,
+		&i.Title,
+		&i.EventType,
+		&i.Description,
+		&i.LocationMode,
+		&i.LocationAddress,
+		&i.SchedulingMode,
+		&i.StartsAt,
+		&i.Status,
+		&i.CreatedAt,
+		&i.CommentsEnabled,
+		&i.GroupID,
+		&i.SeriesID,
+		&i.Recurrence,
+		&i.ReminderSent,
+		&i.Visibility,
+		&i.Topic,
+		&i.City,
+		&i.CustomEmoji,
+		&i.CustomLabel,
 	)
 	return i, err
 }
@@ -934,18 +1253,20 @@ func (q *Queries) UpsertPreferenceAnswer(ctx context.Context, arg UpsertPreferen
 }
 
 const upsertProfile = `-- name: UpsertProfile :one
-INSERT INTO profiles (user_id, display_name, handle)
-VALUES ($1, $2, $3)
+INSERT INTO profiles (user_id, display_name, handle, email)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT (user_id) DO UPDATE
     SET display_name = EXCLUDED.display_name,
-        handle       = EXCLUDED.handle
-RETURNING user_id, display_name, handle, avatar_url, created_at
+        handle       = EXCLUDED.handle,
+        email        = EXCLUDED.email
+RETURNING user_id, display_name, handle, avatar_url, created_at, email
 `
 
 type UpsertProfileParams struct {
 	UserID      string `json:"user_id"`
 	DisplayName string `json:"display_name"`
 	Handle      string `json:"handle"`
+	Email       string `json:"email"`
 }
 
 type UpsertProfileRow struct {
@@ -954,10 +1275,16 @@ type UpsertProfileRow struct {
 	Handle      string             `json:"handle"`
 	AvatarUrl   string             `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Email       string             `json:"email"`
 }
 
 func (q *Queries) UpsertProfile(ctx context.Context, arg UpsertProfileParams) (UpsertProfileRow, error) {
-	row := q.db.QueryRow(ctx, upsertProfile, arg.UserID, arg.DisplayName, arg.Handle)
+	row := q.db.QueryRow(ctx, upsertProfile,
+		arg.UserID,
+		arg.DisplayName,
+		arg.Handle,
+		arg.Email,
+	)
 	var i UpsertProfileRow
 	err := row.Scan(
 		&i.UserID,
@@ -965,6 +1292,7 @@ func (q *Queries) UpsertProfile(ctx context.Context, arg UpsertProfileParams) (U
 		&i.Handle,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.Email,
 	)
 	return i, err
 }

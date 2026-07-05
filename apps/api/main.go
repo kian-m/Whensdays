@@ -26,6 +26,7 @@ import (
 
 	"github.com/clsandbox/api/internal/analytics"
 	"github.com/clsandbox/api/internal/db"
+	"github.com/clsandbox/api/internal/notify"
 )
 
 //go:embed db/migrations/*.sql
@@ -39,6 +40,10 @@ type server struct {
 	queries   *db.Queries
 	logger    *slog.Logger
 	analytics *analytics.Client
+	calendar  calendarConfig
+	guests    guestSigner
+	notify    *notify.Client
+	appOrigin string
 }
 
 func main() {
@@ -73,15 +78,36 @@ func main() {
 	}, logger)
 	defer an.Close()
 
-	s := &server{queries: db.New(pool), logger: logger, analytics: an}
+	s := &server{
+		queries: db.New(pool), logger: logger, analytics: an,
+		calendar:  loadCalendarConfig(logger),
+		guests:    newGuestSigner(logger),
+		notify:    notify.New(os.Getenv("EMAIL_API_KEY"), os.Getenv("EMAIL_FROM"), logger),
+		appOrigin: strings.TrimRight(os.Getenv("APP_ORIGIN"), "/"),
+	}
 	auth := s.authMiddleware()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
+	// Unauthenticated by design: the event id is the capability (invite link).
+	mux.HandleFunc("POST /api/guest/join", s.handleGuestJoin)
+	// Full-page loads of /e/{id} are proxied here by nginx for link unfurls.
+	mux.HandleFunc("GET /e/{id}", s.handleOGPage)
+	// Public browse (read-only, publishes only host-chosen fields) + cron.
+	mux.HandleFunc("GET /api/discover", s.handleDiscover)
+	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
+	// Follows + personal feed.
+	mux.Handle("GET /api/feed", auth(http.HandlerFunc(s.handleFeed)))
+	mux.Handle("GET /api/event-types", auth(http.HandlerFunc(s.handleListCustomTypes)))
+	mux.Handle("GET /api/badges", auth(http.HandlerFunc(s.handleBadges)))
+	mux.Handle("POST /api/events/{id}/invites", auth(http.HandlerFunc(s.handleInviteFriend)))
+	mux.Handle("GET /api/discover/mine", auth(http.HandlerFunc(s.handleDiscoverMine)))
+	mux.Handle("POST /api/follows", auth(http.HandlerFunc(s.handleAddFollow)))
+	mux.Handle("DELETE /api/follows/{kind}/{value}", auth(http.HandlerFunc(s.handleRemoveFollow)))
 	mux.Handle("GET /api/notes", auth(http.HandlerFunc(s.handleListNotes)))
 	mux.Handle("POST /api/notes", auth(http.HandlerFunc(s.handleCreateNote)))
 
-	// Scheduler ("get-togethers") feature — see scheduler.go.
+	// Scheduler ("Whensdays") feature — see scheduler.go.
 	mux.Handle("GET /api/profile", auth(http.HandlerFunc(s.handleGetProfile)))
 	mux.Handle("PUT /api/profile", auth(http.HandlerFunc(s.handleUpsertProfile)))
 	mux.Handle("PUT /api/profile/avatar", auth(http.HandlerFunc(s.handleSetAvatar)))
@@ -97,6 +123,34 @@ func main() {
 	mux.Handle("POST /api/events/{id}/general-votes", auth(http.HandlerFunc(s.handleGeneralVotes)))
 	mux.Handle("POST /api/events/{id}/preferences", auth(http.HandlerFunc(s.handlePreferences)))
 	mux.Handle("POST /api/events/{id}/finalize", auth(http.HandlerFunc(s.handleFinalize)))
+	mux.Handle("PUT /api/events/{id}", auth(http.HandlerFunc(s.handleUpdateEvent)))
+	mux.Handle("DELETE /api/events/{id}", auth(http.HandlerFunc(s.handleCancelEvent)))
+	mux.Handle("DELETE /api/groups/{id}", auth(http.HandlerFunc(s.handleDeleteGroup)))
+	mux.Handle("DELETE /api/friends/{id}", auth(http.HandlerFunc(s.handleDeleteFriendship)))
+	// Comments + cohosts (see comments.go).
+	mux.Handle("POST /api/events/{id}/comments", auth(http.HandlerFunc(s.handlePostComment)))
+	mux.Handle("DELETE /api/events/{id}/comments/{commentId}", auth(http.HandlerFunc(s.handleDeleteComment)))
+	mux.Handle("PUT /api/events/{id}/comments-enabled", auth(http.HandlerFunc(s.handleSetCommentsEnabled)))
+	mux.Handle("POST /api/events/{id}/cohosts", auth(http.HandlerFunc(s.handleAddCohost)))
+	mux.Handle("DELETE /api/events/{id}/cohosts/{userId}", auth(http.HandlerFunc(s.handleRemoveCohost)))
+	mux.Handle("GET /api/events/{id}/calendar.ics", auth(http.HandlerFunc(s.handleEventICS)))
+
+	// Calendar import (see calendars_import.go). The Google OAuth callback is
+	// intentionally UNauthenticated — Google redirects the browser to it with no
+	// bearer; identity rides in the signed `state`.
+	mux.Handle("GET /api/calendar/connections", auth(http.HandlerFunc(s.handleListCalendarConnections)))
+	mux.Handle("GET /api/calendar/events", auth(http.HandlerFunc(s.handleCalendarEvents)))
+	mux.Handle("GET /api/calendar/google/connect", auth(http.HandlerFunc(s.handleGoogleConnect)))
+	mux.HandleFunc("GET /api/calendar/google/callback", s.handleGoogleCallback)
+	mux.Handle("POST /api/calendar/apple", auth(http.HandlerFunc(s.handleAppleConnect)))
+	mux.Handle("DELETE /api/calendar/connections/{provider}", auth(http.HandlerFunc(s.handleDisconnectCalendar)))
+	// Groups (see groups.go) — the recurring-circle wedge.
+	mux.Handle("POST /api/groups", auth(http.HandlerFunc(s.handleCreateGroup)))
+	mux.Handle("GET /api/groups", auth(http.HandlerFunc(s.handleListGroups)))
+	mux.Handle("GET /api/groups/{id}", auth(http.HandlerFunc(s.handleGetGroup)))
+	mux.Handle("POST /api/groups/{id}/members", auth(http.HandlerFunc(s.handleAddGroupMember)))
+	mux.Handle("PUT /api/groups/{id}/icon", auth(http.HandlerFunc(s.handleSetGroupIcon)))
+	mux.Handle("DELETE /api/groups/{id}/members/{userId}", auth(http.HandlerFunc(s.handleRemoveGroupMember)))
 	mux.Handle("GET /api/friends", auth(http.HandlerFunc(s.handleListFriends)))
 	mux.Handle("POST /api/friends", auth(http.HandlerFunc(s.handleAddFriend)))
 	mux.Handle("POST /api/friends/{id}/accept", auth(http.HandlerFunc(s.handleAcceptFriend)))
@@ -155,12 +209,31 @@ func runMigrations(dbURL string) error {
 // Clerk (verifies the session JWT). AUTH_MODE=dev swaps in a stub that trusts an
 // X-Dev-User header — for local/CI hermetic runs only, never production.
 func (s *server) authMiddleware() func(http.Handler) http.Handler {
+	var base func(http.Handler) http.Handler
 	if os.Getenv("AUTH_MODE") == "dev" {
 		s.logger.Warn("AUTH_MODE=dev: authentication is STUBBED — do not use in production")
-		return devAuth
+		base = devAuth
+	} else {
+		clerk.SetKey(mustEnv("CLERK_SECRET_KEY"))
+		base = clerkAuth
 	}
-	clerk.SetKey(mustEnv("CLERK_SECRET_KEY"))
-	return clerkAuth
+	// Guest tokens (see guests.go) are checked first in either mode:
+	// "Authorization: Guest <token>" → a low-privilege guest user.
+	return func(next http.Handler) http.Handler {
+		wrapped := base(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Guest "); ok {
+				uid, valid := s.guests.verify(tok)
+				if !valid {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid guest token"})
+					return
+				}
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userIDKey, uid)))
+				return
+			}
+			wrapped.ServeHTTP(w, r)
+		})
+	}
 }
 
 func devAuth(next http.Handler) http.Handler {

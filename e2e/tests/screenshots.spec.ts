@@ -40,7 +40,10 @@ test.describe("docs screenshots", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill("Camping trip");
     await page.getByTestId("type-camping").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-general").click();
+    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await page.getByTestId("preview-toggle").click(); // host → guest view shows the grid
     for (const cell of ["gp-cell-5-evening", "gp-cell-6-afternoon", "gp-cell-6-evening", "gp-cell-0-noon"]) {
@@ -56,6 +59,15 @@ test.describe("docs screenshots", () => {
       await page.getByTestId(c).click();
     }
     await page.screenshot({ path: `${OUT}/04-scheduler-availability.png`, fullPage: true });
+
+    // Feature: calendar view (connect via profile in stub mode, then the grid).
+    await page.goto("/profile");
+    if (await page.getByTestId("connect-google").isVisible().catch(() => false)) {
+      await page.getByTestId("connect-google").click();
+    }
+    await page.goto("/calendars");
+    await page.getByTestId("cal-month").waitFor();
+    await page.screenshot({ path: `${OUT}/05-scheduler-calendars.png`, fullPage: true });
   });
 });
 
@@ -63,8 +75,11 @@ async function createFixed(page: import("@playwright/test").Page, title: string,
   await page.goto("/new");
   await page.getByTestId("event-title").fill(title);
   await page.getByTestId(`type-${type}`).click();
+  await page.getByTestId("wiz-next").click(); // What → Where
+  await page.getByTestId("wiz-next").click(); // Where → When
   await page.getByTestId("sched-fixed").click();
   await page.getByTestId("fixed-time").fill(when);
+  await page.getByTestId("wiz-next").click();
   await page.getByTestId("create-event").click();
   await page.getByTestId("share-link").waitFor();
 }
@@ -73,11 +88,14 @@ async function createPoll(page: import("@playwright/test").Page, title: string, 
   await page.goto("/new");
   await page.getByTestId("event-title").fill(title);
   await page.getByTestId(`type-${type}`).click();
+  await page.getByTestId("wiz-next").click(); // What → Where
+  await page.getByTestId("wiz-next").click(); // Where → When
   await page.getByTestId("sched-poll").click();
   for (let i = 0; i < times.length; i++) {
     if (i > 0) await page.getByTestId("add-option").click();
     await page.getByTestId(`poll-option-${i}`).fill(times[i]);
   }
+  await page.getByTestId("wiz-next").click();
   await page.getByTestId("create-event").click();
   await page.getByTestId("share-link").waitFor();
 }

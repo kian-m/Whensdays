@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Event, fmtDateTime, getJSON } from "../lib";
-import { emojiFor, labelFor } from "../scheduler/questions";
+import { Event, TYPE_COLORS, fmtDateTime, getJSON } from "../lib";
+import { eventEmoji, eventLabel } from "../scheduler/questions";
 import { Loading, Pill, useAsync } from "../ui";
 
 type EventsResp = { hosting: Event[]; attending: Event[] };
@@ -18,7 +18,10 @@ export function Home() {
     <div className="stack">
       <div className="row between">
         <h1>Your plans</h1>
-        <Link to="/new" className="btn" data-testid="new-event">+ New event</Link>
+        <span className="row">
+          <Link to="/quick" className="btn soft" data-testid="quick-plan">⚡ Quick</Link>
+          <Link to="/new" className="btn" data-testid="new-event">+ New event</Link>
+        </span>
       </div>
 
       {empty && (
@@ -26,7 +29,10 @@ export function Home() {
           <div style={{ fontSize: "2.4rem" }}>🗓️</div>
           <h3>No plans yet</h3>
           <p className="muted">Host a dinner, movie night or camping trip — or wait for an invite.</p>
-          <div><Link to="/new" className="btn soft">Create your first event</Link></div>
+          <div className="row" style={{ justifyContent: "center" }}>
+            <Link to="/new" className="btn soft">Create your first event</Link>
+            <Link to="/discover" className="btn ghost">Browse public events</Link>
+          </div>
         </div>
       )}
 
@@ -53,8 +59,9 @@ export function Home() {
 
 function EventRow({ e, onClick }: { e: Event; onClick: () => void }) {
   return (
-    <div className="card ev" data-testid="event-row" onClick={onClick}>
-      <div className="emoji">{emojiFor(e.event_type)}</div>
+    <div className="card ev tile" data-testid="event-row" onClick={onClick}
+      style={{ borderLeftColor: TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other }}>
+      <div className="emoji" style={{ background: `${TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other}22` }}>{eventEmoji(e)}</div>
       <div style={{ flex: 1 }}>
         <div className="row between">
           <span className="title">{e.title}</span>
@@ -63,7 +70,7 @@ function EventRow({ e, onClick }: { e: Event; onClick: () => void }) {
             : <Pill kind="scheduled">Set</Pill>}
         </div>
         <div className="muted small">
-          {labelFor(e.event_type)} · {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
+          {eventLabel(e)} · {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
         </div>
         <div className="muted small">
           {e.location_mode === "find_venue" ? "📍 Venue TBD" : `📍 ${e.location_address || "Host's place"}`}

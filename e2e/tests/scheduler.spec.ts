@@ -1,9 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
+import { readFileSync } from "fs";
 
 const DEV_AUTH = process.env.E2E_AUTH_MODE === "dev";
 
-// Feature: the scheduler ("get-togethers"). Asserts behavior (create an event,
+// Feature: the scheduler ("Whensdays"). Asserts behavior (create an event,
 // respond as a guest, host sees the answers) AND a visual baseline of the create
 // form. In prod-shaped runs it signs in via Clerk; in hermetic dev runs auth is
 // stubbed so no Clerk is needed. Idempotent: the dev DB persists across the
@@ -45,9 +46,12 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
     await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-08-01T19:00");
+    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
 
     // Lands on the event page in the host view (share link is host-only).
@@ -74,7 +78,10 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-other").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-general").click();
+    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
 
     await expect(page.getByTestId("event-title")).toHaveText(title);
@@ -95,10 +102,761 @@ test.describe("scheduler", () => {
   test("create form visual baseline", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();
-    // Deterministic state: a known type selected, inputs empty.
+    // Deterministic state: step 1 (What) with a known type selected, title
+    // empty, and nothing focused (a focus ring would be pass-dependent).
     await page.getByTestId("type-dinner").click();
     await page.getByTestId("event-title").fill("");
+    await page.getByTestId("event-title").blur();
     await expect(page.locator("form")).toHaveScreenshot("new-event-form.png");
+  });
+
+  test("export a confirmed event to calendar (.ics + google link)", async ({ page }) => {
+    await ensureProfile(page);
+
+    const title = `Calendar ${test.info().testId}`;
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-08-01T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // The export block shows on confirmed (scheduled) events.
+    const block = page.getByTestId("add-to-calendar");
+    await expect(block).toBeVisible();
+
+    // Google link is a client-built TEMPLATE url carrying the title + a time range.
+    const href = await page.getByTestId("add-google").getAttribute("href");
+    expect(href).toContain("calendar.google.com/calendar/render");
+    expect(href).toContain("action=TEMPLATE");
+    expect(href).toContain("text=Calendar");
+    expect(href).toMatch(/dates=20260801T\d{6}Z%2F20260801T\d{6}Z/);
+
+    // Download the .ics and assert it is a valid single-event VCALENDAR.
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByTestId("download-ics").click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/\.ics$/);
+    const ics = readFileSync(await download.path(), "utf8");
+    expect(ics).toContain("BEGIN:VCALENDAR");
+    expect(ics).toContain("BEGIN:VEVENT");
+    expect(ics).toContain(`SUMMARY:${title}`);
+    expect(ics).toContain("DTSTART:20260801T");
+    // No pixel snapshot: text-content cards render 1px-height-unstable between
+    // passes (same as the comments card). Behavior above is the contract.
+  });
+
+  test("comments: post, delete, and the host can disable them", async ({ page }) => {
+    await ensureProfile(page);
+    const title = `Comments ${test.info().testId}`;
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-08-01T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    await expect(page.getByTestId("comments")).toBeVisible();
+
+    // Post a comment, then delete it (host moderates).
+    await page.getByTestId("comment-input").fill("Looking forward to it!");
+    await page.getByTestId("comment-post").click();
+    await expect(page.getByText("Looking forward to it!")).toBeVisible();
+    await page.getByTestId("comment-delete-0").click();
+    await expect(page.getByText("Looking forward to it!")).toHaveCount(0);
+
+    // Host turns comments off → the composer disappears.
+    await page.getByTestId("toggle-comments").click();
+    await expect(page.getByTestId("comments-off")).toBeVisible();
+    await expect(page.getByTestId("comment-input")).toHaveCount(0);
+    // And back on.
+    await page.getByTestId("toggle-comments").click();
+    await expect(page.getByTestId("comment-input")).toBeVisible();
+  });
+
+  test("cohosts: host delegates, cohost can edit + moderate", async ({ browser }) => {
+    const hostCtx = await browser.newContext();
+    const coCtx = await browser.newContext();
+    const host = await hostCtx.newPage();
+    const co = await coCtx.newPage();
+    try {
+      await ensureUser(host, "chost", "C Host", "chost");
+      await ensureUser(co, "cohostr", "Co Host", "cohostr");
+
+      // Host creates an event and adds the cohost by handle.
+      await host.getByTestId("new-event").click();
+      const title = `Cohosted ${test.info().testId}`;
+      await host.getByTestId("event-title").fill(title);
+      await host.getByTestId("type-dinner").click();
+      await host.getByTestId("wiz-next").click();
+      await host.getByTestId("loc-host").click();
+      await host.getByTestId("wiz-next").click();
+      await host.getByTestId("sched-fixed").click();
+      await host.getByTestId("fixed-time").fill("2026-08-02T19:00");
+      await host.getByTestId("wiz-next").click();
+      await host.getByTestId("create-event").click();
+      await expect(host.getByTestId("event-title")).toHaveText(title);
+      const url = host.url();
+
+      await host.getByTestId("cohost-handle").fill("cohostr");
+      await host.getByTestId("cohost-add").click();
+      await expect(host.getByTestId("cohost")).toBeVisible();
+
+      // A guest posts a comment the cohost will moderate.
+      const guestCtx = await browser.newContext();
+      const guest = await guestCtx.newPage();
+      await ensureUser(guest, "cguest", "C Guest", "cguest");
+      await guest.goto(url);
+      await guest.getByTestId("comment-input").fill("Can I bring a friend?");
+      await guest.getByTestId("comment-post").click();
+      await expect(guest.getByText("Can I bring a friend?")).toBeVisible();
+
+      // The gap fix: the cohost sees the event on their OWN dashboard under
+      // Hosting — without ever having opened the invite link.
+      await co.goto("/");
+      await expect(co.getByTestId("event-row").filter({ hasText: title }).first()).toBeVisible();
+
+      // The cohost opens the event: sees the manage view, can edit + moderate.
+      await co.goto(url);
+      await expect(co.getByTestId("share-link")).toBeVisible(); // manager view
+      await expect(co.getByTestId("host-controls")).toHaveCount(0); // but not host-only controls
+      await co.getByTestId("edit-event-open").click();
+      await co.getByTestId("edit-title").fill(`${title} (edited)`);
+      await co.getByTestId("edit-save").click();
+      await expect(co.getByTestId("event-title")).toHaveText(`${title} (edited)`);
+      // Cohost moderates the guest's comment.
+      await co.getByTestId("comment-delete-0").click();
+      await expect(co.getByText("Can I bring a friend?")).toHaveCount(0);
+
+      await guestCtx.close();
+    } finally {
+      await hostCtx.close();
+      await coCtx.close();
+    }
+  });
+
+  test("groups: create, add member, group event", async ({ browser }) => {
+    const ownerCtx = await browser.newContext();
+    const memberCtx = await browser.newContext();
+    const ownerPage = await ownerCtx.newPage();
+    const memberPage = await memberCtx.newPage();
+    try {
+      // Ensure the member user exists so the handle is available to add.
+      await ensureUser(memberPage, "gmem", "G Mem", "gmem");
+
+      // Set up owner and navigate to groups.
+      await ensureUser(ownerPage, "gowner", "G Owner", "gowner");
+      await ownerPage.goto("/?as=gowner");
+      await ownerPage.goto("/groups");
+
+      // Create a fresh group. testId is stable across runs and the dev DB
+      // persists (two-pass e2e), so pick .first() to survive duplicates.
+      const testId = test.info().testId;
+      const groupName = `Crew ${testId}`;
+      await ownerPage.getByTestId("group-name").fill(groupName);
+      await ownerPage.getByTestId("group-create").click();
+
+      // Click the new group row by text.
+      await ownerPage.getByText(groupName).first().click();
+
+      // Group title is visible.
+      await expect(ownerPage.getByTestId("group-title")).toBeVisible();
+
+      // Add the member by handle.
+      await ownerPage.getByTestId("member-handle").fill("gmem");
+      await ownerPage.getByTestId("member-add").click();
+
+      // Member shows up in the list.
+      await expect(ownerPage.getByTestId("group-member").first()).toBeVisible();
+
+      // Create a group event via the group-new-event button.
+      await ownerPage.getByTestId("group-new-event").click();
+      const eventTitle = `Group dinner ${testId}`;
+      await ownerPage.getByTestId("event-title").fill(eventTitle);
+      await ownerPage.getByTestId("type-dinner").click();
+      await ownerPage.getByTestId("wiz-next").click();
+      await ownerPage.getByTestId("loc-host").click();
+      await ownerPage.getByTestId("wiz-next").click();
+      await ownerPage.getByTestId("sched-fixed").click();
+      await ownerPage.getByTestId("fixed-time").fill("2026-08-10T19:00");
+      await ownerPage.getByTestId("wiz-next").click();
+      await ownerPage.getByTestId("create-event").click();
+      await expect(ownerPage.getByTestId("event-title")).toHaveText(eventTitle);
+
+      // Go back to the group page and verify the event appears there.
+      await ownerPage.goto("/groups");
+      await ownerPage.getByText(groupName).first().click();
+      await expect(ownerPage.getByTestId("group-event").filter({ hasText: eventTitle }).first()).toBeVisible();
+    } finally {
+      await ownerCtx.close();
+      await memberCtx.close();
+    }
+  });
+
+  test("recurring event: series occurrences created and navigable", async ({ page }) => {
+    await ensureProfile(page);
+    const title = `Weekly run ${test.info().testId}`;
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-other").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-08-11T18:00");
+    await page.getByTestId("repeat-weekly").click();
+    await page.getByTestId("repeat-count").selectOption("3");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Series card: 3 occurrences, this is the first; siblings navigate.
+    await expect(page.getByTestId("series")).toContainText("1 of 3");
+    await page.getByTestId("series-occ-1").click();
+    await expect(page.getByTestId("series")).toContainText("2 of 3");
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+  });
+
+  test("group icons: emoji-only and photo upload", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for an isolated owner");
+    await ensureUser(page, "iconowner", "Icon Owner", "iconowner");
+    await page.goto("/groups");
+    // Emoji comes from the preset palette (free text is impossible in the UI
+    // and rejected by the API).
+    await page.getByTestId("group-emoji-🎲").click();
+    const name = `Icons ${test.info().testId}`;
+    await page.getByTestId("group-name").fill(name);
+    await page.getByTestId("group-create").click();
+    await page.getByText(name).first().click();
+    await expect(page.getByTestId("group-title")).toHaveText(name);
+
+    // Owner uploads a photo icon; it replaces the emoji (avatar img appears).
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    await page.getByTestId("group-icon-file").setInputFiles({
+      name: "icon.png", mimeType: "image/png", buffer: Buffer.from(png, "base64"),
+    });
+    await expect(page.getByTestId("group-icon-pick")).toHaveText("Change photo");
+  });
+
+  test("discover: public event browsable, topic filter, follow → feed", async ({ page, browser, request }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    // The browse API is public — no auth headers at all.
+    const unauth = await request.get("/api/discover");
+    expect(unauth.status()).toBe(200);
+
+    // Host publishes a public event with a topic.
+    await ensureUser(page, "pubhost", "Pub Host", "pubhost");
+    const title = `Stream ${test.info().testId}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-other").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-09-01T20:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("vis-public").click();
+    await page.getByTestId("cat-streams").click();
+    await page.getByTestId("event-city").fill("Portland");
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Another user finds it on Discover, filters by topic, follows the host.
+    const fanCtx = await browser.newContext();
+    try {
+      const fan = await fanCtx.newPage();
+      await ensureUser(fan, "fan1", "Fan One", "fan1");
+      // Known starting state across the two-pass run: not following (the
+      // follow button is a toggle, so a leftover follow would flip it OFF).
+      await fan.evaluate(() =>
+        fetch("/api/follows/host/pubhost", { method: "DELETE", headers: { "X-Dev-User": "fan1" } }),
+      );
+      await fan.goto("/discover");
+      // .first(): the persistent two-pass DB can hold duplicates of this title,
+      // and it can appear in both the feed and browse sections.
+      await expect(fan.getByText(title).first()).toBeVisible();
+      await fan.getByTestId("disc-cat-streams").click();
+      await expect(fan.getByTestId("disc-event").filter({ hasText: title }).first()).toBeVisible();
+
+      await fan.getByTestId("disc-event").filter({ hasText: title }).first()
+        .getByTestId("follow-host").click();
+      // Clear the filter (the For-you rail hides while filtering), then the
+      // followed host's event ranks into the rail.
+      await fan.getByTestId("disc-cat-streams").click();
+      await expect(fan.getByTestId("feed-event").filter({ hasText: title }).first()).toBeVisible();
+    } finally {
+      await fanCtx.close();
+    }
+  });
+
+  test("deletion: cancel event, delete group, decline + unfriend", async ({ page, browser }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "deleter", "Del Eter", "deleter");
+    page.on("dialog", (d) => d.accept()); // auto-accept the confirm()s
+
+    // Cancel an event → page shows the cancelled state; it leaves the dashboard.
+    const title = `Doomed ${test.info().testId}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-09-10T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    await page.getByTestId("cancel-event").click();
+    await expect(page.getByTestId("cancelled-note")).toBeVisible();
+    await page.goto("/");
+    await expect(page.getByText(title)).toHaveCount(0);
+
+    // Delete a group → back on /groups without it.
+    await page.goto("/groups");
+    const gname = `Doomed crew ${test.info().testId}`;
+    await page.getByTestId("group-name").fill(gname);
+    await page.getByTestId("group-create").click();
+    await page.getByText(gname).first().click();
+    await page.getByTestId("group-delete").click();
+    await expect(page).toHaveURL(/\/groups$/);
+    await expect(page.getByText(gname)).toHaveCount(0);
+
+    // Friends: decline an incoming request, then unfriend an accepted one.
+    const otherCtx = await browser.newContext();
+    try {
+      const other = await otherCtx.newPage();
+      await ensureUser(other, "delfriend", "Del Friend", "delfriend");
+      // delfriend requests deleter → deleter declines.
+      await other.goto("/friends");
+      await other.getByTestId("friend-handle").fill("deleter");
+      await other.getByTestId("add-friend").click();
+      await expect(other.getByText("Request sent ✓")).toBeVisible();
+      await page.goto("/friends");
+      await page.getByTestId("friend-handle").waitFor();
+      await page.getByTestId("decline-delfriend").click();
+      await expect(page.getByTestId("accept-delfriend")).toHaveCount(0);
+
+      // Request again, accept this time, then unfriend.
+      await other.goto("/friends");
+      await other.getByTestId("friend-handle").waitFor();
+      await other.getByTestId("friend-handle").fill("deleter");
+      await other.getByTestId("add-friend").click();
+      await page.goto("/friends");
+      await page.getByTestId("friend-handle").waitFor();
+      await page.getByTestId("accept-delfriend").click();
+      await expect(page.getByTestId("unfriend-delfriend")).toBeVisible();
+      await page.getByTestId("unfriend-delfriend").click();
+      await expect(page.getByTestId("unfriend-delfriend")).toHaveCount(0);
+    } finally {
+      await otherCtx.close();
+    }
+  });
+
+  test("friends-visible events show in the feed's Friends scope", async ({ page, browser, request }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    // fv1 hosts a friends-visible event (not on public Discover).
+    await ensureUser(page, "fv1", "F V One", "fv1");
+    const title = `Friends only ${test.info().testId}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-09-05T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("vis-friends").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    const otherCtx = await browser.newContext();
+    try {
+      const fv2 = await otherCtx.newPage();
+      await ensureUser(fv2, "fv2", "F V Two", "fv2");
+      // Befriend (idempotent across passes: accept only if pending).
+      await fv2.goto("/friends");
+      await fv2.getByTestId("friend-handle").fill("fv1");
+      await fv2.getByTestId("add-friend").click();
+      await page.goto("/friends");
+      await page.getByTestId("friend-handle").waitFor();
+      const accept = page.getByTestId("accept-fv2");
+      if (await accept.isVisible().catch(() => false)) await accept.click();
+      await expect(page.getByTestId("unfriend-fv2")).toBeVisible();
+
+      // fv2's Friends scope shows it; the public browse list does not.
+      await fv2.goto("/discover");
+      await fv2.getByTestId("scope-friends").click();
+      const row = fv2.getByTestId("feed-event").filter({ hasText: title }).first();
+      await expect(row).toBeVisible();
+      // Each event renders exactly once: it's in the For-you rail, so the
+      // browse list below must NOT duplicate it — and it never leaks to the
+      // anonymous public endpoint.
+      await expect(fv2.getByTestId("disc-event").filter({ hasText: title })).toHaveCount(0);
+      const pub = await request.get("/api/discover");
+      expect(await pub.text()).not.toContain(title);
+
+      // Tier styling: a friend's event glows green until you're going (in the
+      // second e2e pass the RSVP from pass 1 persists → already tile-going).
+      if (!((await row.getAttribute("class")) ?? "").includes("tile-going")) {
+        await expect(row).toHaveClass(/tile-friend/);
+      }
+      await fv2.getByText(title).first().click(); // open → RSVP going
+      await fv2.getByTestId("rsvp-going").click();
+      await fv2.goto("/discover");
+      await fv2.getByTestId("scope-friends").click();
+      await expect(fv2.getByTestId("feed-event").filter({ hasText: title }).first()).toHaveClass(/tile-going/);
+
+      // Social proof: the host (fv2's friend) also RSVPs going → fv2's tile
+      // shows "1 friend going". (Hosts don't appear in their own feed.)
+      await page.goto("/");
+      await page.getByText(title).first().click();
+      await page.getByTestId("preview-toggle").click();
+      await page.getByTestId("rsvp-going").click();
+      await fv2.reload();
+      await fv2.getByTestId("scope-friends").click();
+      await expect(
+        fv2.getByTestId("feed-event").filter({ hasText: title }).first().getByTestId("friends-going"),
+      ).toHaveText(/1 friend going/);
+    } finally {
+      await otherCtx.close();
+    }
+  });
+
+  test("edit can take a private event public", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for an isolated user");
+    await ensureUser(page, "editpub", "Edit Pub", "editpub");
+    const title = `Went public ${test.info().testId}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-movie").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-09-12T20:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click(); // private by default
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Edit → Public + a category → it appears on Discover.
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-vis-public").click();
+    await page.getByTestId("edit-cat-gaming").click();
+    await page.getByTestId("edit-save").click();
+    await page.goto("/discover");
+    await expect(page.getByText(title).first()).toBeVisible(); // rail or browse
+  });
+
+  test("public polls are discoverable before a time is set", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for an isolated user");
+    await ensureUser(page, "pollpub", "Poll Pub", "pollpub");
+    const title = `Open poll ${test.info().testId}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-other").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-general").click(); // polling: no time yet
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("vis-public").click();
+    await page.getByTestId("cat-social").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // The Discover filter starts EMPTY (no timezone prefill hiding results)
+    // and time-less polls are listed.
+    await page.goto("/discover");
+    await expect(page.getByTestId("disc-city")).toHaveValue("");
+    await expect(page.getByText(title).first()).toBeVisible(); // rail or browse, exactly once
+  });
+
+  test("region filter matches member cities", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for an isolated user");
+    await ensureUser(page, "regionist", "Region Ist", "regionist");
+    const title = `Oakland meetup ${test.info().testId}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-other").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-09-15T18:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("vis-public").click();
+    await page.getByTestId("cat-tech").click();
+    await page.getByTestId("event-city").fill("Oakland");
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Filtering by the metro region finds the member-city event.
+    await page.goto("/discover");
+    await page.getByTestId("disc-city").fill("Bay Area, CA");
+    await expect(page.getByTestId("disc-event").filter({ hasText: title }).first()).toBeVisible();
+    // A different region does not.
+    await page.getByTestId("disc-city").fill("Tampa Bay, FL");
+    await expect(page.getByTestId("disc-event").filter({ hasText: title })).toHaveCount(0);
+  });
+
+  test("invites: badge counts, invite a friend, invitee sees the event", async ({ page, browser }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    const bCtx = await browser.newContext();
+    try {
+      const b = await bCtx.newPage();
+      await ensureUser(b, "invB", "Inv Bee", "invb");
+      await ensureUser(page, "invA", "Inv Ay", "inva");
+
+      // A requests B → B's Friends nav shows a red count.
+      await page.goto("/friends");
+      await page.getByTestId("friend-handle").waitFor();
+      const already = await page.getByTestId("unfriend-invb").isVisible().catch(() => false);
+      if (!already) {
+        await page.getByTestId("friend-handle").fill("invb");
+        await page.getByTestId("add-friend").click();
+        await b.goto("/friends");
+        await expect(b.getByTestId("nav-badge-friends")).toHaveText("1");
+        await b.getByTestId("accept-inva").click();
+      }
+      await b.goto("/friends");
+      await expect(b.getByTestId("unfriend-inva")).toBeVisible();
+
+      // A hosts an event and invites friend B from the event page.
+      const title = `Invited ${test.info().testId}`;
+      await page.goto("/new");
+      await page.getByTestId("event-title").fill(title);
+      await page.getByTestId("type-dinner").click();
+      await page.getByTestId("wiz-next").click();
+      await page.getByTestId("loc-host").click();
+      await page.getByTestId("wiz-next").click();
+      await page.getByTestId("sched-fixed").click();
+      await page.getByTestId("fixed-time").fill("2026-09-20T19:00");
+      await page.getByTestId("wiz-next").click();
+      await page.getByTestId("winvite-invb").click(); // invite from the wizard's Who step
+      await page.getByTestId("create-event").click();
+      await expect(page.getByTestId("event-title")).toHaveText(title);
+      await expect(page.getByText("Invited: Inv Bee")).toBeVisible();
+
+      // B: red count on Events, the event on the dashboard WITHOUT any link,
+      // and the badge clears once the dashboard has been seen.
+      await b.goto("/friends");
+      await expect(b.getByTestId("nav-badge-events")).toBeVisible();
+      await b.goto("/");
+      await expect(b.getByTestId("event-row").filter({ hasText: title }).first()).toBeVisible();
+      await b.goto("/friends");
+      await expect(b.getByTestId("nav-badge-events")).toHaveCount(0);
+    } finally {
+      await bCtx.close();
+    }
+  });
+
+  test("custom event types: + chip, emoji + short name, saved for reuse", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for an isolated user");
+    await ensureUser(page, "typer", "Ty Per", "typer");
+    const title = `Strike night ${test.info().testId}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-add").click();
+    await page.getByTestId("newtype-emoji-🎳").click();
+    await page.getByTestId("newtype-name").fill("Bowling");
+    await page.getByTestId("newtype-save").click();
+    // The new type appears as a SELECTED chip, styled like the preset types.
+    await expect(page.getByTestId("custom-bowling")).toHaveClass(/on/);
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-09-25T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+
+    // The event displays the custom emoji + name instead of a preset type.
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    await expect(page.getByText("Bowling").first()).toBeVisible();
+
+    // The type is saved and reappears as a chip for next time.
+    await page.goto("/new");
+    await expect(page.getByTestId("custom-bowling")).toBeVisible();
+  });
+
+  test("zero-signup: start a plan from scratch, share-ready", async ({ browser }) => {
+    test.skip(!DEV_AUTH, "guest flow uses the dev ?guest=1 hook");
+    const ctx = await browser.newContext();
+    try {
+      const p = await ctx.newPage();
+      await p.goto("/start?guest=1");
+      await p.getByTestId("guest-name").fill("Zero Sign");
+      await p.getByTestId("guest-join").click();
+      // Lands on Quick plan: title + time → event page with the invite link.
+      await p.getByTestId("quick-title").fill(`Zero ${test.info().testId}`);
+      await p.getByTestId("quick-when").fill("2026-10-01T19:00");
+      await p.getByTestId("quick-create").click();
+      await expect(p.getByTestId("share-link")).toBeVisible();
+      await expect(p.getByTestId("guest-banner")).toBeVisible(); // convert nudge
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test("quick plan: title + time → shareable event", async ({ page }) => {
+    await ensureProfile(page);
+    await page.goto("/");
+    await page.getByTestId("quick-plan").click();
+    const title = `Fast ${test.info().testId}`;
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-when").fill("2026-10-02T18:00");
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    await expect(page.getByTestId("share-link")).toBeVisible();
+  });
+
+  test("quick plan: availability mode asks when people are free", async ({ page }) => {
+    await ensureProfile(page);
+    await page.goto("/quick");
+    const title = `Fast avail ${test.info().testId}`;
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-mode-avail").click();
+    await page.getByTestId("quick-create").click();
+    // Lands as a general-availability poll; guests get the when-works grid.
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    await expect(page.getByText("Time being decided")).toBeVisible();
+    await page.getByTestId("preview-toggle").click();
+    await expect(page.getByTestId("gp-cell-6-evening")).toBeVisible();
+  });
+
+  test("invite links unfurl: /e/{id} serves Open Graph tags", async ({ page, request }) => {
+    await ensureProfile(page);
+    const title = `Unfurl ${test.info().testId}`;
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-when").fill("2026-10-03T18:00");
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const id = page.url().split("/e/")[1];
+
+    // A no-JS fetch (what iMessage/WhatsApp bots do) gets real OG tags…
+    const res = await request.get(`/e/${id}`);
+    expect(res.status()).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(`og:title`);
+    expect(html).toContain(title);
+    expect(html).toContain("no account needed");
+    // …and a real browser full-load gets bounced into the SPA.
+    await page.goto(`/e/${id}`);
+    await expect(page).toHaveURL(new RegExp(`/ev/${id}`));
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+  });
+
+  test("cron reminders endpoint is key-gated", async ({ request }) => {
+    const noKey = await request.post("/api/cron/reminders");
+    expect(noKey.status()).toBe(401); // no CRON_KEY configured/matched
+  });
+
+  test("intent links on scheduled events", async ({ page }) => {
+    await ensureProfile(page);
+
+    const testId = test.info().testId;
+    const title = `Intent ${testId}`;
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-08-01T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // The intent link for dinner should be visible and point to opentable.
+    const link = page.getByTestId("intent-dinner");
+    await expect(link).toBeVisible();
+    const href = await link.getAttribute("href");
+    expect(href).toContain("opentable.com");
+  });
+
+  test("guest joins from an invite link with just a name", async ({ page, browser }) => {
+    test.skip(!DEV_AUTH, "guest flow is exercised via the dev ?guest=1 hook");
+    await ensureProfile(page);
+
+    // Host creates a fixed event to invite someone to.
+    const title = `Guesty ${test.info().testId}`;
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-08-09T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const url = page.url();
+
+    // A signed-out visitor opens the invite: name → join → RSVP → comment.
+    const guestCtx = await browser.newContext();
+    try {
+      const guest = await guestCtx.newPage();
+      await guest.goto(`${url}?guest=1`);
+      await guest.getByTestId("guest-name").fill("Guest Gal");
+      await guest.getByTestId("guest-join").click();
+      await expect(guest.getByTestId("event-title")).toHaveText(title);
+      // The conversion nudge shows for guest identities.
+      await expect(guest.getByTestId("guest-banner")).toBeVisible();
+      await guest.getByTestId("rsvp-going").click();
+      await guest.getByTestId("comment-input").fill("So excited!");
+      await guest.getByTestId("comment-post").click();
+      await expect(guest.getByText("So excited!")).toBeVisible();
+    } finally {
+      await guestCtx.close();
+    }
+
+    // The host sees the guest's participation (name may appear in both the
+    // guest list and the comment byline — assert at least one).
+    await page.reload();
+    await expect(page.getByText("Guest Gal").first()).toBeVisible();
+  });
+
+  test("imported busy times flag conflicting poll options", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses the stubbed calendar (CALENDAR_MODE=stub)");
+    // A dedicated user connects the stub Google calendar (Dentist: Aug 3, 9-11am).
+    await ensureUser(page, "busyvoter", "Busy Voter", "busyvoter");
+    await page.goto("/profile");
+    await expect(page.getByTestId("calendar-connections")).toBeVisible();
+    if (await page.getByTestId("connect-google").isVisible().catch(() => false)) {
+      await page.getByTestId("connect-google").click();
+      await expect(page.getByTestId("disconnect-google")).toBeVisible();
+    }
+
+    // A poll with one option inside the busy window and one outside.
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(`Busy ${test.info().testId}`);
+    await page.getByTestId("type-movie").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-poll").click();
+    await page.getByTestId("poll-option-0").fill("2026-08-03T09:30");
+    await page.getByTestId("add-option").click();
+    await page.getByTestId("poll-option-1").fill("2026-08-20T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+
+    // Voting view (host previews as guest) shows the conflict badge on option 0 only.
+    await page.getByTestId("preview-toggle").click();
+    await expect(page.getByTestId("busy-0")).toBeVisible();
+    await expect(page.getByTestId("busy-1")).toHaveCount(0);
   });
 
   test("specific-times poll: vote and finalize", async ({ page }) => {
@@ -108,10 +866,13 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-movie").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-poll").click();
     await page.getByTestId("poll-option-0").fill("2026-08-01T19:00");
     await page.getByTestId("add-option").click();
     await page.getByTestId("poll-option-1").fill("2026-08-02T19:00");
+    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -131,8 +892,10 @@ test.describe("scheduler", () => {
   test("edit profile and date-based availability", async ({ page }) => {
     await ensureProfile(page);
     await page.goto("/profile");
+    await page.getByTestId("profile-edit").click(); // tile is read-only until Edit
     await page.getByTestId("profile-name").fill("Demo Host");
     await page.getByTestId("save-profile").click();
+    await expect(page.getByTestId("profile-view")).toBeVisible(); // back to read-only
     // Explicit calendar: tomorrow evening, day-after noon.
     await page.getByTestId("avail-cell-1-evening").click();
     await page.getByTestId("avail-cell-2-noon").click();
@@ -140,9 +903,66 @@ test.describe("scheduler", () => {
     await expect(page.getByText("Availability saved ✓")).toBeVisible();
   });
 
+  test("availability: recurring weekly and paginated specific dates", async ({ page }) => {
+    await ensureProfile(page);
+    await page.goto("/profile");
+
+    // Recurring weekly mode: pick Monday morning + Friday evening, save.
+    await page.getByTestId("avail-mode-weekly").click();
+    await expect(page.getByTestId("weekly-grid")).toBeVisible();
+    await page.getByTestId("wk-cell-1-morning").click();
+    await page.getByTestId("wk-cell-5-evening").click();
+    await page.getByTestId("save-weekly").click();
+    await expect(page.getByText("Availability saved ✓")).toBeVisible();
+
+    // Specific dates: paginate further into the future, then mark a cell there.
+    await page.getByTestId("avail-mode-specific").click();
+    await expect(page.getByTestId("avail-earlier")).toBeDisabled(); // present is the floor
+    const firstRange = await page.getByTestId("avail-range").textContent();
+    await page.getByTestId("avail-later").click();
+    await expect(page.getByTestId("avail-earlier")).toBeEnabled();
+    await expect(page.getByTestId("avail-range")).not.toHaveText(firstRange ?? "");
+    await page.getByTestId("avail-cell-0-evening").click(); // a date ~2 weeks out
+    await page.getByTestId("save-availability").click();
+    await expect(page.getByText("Availability saved ✓")).toBeVisible();
+  });
+
+  test("availability weekly grid visual baseline", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for a clean, unsaved availability state");
+    // A fresh user with no saved availability → deterministic empty grid.
+    await ensureUser(page, "availviz", "Avail Viz", "availviz");
+    await page.goto("/profile");
+    await page.getByTestId("avail-mode-weekly").click();
+    await expect(page.getByTestId("weekly-grid")).toBeVisible();
+    await expect(page.getByTestId("weekly-grid")).toHaveScreenshot("weekly-grid.png");
+  });
+
+  test("mobile: bottom tab bar navigates and highlights", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 }); // phone-sized
+    await ensureProfile(page);
+
+    const bar = page.getByTestId("tabbar");
+    await expect(bar).toBeVisible(); // shows only at mobile widths
+
+    // Each tab navigates to its page.
+    await page.getByTestId("tab-friends").click();
+    await expect(page).toHaveURL(/\/friends$/);
+    await page.getByTestId("tab-calendars").click();
+    await expect(page).toHaveURL(/\/calendars$/);
+    await page.getByTestId("tab-profile").click();
+    await expect(page).toHaveURL(/\/profile$/);
+    await page.getByTestId("tab-events").click();
+    await expect(page).toHaveURL(/\/$/);
+
+    // Active tab is highlighted; visual baseline of the (fixed-height) bar.
+    await expect(page.getByTestId("tab-events")).toHaveClass(/active/);
+    await expect(bar).toHaveScreenshot("tabbar.png");
+  });
+
   test("upload a profile photo", async ({ page }) => {
     await ensureProfile(page);
     await page.goto("/profile");
+    await page.getByTestId("profile-edit").click(); // photo picker lives in edit mode
     // 1x1 PNG; the client resizes it to a JPEG data URL before saving.
     const png =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -177,6 +997,9 @@ test.describe("scheduler", () => {
       // Ben accepts (only if a request is pending — keeps the run idempotent),
       // then wait until Amy shows as an accepted friend so the round-trip is done.
       await ben.goto("/friends");
+      // Wait for the page to finish its initial load first — a non-waiting
+      // isVisible() during the loading spinner would skip the accept step.
+      await ben.getByTestId("friend-handle").waitFor();
       const accept = ben.getByTestId("accept-amy");
       if (await accept.isVisible().catch(() => false)) await accept.click();
       await expect(ben.getByTestId("view-avail-amy")).toBeVisible();

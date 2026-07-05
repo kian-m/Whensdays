@@ -37,7 +37,7 @@ export const QUESTIONS: Record<EventType, Question[]> = {
 };
 
 export const EVENT_TYPES: { value: EventType; label: string; emoji: string }[] = [
-  { value: "dinner", label: "Dinner", emoji: "🍝" },
+  { value: "dinner", label: "Meal", emoji: "🍽️" },
   { value: "drinks", label: "Drinks", emoji: "🍸" },
   { value: "movie", label: "Movie", emoji: "🎬" },
   { value: "camping", label: "Camping", emoji: "⛺" },
@@ -48,5 +48,10 @@ export const EVENT_TYPES: { value: EventType; label: string; emoji: string }[] =
 
 export const emojiFor = (t: EventType) => EVENT_TYPES.find((e) => e.value === t)?.emoji ?? "✨";
 export const labelFor = (t: EventType) => EVENT_TYPES.find((e) => e.value === t)?.label ?? "Event";
+
+// Custom-type aware variants: user-defined emoji/name win when present.
+type Typed = { event_type: EventType; custom_emoji?: string; custom_label?: string };
+export const eventEmoji = (e: Typed) => e.custom_emoji || emojiFor(e.event_type);
+export const eventLabel = (e: Typed) => e.custom_label || labelFor(e.event_type);
 export const questionLabel = (t: EventType, key: string) =>
   QUESTIONS[t]?.find((q) => q.key === key)?.prompt ?? key;

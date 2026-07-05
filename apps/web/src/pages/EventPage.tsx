@@ -1,22 +1,28 @@
 import { Fragment, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   Attendee,
+  CATEGORIES,
+  CITY_OPTIONS,
   DAYPARTS,
   EventDetail,
   GeneralVote,
   PrefAnswer,
+  ImportedEvent,
   TimeOption,
   Vote,
   WEEKDAYS,
+  busyConflict,
   fmtDate,
   fmtDateTime,
   getJSON,
+  guessCity,
+  importedBusy,
   nextMonths,
   sendJSON,
   useApi,
 } from "../lib";
-import { QUESTIONS, emojiFor, labelFor, questionLabel } from "../scheduler/questions";
+import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
 import { Avatar, BackLink, Loading, Pill, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
@@ -28,7 +34,7 @@ export function EventPage() {
   if (loading) return <Loading />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Event not found.</p></div>;
 
-  const showHost = data.role === "host" && !preview;
+  const showManage = data.can_manage && !preview;
   const e = data.event;
 
   return (
@@ -36,12 +42,14 @@ export function EventPage() {
       <BackLink />
       <div className="card stack">
         <div className="row" style={{ gap: "0.9rem" }}>
-          <div className="emoji" style={{ fontSize: "1.8rem", width: 56, height: 56 }}>{emojiFor(e.event_type)}</div>
+          <div className="emoji" style={{ fontSize: "1.8rem", width: 56, height: 56 }}>{eventEmoji(e)}</div>
           <div style={{ flex: 1 }}>
             <h1 data-testid="event-title">{e.title}</h1>
-            <p className="muted">{labelFor(e.event_type)}</p>
+            <p className="muted">{eventLabel(e)}</p>
           </div>
-          {e.status === "polling" ? <Pill kind="polling">Polling</Pill> : <Pill kind="scheduled">Confirmed</Pill>}
+          {e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
+            : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
+            : <Pill kind="scheduled">Confirmed</Pill>}
         </div>
         {e.description && <p>{e.description}</p>}
         <div className="muted small">
@@ -49,11 +57,26 @@ export function EventPage() {
           {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at).split(", ").pop()}` : ""}
         </div>
         <div className="muted small">
-          {e.location_mode === "find_venue" ? "📍 Venue to be decided" : `📍 ${e.location_address || "At the host's place"}`}
+          {e.location_mode === "find_venue" ? "📍 Venue to be decided" : `📍 ${e.location_address || "Address to come"}`}
         </div>
       </div>
 
-      {showHost ? <HostView data={data} reload={reload} /> : <GuestView data={data} reload={reload} />}
+      {e.status === "cancelled" && (
+        <div className="card empty" data-testid="cancelled-note">
+          <p className="muted">This get-together was cancelled by the host.</p>
+        </div>
+      )}
+
+      {data.series && data.series.length > 1 && <SeriesCard data={data} />}
+
+      {e.status === "scheduled" && e.starts_at && <AddToCalendar event={e} />}
+      {e.status === "scheduled" && e.starts_at && <IntentLinks event={e} attendees={data.attendees} />}
+
+      {e.status !== "cancelled" && (showManage ? <HostView data={data} reload={reload} /> : <GuestView data={data} reload={reload} />)}
+
+      {e.status !== "cancelled" && <InviteFriends data={data} reload={reload} />}
+
+      <EventComments data={data} reload={reload} />
 
       {data.role === "host" && (
         <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="preview-toggle"
@@ -63,6 +86,201 @@ export function EventPage() {
       )}
     </div>
   );
+}
+
+// ---------------- recurring series ----------------
+
+const RECURRENCE_LABEL: Record<string, string> = {
+  weekly: "weekly", biweekly: "every 2 weeks", monthly: "monthly",
+};
+
+// Sibling occurrences of a recurring event; the one being viewed is highlighted.
+function SeriesCard({ data }: { data: EventDetail }) {
+  const nav = useNavigate();
+  const series = data.series!;
+  const idx = series.findIndex((s) => s.id === data.event.id);
+  return (
+    <div className="card stack" data-testid="series">
+      <h3 style={{ margin: 0 }}>
+        🔁 Repeats {RECURRENCE_LABEL[data.event.recurrence] || ""} · {idx + 1} of {series.length}
+      </h3>
+      <div className="row wrap" style={{ gap: 6 }}>
+        {series.map((s, i) => (
+          <button key={s.id} type="button"
+            className={`chip sm ${s.id === data.event.id ? "on" : ""}`}
+            data-testid={`series-occ-${i}`}
+            onClick={() => s.id !== data.event.id && nav(`/e/${s.id}`)}>
+            {fmtDate(s.starts_at)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------- invite friends ----------------
+
+// Anyone on the event can invite THEIR friends (friendship = the permission,
+// enforced server-side). Already-attending/invited friends are filtered out.
+function InviteFriends({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const { data: fr } = useAsync<{ friends: { id: string; friend_id: string; display_name: string; handle: string; avatar_url: string }[] }>(
+    (a) => getJSON(a, "/api/friends"),
+  );
+  const there = new Set([
+    ...data.attendees.map((a) => a.user_id),
+    ...data.invites.map((i) => i.user_id),
+    ...data.cohosts.map((c) => c.user_id),
+    data.event.host_id,
+  ]);
+  const invitable = (fr?.friends ?? []).filter((f) => !there.has(f.friend_id));
+  const invitedNames = data.invites.filter((i) => i.display_name).map((i) => i.display_name);
+  if (invitable.length === 0 && invitedNames.length === 0) return null;
+
+  async function invite(friendId: string) {
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/invites`, { friend_id: friendId });
+    reload();
+  }
+
+  return (
+    <div className="card stack" data-testid="invite-friends">
+      <h3 style={{ margin: 0 }}>Invite friends</h3>
+      {invitable.map((f) => (
+        <div key={f.friend_id} className="row between">
+          <span className="row" style={{ gap: 8 }}>
+            <Avatar url={f.avatar_url} name={f.display_name} size={28} />
+            <span>{f.display_name} <span className="muted small">@{f.handle}</span></span>
+          </span>
+          <button className="btn soft sm" data-testid={`invite-${f.handle}`} onClick={() => invite(f.friend_id)}>Invite</button>
+        </div>
+      ))}
+      {invitedNames.length > 0 && (
+        <p className="muted small">Invited: {invitedNames.join(", ")}</p>
+      )}
+    </div>
+  );
+}
+
+// ---------------- add to calendar (export) ----------------
+
+// Compact iCal/Google UTC stamp, e.g. 20260715T190000Z.
+function gcalStamp(d: Date): string {
+  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+// Builds an "Add to Google Calendar" template URL entirely client-side — no API
+// call or account needed. Matches the API's 2h default export duration.
+function googleCalendarUrl(e: EventDetail["event"]): string {
+  const start = new Date(e.starts_at!);
+  const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+  const location = e.location_mode === "find_venue" ? "Venue to be decided" : e.location_address || "Address to come";
+  const p = new URLSearchParams({
+    action: "TEMPLATE",
+    text: e.title,
+    dates: `${gcalStamp(start)}/${gcalStamp(end)}`,
+    details: e.description || "",
+    location,
+  });
+  return `https://calendar.google.com/calendar/render?${p.toString()}`;
+}
+
+function AddToCalendar({ event }: { event: EventDetail["event"] }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+
+  async function downloadICS() {
+    setBusy(true);
+    try {
+      const res = await api(`/api/events/${event.id}/calendar.ics`);
+      if (!res.ok) throw new Error(`ics ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${event.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "event"}.ics`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      analytics.capture(EVENTS.addToCalendarClicked, { target: "ics" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card stack" data-testid="add-to-calendar">
+      <h3 style={{ margin: 0 }}>Add to your calendar</h3>
+      <p className="muted small" style={{ margin: 0 }}>Save this get-together to Apple, Google, Outlook or any other calendar.</p>
+      <div className="row" style={{ gap: "0.6rem", flexWrap: "wrap" }}>
+        <button className="btn sm" data-testid="download-ics" disabled={busy} onClick={downloadICS}>
+          ⬇️ Download .ics
+        </button>
+        <a
+          className="btn ghost sm"
+          data-testid="add-google"
+          href={googleCalendarUrl(event)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => analytics.capture(EVENTS.addToCalendarClicked, { target: "google" })}
+        >
+          📅 Add to Google Calendar
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- intent links (book a table, find a place) ----------------
+
+function IntentLinks({ event, attendees }: { event: EventDetail["event"]; attendees: Attendee[] }) {
+  const going = Math.max(2, attendees.filter((a) => a.rsvp === "going").length);
+  const type = event.event_type;
+
+  if (type === "dinner" || type === "drinks") {
+    const href = `https://www.opentable.com/s?dateTime=${encodeURIComponent(event.starts_at!)}&covers=${going}`;
+    return (
+      <div className="card stack">
+        <h3 style={{ margin: 0 }}>Make it happen</h3>
+        <div>
+          <a
+            className="btn ghost sm"
+            data-testid="intent-dinner"
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => analytics.capture(EVENTS.intentLinkClicked, { target: "opentable", event_type: type })}
+          >
+            🍽️ Book a table
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "trip" || type === "camping") {
+    const date = event.starts_at!.slice(0, 10);
+    const href = `https://www.booking.com/searchresults.html?checkin=${date}`;
+    return (
+      <div className="card stack">
+        <h3 style={{ margin: 0 }}>Make it happen</h3>
+        <div>
+          <a
+            className="btn ghost sm"
+            data-testid="intent-stay"
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => analytics.capture(EVENTS.intentLinkClicked, { target: "booking", event_type: type })}
+          >
+            🏡 Find a place to stay
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ---------------- guest / invitee experience ----------------
@@ -113,6 +331,9 @@ function PollVote({ eventId, options, votes, viewerId, reload }: {
   votes.filter((v) => v.user_id === viewerId).forEach((v) => (initial[v.option_id] = v.response));
   const [picks, setPicks] = useState<Record<string, string>>(initial);
   const [saved, setSaved] = useState(false);
+  // Your imported calendar (if connected) flags options you're already busy for.
+  const { data: cal } = useAsync<{ events: ImportedEvent[] }>((a) => getJSON(a, "/api/calendar/events"));
+  const intervals = importedBusy(cal?.events ?? []).intervals;
 
   async function save() {
     const payload = Object.entries(picks).map(([option_id, response]) => ({ option_id, response }));
@@ -126,7 +347,13 @@ function PollVote({ eventId, options, votes, viewerId, reload }: {
       <h3>Which times work?</h3>
       {options.map((o, i) => (
         <div key={o.id} className="row between">
-          <span className="small">{fmtDateTime(o.starts_at)}</span>
+          <span className="small">
+            {fmtDateTime(o.starts_at)}
+            {busyConflict(intervals, o.starts_at) && (
+              <span className="pill maybe" style={{ marginLeft: 6 }} data-testid={`busy-${i}`}
+                title={`Conflicts with: ${busyConflict(intervals, o.starts_at)}`}>⚠️ busy</span>
+            )}
+          </span>
           <div className="row">
             {(["yes", "maybe", "no"] as const).map((r) => (
               <button key={r} className={`chip sm ${picks[o.id] === r ? "on" : ""}`}
@@ -316,6 +543,212 @@ function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
       )}
       <Guests attendees={data.attendees} />
       <AnswerSummary data={data} />
+      <EditEvent data={data} reload={reload} />
+      {data.role === "host" && <HostControls data={data} reload={reload} />}
+    </div>
+  );
+}
+
+// Edit the event's details — available to the host and any cohost. Visibility
+// can change here too: take a private event friends-wide or public later.
+function EditEvent({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const e = data.event;
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(e.title);
+  const [desc, setDesc] = useState(e.description);
+  const [locMode, setLocMode] = useState(e.location_mode);
+  const [locAddr, setLocAddr] = useState(e.location_address);
+  const [visibility, setVisibility] = useState(e.visibility);
+  const [topic, setTopic] = useState(e.topic);
+  const [city, setCity] = useState(e.city || guessCity());
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function save(ev: React.FormEvent) {
+    ev.preventDefault();
+    setMsg(null);
+    const res = await sendJSON(api, "PUT", `/api/events/${e.id}`, {
+      title, description: desc, location_mode: locMode, location_address: locAddr,
+      visibility, topic: visibility === "public" ? topic : "", city: visibility === "public" ? city.trim() : "",
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setMsg(b.error || "could not save");
+    }
+    setOpen(false);
+    reload();
+  }
+
+  return (
+    <div className="card stack">
+      <div className="row between">
+        <h3 style={{ margin: 0 }}>Edit event</h3>
+        <button className="btn ghost sm" data-testid="edit-event-open" onClick={() => setOpen((o) => !o)}>
+          {open ? "Cancel" : "Edit"}
+        </button>
+      </div>
+      {open && (
+        <form className="stack" onSubmit={save}>
+          <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
+          <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
+          <div className="row" style={{ gap: 6 }}>
+            <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
+              data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>
+            <button type="button" className={locMode === "find_venue" ? "btn sm" : "btn ghost sm"}
+              data-testid="edit-loc-venue" onClick={() => setLocMode("find_venue")}>Find a venue</button>
+          </div>
+          {locMode === "host_place" && (
+            <input className="input" data-testid="edit-address" value={locAddr} onChange={(ev) => setLocAddr(ev.target.value)} placeholder="Address" />
+          )}
+          <div className="row wrap" style={{ gap: 6 }}>
+            <span className="muted small">Who can find it:</span>
+            {([["private", "🔒 Invite-only"], ["friends", "🤝 Friends"], ["public", "🌎 Public"]] as const).map(([v, l]) => (
+              <button key={v} type="button" className={`chip sm ${visibility === v ? "on" : ""}`}
+                data-testid={`edit-vis-${v}`} onClick={() => setVisibility(v)}>{l}</button>
+            ))}
+          </div>
+          {visibility === "public" && (
+            <>
+              <div className="row wrap" style={{ gap: 4 }}>
+                {CATEGORIES.map((c) => (
+                  <button key={c.slug} type="button" className={`chip sm ${topic === c.slug ? "on" : ""}`}
+                    data-testid={`edit-cat-${c.slug}`}
+                    onClick={() => setTopic(topic === c.slug ? "" : c.slug)}>{c.emoji} {c.label}</button>
+                ))}
+              </div>
+              <input className="input" data-testid="edit-city" list="edit-city-list" value={city}
+                placeholder="city (optional)" onChange={(ev) => setCity(ev.target.value)} />
+              <datalist id="edit-city-list">
+                {CITY_OPTIONS.map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </>
+          )}
+          {msg && <p className="muted small">{msg}</p>}
+          <button className="btn" data-testid="edit-save" style={{ alignSelf: "flex-start" }}>Save changes</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// Host-only controls: toggle the comment thread + manage cohosts.
+function HostControls({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const e = data.event;
+  const [handle, setHandle] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function toggleComments() {
+    await sendJSON(api, "PUT", `/api/events/${e.id}/comments-enabled`, { enabled: !e.comments_enabled });
+    reload();
+  }
+  async function addCohost(ev: React.FormEvent) {
+    ev.preventDefault();
+    setMsg(null);
+    const res = await sendJSON(api, "POST", `/api/events/${e.id}/cohosts`, { handle });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setMsg(b.error || "could not add");
+    }
+    setHandle("");
+    reload();
+  }
+  async function removeCohost(uid: string) {
+    await api(`/api/events/${e.id}/cohosts/${uid}`, { method: "DELETE" });
+    reload();
+  }
+
+  return (
+    <div className="card stack" data-testid="host-controls">
+      <h3 style={{ margin: 0 }}>Host controls</h3>
+      <div className="row between">
+        <span className="small">Comments are <strong>{e.comments_enabled ? "on" : "off"}</strong></span>
+        <button className="btn soft sm" data-testid="toggle-comments" onClick={toggleComments}>
+          {e.comments_enabled ? "Turn off" : "Turn on"}
+        </button>
+      </div>
+
+      <div className="section-h">Cohosts</div>
+      <p className="muted small" style={{ margin: 0 }}>Cohosts can edit the event, share the invite, and moderate comments.</p>
+      {data.cohosts.map((c) => (
+        <div key={c.user_id} className="row between" data-testid="cohost">
+          <span>{c.display_name || c.handle} <span className="muted small">@{c.handle}</span></span>
+          <button className="btn ghost sm" data-testid={`cohost-remove-${c.handle}`} onClick={() => removeCohost(c.user_id)}>Remove</button>
+        </div>
+      ))}
+      <form className="row" onSubmit={addCohost}>
+        <input className="input" data-testid="cohost-handle" value={handle} onChange={(ev) => setHandle(ev.target.value)} placeholder="friend's handle" />
+        <button className="btn sm" data-testid="cohost-add">Add cohost</button>
+      </form>
+      {msg && <p className="muted small">{msg}</p>}
+
+      <div className="section-h">Danger zone</div>
+      <div className="row wrap">
+        <button className="btn ghost sm" style={{ color: "var(--no)" }} data-testid="cancel-event"
+          onClick={async () => {
+            if (!window.confirm("Cancel this get-together? Guests will see it as cancelled.")) return;
+            await api(`/api/events/${e.id}`, { method: "DELETE" });
+            reload();
+          }}>Cancel event</button>
+        {e.series_id && (
+          <button className="btn ghost sm" style={{ color: "var(--no)" }} data-testid="cancel-series"
+            onClick={async () => {
+              if (!window.confirm("Cancel EVERY occurrence in this series?")) return;
+              await api(`/api/events/${e.id}?series=all`, { method: "DELETE" });
+              reload();
+            }}>Cancel whole series</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// The comment thread — visible to everyone; composer shows when comments are on.
+function EventComments({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const e = data.event;
+  const [body, setBody] = useState("");
+
+  async function post() {
+    if (!body.trim()) return;
+    const res = await sendJSON(api, "POST", `/api/events/${e.id}/comments`, { body });
+    if (res.ok) {
+      setBody("");
+      reload();
+    }
+  }
+  async function del(cid: string) {
+    await api(`/api/events/${e.id}/comments/${cid}`, { method: "DELETE" });
+    reload();
+  }
+
+  return (
+    <div className="card stack" data-testid="comments">
+      <h3 style={{ margin: 0 }}>Comments</h3>
+      {data.comments.length === 0 && <p className="muted small">No comments yet.</p>}
+      {data.comments.map((c, i) => (
+        <div key={c.id} className="row between" data-testid="comment">
+          <span className="row" style={{ gap: 8, alignItems: "flex-start" }}>
+            <Avatar url={c.avatar_url} name={c.display_name} size={28} />
+            <span className="stack" style={{ gap: 1 }}>
+              <strong className="small">{c.display_name || "Someone"}</strong>
+              <span>{c.body}</span>
+            </span>
+          </span>
+          {(c.user_id === data.viewer_id || data.can_manage) && (
+            <button className="btn ghost sm" data-testid={`comment-delete-${i}`} onClick={() => del(c.id)}>Delete</button>
+          )}
+        </div>
+      ))}
+      {e.comments_enabled ? (
+        <div className="row">
+          <input className="input" data-testid="comment-input" value={body} placeholder="Add a comment…"
+            onChange={(ev) => setBody(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && post()} />
+          <button className="btn sm" data-testid="comment-post" onClick={post}>Post</button>
+        </div>
+      ) : (
+        <p className="muted small" data-testid="comments-off">Comments are turned off for this event.</p>
+      )}
     </div>
   );
 }
@@ -332,6 +765,12 @@ function ShareLink({ eventId }: { eventId: string }) {
         <button className="btn soft sm" onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); analytics.capture(EVENTS.shareLinkCopied); }}>
           {copied ? "Copied" : "Copy"}
         </button>
+        {typeof navigator.share === "function" && (
+          <button className="btn sm" data-testid="share-native"
+            onClick={() => { navigator.share({ title: "Whensdays invite", url }).catch(() => {}); analytics.capture(EVENTS.shareLinkCopied, { via: "native" }); }}>
+            Share…
+          </button>
+        )}
       </div>
     </div>
   );
@@ -340,6 +779,9 @@ function ShareLink({ eventId }: { eventId: string }) {
 function PollResults({ data, reload }: { data: EventDetail; reload: () => void }) {
   const api = useApi();
   const voters = new Set(data.votes.map((v) => v.user_id)).size || 1;
+  const yesFor = (o: TimeOption) => data.votes.filter((v) => v.option_id === o.id && v.response === "yes").length;
+  // Rank options best-first so the host sees the winner immediately.
+  const ranked = [...data.time_options].sort((a, b) => yesFor(b) - yesFor(a));
   async function finalize(o: TimeOption) {
     await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, { starts_at: o.starts_at });
     reload();
@@ -347,12 +789,15 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
   return (
     <div className="card stack">
       <h3>Availability</h3>
-      {data.time_options.map((o, i) => {
-        const yes = data.votes.filter((v) => v.option_id === o.id && v.response === "yes").length;
+      {ranked.map((o, i) => {
+        const yes = yesFor(o);
         return (
           <div key={o.id} className="stack" style={{ gap: 4 }}>
             <div className="row between">
-              <span className="small">{fmtDateTime(o.starts_at)}</span>
+              <span className="small">
+                {fmtDateTime(o.starts_at)}
+                {i === 0 && yes > 0 && <span className="pill scheduled" style={{ marginLeft: 6 }}>Best</span>}
+              </span>
               <div className="row">
                 <span className="muted small">{yes} available</span>
                 <button className="btn sm" data-testid={`finalize-${i}`} onClick={() => finalize(o)}>Pick</button>

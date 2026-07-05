@@ -20,6 +20,25 @@ type AvailabilitySlot struct {
 	PartOfDay string `json:"part_of_day"`
 }
 
+type CalendarConnection struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       string             `json:"user_id"`
+	Provider     string             `json:"provider"`
+	AccountLabel string             `json:"account_label"`
+	AccessToken  string             `json:"access_token"`
+	RefreshToken string             `json:"refresh_token"`
+	TokenExpiry  pgtype.Timestamptz `json:"token_expiry"`
+	IcalUrl      string             `json:"ical_url"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type CustomEventType struct {
+	UserID    string             `json:"user_id"`
+	Label     string             `json:"label"`
+	Emoji     string             `json:"emoji"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Event struct {
 	ID              pgtype.UUID        `json:"id"`
 	HostID          string             `json:"host_id"`
@@ -32,6 +51,16 @@ type Event struct {
 	StartsAt        pgtype.Timestamptz `json:"starts_at"`
 	Status          string             `json:"status"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	CommentsEnabled bool               `json:"comments_enabled"`
+	GroupID         pgtype.UUID        `json:"group_id"`
+	SeriesID        pgtype.UUID        `json:"series_id"`
+	Recurrence      string             `json:"recurrence"`
+	ReminderSent    bool               `json:"reminder_sent"`
+	Visibility      string             `json:"visibility"`
+	Topic           string             `json:"topic"`
+	City            string             `json:"city"`
+	CustomEmoji     string             `json:"custom_emoji"`
+	CustomLabel     string             `json:"custom_label"`
 }
 
 type EventAttendee struct {
@@ -42,12 +71,34 @@ type EventAttendee struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type EventCohost struct {
+	EventID   pgtype.UUID        `json:"event_id"`
+	UserID    string             `json:"user_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type EventComment struct {
+	ID        pgtype.UUID        `json:"id"`
+	EventID   pgtype.UUID        `json:"event_id"`
+	UserID    string             `json:"user_id"`
+	Body      string             `json:"body"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type EventGeneralVote struct {
 	ID        pgtype.UUID `json:"id"`
 	EventID   pgtype.UUID `json:"event_id"`
 	UserID    string      `json:"user_id"`
 	Dimension string      `json:"dimension"`
 	Value     string      `json:"value"`
+}
+
+type EventInvite struct {
+	EventID   pgtype.UUID        `json:"event_id"`
+	UserID    string             `json:"user_id"`
+	InviterID string             `json:"inviter_id"`
+	Seen      bool               `json:"seen"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type EventPreferenceAnswer struct {
@@ -71,12 +122,34 @@ type EventTimeVote struct {
 	Response string      `json:"response"`
 }
 
+type Follow struct {
+	UserID    string             `json:"user_id"`
+	Kind      string             `json:"kind"`
+	Value     string             `json:"value"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Friendship struct {
 	ID          pgtype.UUID        `json:"id"`
 	RequesterID string             `json:"requester_id"`
 	AddresseeID string             `json:"addressee_id"`
 	Status      string             `json:"status"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type Group struct {
+	ID        pgtype.UUID        `json:"id"`
+	OwnerID   string             `json:"owner_id"`
+	Name      string             `json:"name"`
+	Emoji     string             `json:"emoji"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	IconUrl   string             `json:"icon_url"`
+}
+
+type GroupMember struct {
+	GroupID   pgtype.UUID        `json:"group_id"`
+	UserID    string             `json:"user_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type Note struct {
@@ -92,4 +165,5 @@ type Profile struct {
 	Handle      string             `json:"handle"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	AvatarUrl   string             `json:"avatar_url"`
+	Email       string             `json:"email"`
 }

@@ -44,12 +44,18 @@ export function Pill({ kind, children }: { kind: string; children: React.ReactNo
 // Availability grid: rows = dates, columns = the 6 dayparts. Editable (tap a
 // cell; tap a date or daypart header to fill that row/column) or read-only.
 // `selected` and `busy` are sets of "YYYY-MM-DD:daypart" keys.
+// A toggle grid of rows (dates or weekdays) × columns (time-of-day buckets).
+// Defaults to the 6 DAYPARTS / "avail" test ids (explicit date availability);
+// pass `cols`/`idPrefix` to reuse it for the recurring weekly grid.
 export function DayGrid({
-  dates, selected, busy, onToggle, onToggleRow, onToggleCol, readOnly, testid,
+  dates, selected, busy, cols = DAYPARTS, idPrefix = "avail",
+  onToggle, onToggleRow, onToggleCol, readOnly, testid,
 }: {
   dates: { value: string; label: string }[];
   selected: Set<string>;
   busy?: Set<string>;
+  cols?: { value: string; short: string }[];
+  idPrefix?: string;
   onToggle?: (day: string, dp: string) => void;
   onToggleRow?: (day: string) => void;
   onToggleCol?: (dp: string) => void;
@@ -58,14 +64,14 @@ export function DayGrid({
 }) {
   const key = (day: string, dp: string) => `${day}:${dp}`;
   return (
-    <div className="grid" style={{ gridTemplateColumns: "auto repeat(6, 1fr)" }} data-testid={testid}>
+    <div className="grid" style={{ gridTemplateColumns: `auto repeat(${cols.length}, 1fr)` }} data-testid={testid}>
       <div />
-      {DAYPARTS.map((dp) =>
+      {cols.map((dp) =>
         readOnly ? (
           <div key={dp.value} className="hd">{dp.short}</div>
         ) : (
           <button key={dp.value} type="button" className="hd gp-head"
-            data-testid={`avail-col-${dp.value}`} onClick={() => onToggleCol?.(dp.value)}>{dp.short}</button>
+            data-testid={`${idPrefix}-col-${dp.value}`} onClick={() => onToggleCol?.(dp.value)}>{dp.short}</button>
         ),
       )}
       {dates.map((d, i) => (
@@ -74,16 +80,16 @@ export function DayGrid({
             <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
           ) : (
             <button type="button" className="day gp-head" style={{ textAlign: "left" }}
-              data-testid={`avail-row-${i}`} onClick={() => onToggleRow?.(d.value)}>{d.label}</button>
+              data-testid={`${idPrefix}-row-${i}`} onClick={() => onToggleRow?.(d.value)}>{d.label}</button>
           )}
-          {DAYPARTS.map((dp) => {
+          {cols.map((dp) => {
             const k = key(d.value, dp.value);
             const isBusy = busy?.has(k);
             const cls = `cell ${isBusy ? "busy" : selected.has(k) ? "on" : ""}`;
             return readOnly ? (
               <div key={dp.value} className={cls} title={isBusy ? "busy" : undefined} />
             ) : (
-              <button key={dp.value} type="button" data-testid={`avail-cell-${i}-${dp.value}`}
+              <button key={dp.value} type="button" data-testid={`${idPrefix}-cell-${i}-${dp.value}`}
                 className={cls} disabled={isBusy} title={isBusy ? "busy" : undefined}
                 onClick={() => onToggle?.(d.value, dp.value)} />
             );
@@ -92,6 +98,26 @@ export function DayGrid({
       ))}
     </div>
   );
+}
+
+// Resize an image File to a small square JPEG data URL (cover crop), client-side
+// — keeps images tiny so they can live as data URLs in the DB (no object store).
+// Used for profile avatars and group icons.
+export function fileToAvatar(file: File, size = 160): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("no canvas"));
+      const s = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => reject(new Error("bad image"));
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 // Round avatar: shows the photo if present, otherwise a colored initial.

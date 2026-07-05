@@ -24,6 +24,10 @@ export const EVENTS = {
   previewToggled: "preview_as_guest_toggled",
   shareLinkCopied: "share_link_copied",
   friendAvailabilityViewed: "friend_availability_viewed",
+  addToCalendarClicked: "add_to_calendar_clicked",
+  calendarConnectStarted: "calendar_connect_started",
+  intentLinkClicked: "intent_link_clicked",
+  followed: "followed",
 } as const;
 
 export function initAnalytics() {

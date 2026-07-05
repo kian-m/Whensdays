@@ -1,4 +1,4 @@
-# get-togethers (clSandbox app)
+# Whensdays (clSandbox app)
 
 **Plans, minus the group-chat chaos.** A minimal scheduling assistant for any
 get-together — dinner, drinks, movie night, camping, trips, parties. Host an event at
@@ -11,6 +11,30 @@ end to end, where every feature ships with a visual end-to-end test. Secure,
 fast, scalable, and cheap to host. This app lives on the `app/scheduler` branch.
 
 > **Maintenance rule:** every code change must check this README. If behavior, features, routes, ports, or setup change, update the relevant section in the same commit. See [Keeping this README current](#keeping-this-readme-current).
+
+## Product direction (read before adding features)
+
+**Wedge:** recurring coordination for small friend groups & clubs (book clubs, run groups, D&D tables, monthly dinners, annual trips) — not one-off parties (Partiful) or work polls (Doodle).
+
+Priorities, in order — growth loop over feature breadth:
+1. **Frictionless guests** — invitees must be able to RSVP/vote/comment from the invite link *without creating an account* (capability link + name; convert later). The signup wall is the #1 conversion killer.
+2. **Notifications** — transactional email (invite, votes, time locked, reminder, new comment). No nudges = no retention.
+3. **Calendar as moat** — imported busy times should auto-block availability and rank candidate times, not just display.
+4. **Recurring groups** — series events + a persistent group home (drives retention structurally).
+5. **Monetize via intent, not walls** — affiliate/commerce on event types (dinner→reservation, trip→lodging), organizer premium later. Never paywall basics.
+
+Measure in PostHog: activation (host invites ≥1), invite→participant conversion, participant→new-host (K-factor), events/group/month, W4 retention. **Feature breadth is not a moat — defer new event types/polish until the loop works.**
+
+**Phase 3 — "schedule anything" onboarding (current focus):** the fastest path to habitual use is making Whensdays the easiest way to schedule *anything at all*. In priority order:
+1. **Zero-signup event creation** — "Start a plan" on the landing page mints a guest identity and drops straight into the wizard; share the link before ever creating an account. (Guests can already host — surface it.)
+2. **Link unfurls (OG tags)** — invite links pasted into iMessage/WhatsApp/Discord must show the event title, time, and a card image; this is the single highest-leverage growth surface.
+3. **Quick-create** — a one-screen "title + time → link" path beside the full wizard for the "just schedule it" case.
+4. **Native share ergonomics** — Web Share API + QR on the share card.
+5. **One-field onboarding** — auto-derive the handle from the name; ask for nothing else up front.
+6. **PWA manifest** — installable, app-like on phones (the tab bar already sells it).
+7. **Bundle diet** — code-split the 550KB JS bundle; landing must load instantly on cellular.
+
+**Phase 2 — public discovery (after the private loop works):** a public events page browsable by **locality or interest/topic**, so online communities can broadcast live events (streams, Twitch shows, meetups) to non-members; **follow** people and topics to see their upcoming public events in a feed. This turns the tool into a network: public events are a zero-cost acquisition surface (every public page is indexable and shareable), and follows create the recurring visit reason that private one-off events can't. Prereqs: events need a `visibility` (private/public) flag, topic tags, follow edges, and moderation basics before launch.
 
 ---
 
@@ -82,7 +106,7 @@ the same grid as a heatmap.
 
 | Feature | Where | How to use it | Under the hood |
 |---|---|---|---|
-| **Profile** | First run / **Profile** | Set a display name + unique handle, a **profile photo**, and your **explicit availability** — which dayparts you're free on concrete upcoming dates (next 2 weeks) | `PUT /api/profile`, `PUT /api/profile/avatar`, `PUT /api/availability/days` — scoped to your user |
+| **Profile** | First run / **Profile** | Set a display name + unique handle, a **profile photo**, and your **availability** — either a **recurring weekly** pattern (weekday × morning/afternoon/evening) or **specific dates** (paginated two weeks at a time, up to ~12 weeks ahead) | `PUT /api/profile`, `PUT /api/profile/avatar`, `PUT /api/availability` (weekly), `PUT /api/availability/days` (dates) — scoped to your user |
 | **See friends' availability** | **Friends** | Open an accepted friend to see their real upcoming free dates/times (+ what they're booked for) | `GET /api/friends/{id}/availability` |
 | **Create an event** | **+ New event** | Title, type (dinner/drinks/movie/camping/party/trip/other), location (your place + address *or* "help me find a venue"), and one of three scheduling modes (below) | `POST /api/events` (+ time options for specific-time polls) |
 | **Your plans** | Home | Events split into **Hosting** and **Going & invited** | `GET /api/events` |
@@ -92,7 +116,25 @@ the same grid as a heatmap.
 | **Scheduling — general availability poll** | Event page (general events) | Guests pick ideal **months** + a **per-day grid** of times of day (early morning → night); host reads the heatmap and finalizes a time | `POST /api/events/{id}/general-votes`, `POST /api/events/{id}/finalize` |
 | **Preference questions** | Event page, after RSVP | One question at a time, tuned to the event type (e.g. dietary + cuisine for dinner) | `POST /api/events/{id}/preferences` |
 | **Host view + guest preview** | Event page (host only) | Invite link, poll results, guests, preference summary; toggle to preview the guest flow | role-aware `GET /api/events/{id}` |
+| **Comments** | Event page | A comment thread on each event; anyone with the invite can post. Authors delete their own; the host (or a cohost) moderates any. The host can turn the thread on/off | `POST/DELETE /api/events/{id}/comments`, `PUT /api/events/{id}/comments-enabled` |
+| **Cohosts** | Event page (host only) | The host delegates by handle: a **cohost** can edit the event, share the invite (sees the host view), and moderate comments — but can't manage cohosts or toggle the thread | `POST /api/events/{id}/cohosts`, `DELETE /api/events/{id}/cohosts/{userId}`, `PUT /api/events/{id}` (edit, host+cohost) |
 | **Friends** | **Friends** | Add by handle (request + accept), then view an accepted friend's weekly availability | `POST /api/friends`, `POST /api/friends/{id}/accept`, `GET /api/friends/{id}/availability` |
+| **Cancel / delete / remove** | Event page, group page, Friends | Hosts **cancel** events (or a whole series) — guests see "Cancelled", attendees get an email; group owners **delete** groups (events survive); friends: **decline** incoming, **cancel** outgoing, **remove** accepted | `DELETE /api/events/{id}[?series=all]`, `DELETE /api/groups/{id}`, `DELETE /api/friends/{id}` |
+| **Export to your calendar** | Event page (confirmed events) | **Download .ics** (Apple/Outlook/any) or **Add to Google Calendar** (client-built link) for a finalized event | `GET /api/events/{id}/calendar.ics` (2h default duration) |
+| **Start a plan (no account)** | Landing page → "Start a plan" | A name is all it takes: guest identity → ⚡ Quick plan (title + time) → share the link. Full wizard at `/new` | `POST /api/guest/join` without an `event_id` |
+| **Quick plan** | Home → ⚡ Quick, or `/quick` | The 10-second path: title + time → private event → share link | plain `POST /api/events` |
+| **Link unfurls** | Automatic | Invite links pasted into iMessage/WhatsApp/Discord show the event title + time ("Tap to RSVP, no account needed"); browsers bounce into the app at `/ev/{id}` | nginx proxies `/e/{id}` full-page loads to the API's OG shell (`ogpage.go`) |
+| **Join as a guest (no account)** | Any invite link, signed out | Invitees enter just a name to RSVP, vote, and comment; a signed guest token (90d) lives in their browser. Dev/E2E: append `?guest=1` | `POST /api/guest/join` (unauthenticated; event id = capability), `Authorization: Guest <token>` |
+| **Email notifications** | Automatic | If you add an email on **Profile**: hosts hear about RSVPs & comments; attendees hear when the time is locked and get a **24h-before reminder** (a scheduler hits the key-gated cron endpoint). No-op unless `EMAIL_API_KEY`/`EMAIL_FROM` set | `internal/notify` (Resend-compatible), async; `POST /api/cron/reminders` (X-Cron-Key) |
+| **Discover (public events)** | **Discover** — works signed-out | Events are **🔒 invite-only, 🤝 friends, or 🌎 public**. Public ones take a **preset category** (12, server-enforced — never free text) + a city (curated autocomplete list, prefilled from your timezone; no external geo API). Browse/filter by category chips & city; **follow hosts or categories** | `GET /api/discover` (unauthenticated, read-only), `POST/DELETE /api/follows` |
+| **Tile styling** | Everywhere events are listed | Tiles carry a **type-colored edge** (dinner amber, drinks violet, …); in the stream, events **you're going to glow accent**, **friend-connected ones glow green**, plain public stays neutral; a **"👥 N friends going"** badge shows social proof | annotated `friends_going`/`viewer_rsvp`/`from_friend`; `GET /api/discover/mine` (authed twin of the public browse) |
+| **"For you" feed** | **Discover**, signed in | Ranked like a (transparent) social feed: follows > friends-going social proof > your RSVP-history taste (host/category/type) > popularity > time-proximity sweet spot. Toggle between **🌎 Public** and **🤝 Friends** (what your friends are hosting) | `GET /api/feed?scope=public\|friends`; scorer + weights in `apps/api/ranking.go` |
+| **Groups** | **Groups** | Persistent circles (book club, run crew): create, add members by handle, attach events; group page lists everyone and all its events. Icon = an **emoji from the palette or an uploaded photo** (never free text) | `POST/GET /api/groups`, `GET /api/groups/{id}`, members add/remove, `PUT /api/groups/{id}/icon`; `POST /api/events` takes `group_id` |
+| **Recurring events** | New event → fixed time → "Repeats" | Weekly / every-2-weeks / monthly, 2–12 occurrences, materialized up front as separate events sharing a series (per-occurrence RSVPs); the event page shows "🔁 1 of N" with hop-between links | `repeat`+`repeat_count` on `POST /api/events`; `series` in the event detail |
+| **Busy-time overlays** | Profile & poll voting | With a calendar connected, imported busy times grey out availability cells and flag poll options "⚠️ busy"; hosts see options ranked with a **Best** tag | client-side from `GET /api/calendar/events` |
+| **Import your calendar** | **Calendars** | Connect **Google** (OAuth 2.0, read-only) or **Apple** (paste a published iCloud `webcal://` URL) to view your own upcoming plans alongside the scheduler — display only, never changes availability | `GET /api/calendar/google/connect` + `/callback`, `POST /api/calendar/apple`, `GET /api/calendar/events`, `DELETE /api/calendar/connections/{provider}` |
+
+> Calendar import needs a Google OAuth client (`GOOGLE_OAUTH_CLIENT_ID/SECRET`), `APP_ORIGIN`, and a `CALENDAR_TOKEN_KEY` — see `.env.example`. The hermetic E2E/docs stacks set `CALENDAR_MODE=stub` to exercise the flow without real accounts.
 
 ### API endpoints (try them directly)
 

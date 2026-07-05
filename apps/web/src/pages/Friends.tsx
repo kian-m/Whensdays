@@ -39,6 +39,13 @@ export function Friends() {
     reload();
   }
 
+  // Decline an incoming request, cancel an outgoing one, or unfriend — all the
+  // same friendship-row delete.
+  async function remove(id: string) {
+    await api(`/api/friends/${id}`, { method: "DELETE" });
+    reload();
+  }
+
   if (loading) return <Loading />;
 
   return (
@@ -61,7 +68,10 @@ export function Friends() {
           {data.incoming.map((r) => (
             <div key={r.id} className="card row between">
               <span>{r.display_name} <span className="muted small">@{r.handle}</span></span>
-              <button className="btn soft sm" data-testid={`accept-${r.handle}`} onClick={() => accept(r.id)}>Accept</button>
+              <span className="row">
+                <button className="btn soft sm" data-testid={`accept-${r.handle}`} onClick={() => accept(r.id)}>Accept</button>
+                <button className="btn ghost sm" data-testid={`decline-${r.handle}`} onClick={() => remove(r.id)}>Decline</button>
+              </span>
             </div>
           ))}
         </>
@@ -69,7 +79,7 @@ export function Friends() {
 
       <div className="section-h">Your friends</div>
       {data && data.friends.length === 0 && <p className="muted small">No friends yet — add someone above.</p>}
-      {data?.friends.map((f) => <FriendCard key={f.friend_id} friend={f} />)}
+      {data?.friends.map((f) => <FriendCard key={f.friend_id} friend={f} onRemove={() => remove(f.id)} />)}
 
       {data && data.outgoing.length > 0 && (
         <>
@@ -77,7 +87,10 @@ export function Friends() {
           {data.outgoing.map((r) => (
             <div key={r.id} className="card row between">
               <span>{r.display_name} <span className="muted small">@{r.handle}</span></span>
-              <span className="muted small">Awaiting reply</span>
+              <span className="row">
+                <span className="muted small">Awaiting reply</span>
+                <button className="btn ghost sm" data-testid={`cancel-req-${r.handle}`} onClick={() => remove(r.id)}>Cancel</button>
+              </span>
             </div>
           ))}
         </>
@@ -86,7 +99,7 @@ export function Friends() {
   );
 }
 
-function FriendCard({ friend }: { friend: Friend }) {
+function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void }) {
   const api = useApi();
   const [open, setOpen] = useState(false);
   const [avail, setAvail] = useState<{ days: AvailabilityDay[]; commitments: Commitment[] } | null>(null);
@@ -111,9 +124,13 @@ function FriendCard({ friend }: { friend: Friend }) {
           <Avatar url={friend.avatar_url} name={friend.display_name} size={32} />
           <span>{friend.display_name} <span className="muted small">@{friend.handle}</span></span>
         </span>
-        <button className="btn ghost sm" data-testid={`view-avail-${friend.handle}`} onClick={toggle}>
-          {open ? "Hide" : "Availability"}
-        </button>
+        <span className="row">
+          <button className="btn ghost sm" data-testid={`view-avail-${friend.handle}`} onClick={toggle}>
+            {open ? "Hide" : "Availability"}
+          </button>
+          <button className="btn ghost sm" data-testid={`unfriend-${friend.handle}`}
+            onClick={() => window.confirm(`Remove ${friend.display_name} as a friend?`) && onRemove()}>Remove</button>
+        </span>
       </div>
       {open && avail && (
         <div className="stack">

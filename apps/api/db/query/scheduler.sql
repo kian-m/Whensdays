@@ -1,27 +1,28 @@
 -- ============================ profiles ============================
 
 -- name: GetProfile :one
-SELECT user_id, display_name, handle, avatar_url, created_at
+SELECT user_id, display_name, handle, avatar_url, created_at, email
 FROM profiles
 WHERE user_id = $1;
 
 -- name: GetProfileByHandle :one
-SELECT user_id, display_name, handle, avatar_url, created_at
+SELECT user_id, display_name, handle, avatar_url, created_at, email
 FROM profiles
 WHERE handle = $1;
 
 -- name: UpsertProfile :one
-INSERT INTO profiles (user_id, display_name, handle)
-VALUES ($1, $2, $3)
+INSERT INTO profiles (user_id, display_name, handle, email)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT (user_id) DO UPDATE
     SET display_name = EXCLUDED.display_name,
-        handle       = EXCLUDED.handle
-RETURNING user_id, display_name, handle, avatar_url, created_at;
+        handle       = EXCLUDED.handle,
+        email        = EXCLUDED.email
+RETURNING user_id, display_name, handle, avatar_url, created_at, email;
 
 -- name: SetAvatar :one
 UPDATE profiles SET avatar_url = $2
 WHERE user_id = $1
-RETURNING user_id, display_name, handle, avatar_url, created_at;
+RETURNING user_id, display_name, handle, avatar_url, created_at, email;
 
 -- ======================== availability ============================
 
@@ -73,6 +74,7 @@ RETURNING id, requester_id, addressee_id, status, created_at;
 
 -- name: ListFriends :many
 SELECT
+    f.id,
     (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END)::text AS friend_id,
     p.display_name,
     p.handle,
@@ -111,39 +113,60 @@ SELECT EXISTS (
 -- name: CreateEvent :one
 INSERT INTO events (
     host_id, title, event_type, description,
-    location_mode, location_address, scheduling_mode, starts_at, status
+    location_mode, location_address, scheduling_mode, starts_at, status, group_id, series_id, recurrence,
+    visibility, topic, city, custom_emoji, custom_label
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at;
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label;
 
 -- name: GetEvent :one
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
 FROM events
 WHERE id = $1;
 
 -- name: ListEventsHosting :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
 FROM events
 WHERE host_id = $1 AND status <> 'cancelled'
 ORDER BY created_at DESC;
 
 -- name: ListEventsAttending :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label
 FROM events e
 JOIN event_attendees a ON a.event_id = e.id
 WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled'
+  AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = e.id AND ch.user_id = $1)
+ORDER BY e.created_at DESC;
+
+-- name: ListEventsCohosting :many
+SELECT e.id, e.host_id, e.title, e.event_type, e.description,
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label
+FROM events e
+JOIN event_cohosts ch ON ch.event_id = e.id
+WHERE ch.user_id = $1 AND e.status <> 'cancelled'
 ORDER BY e.created_at DESC;
 
 -- name: FinalizeEvent :one
 UPDATE events
-SET starts_at = $3, status = 'scheduled'
-WHERE id = $1 AND host_id = $2
+SET starts_at = $2, status = 'scheduled'
+WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at;
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label;
+
+-- name: UpdateEvent :one
+UPDATE events
+SET title = $2, description = $3, location_mode = $4, location_address = $5,
+    visibility = $6, topic = $7, city = $8
+WHERE id = $1
+RETURNING id, host_id, title, event_type, description,
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label;
+
+-- name: SetCommentsEnabled :exec
+UPDATE events SET comments_enabled = $2 WHERE id = $1;
 
 -- name: ListUpcomingCommitments :many
 SELECT e.id, e.title, e.starts_at
@@ -231,3 +254,29 @@ FROM event_preference_answers pa
 LEFT JOIN profiles p ON p.user_id = pa.user_id
 WHERE pa.event_id = $1
 ORDER BY pa.user_id, pa.question_key;
+
+-- name: ListSeriesEvents :many
+SELECT id, starts_at, status
+FROM events
+WHERE series_id = $1 AND status <> 'cancelled'
+ORDER BY starts_at;
+
+-- name: GetFriendship :one
+SELECT id, requester_id, addressee_id, status, created_at
+FROM friendships
+WHERE id = $1;
+
+-- name: DeleteFriendship :exec
+DELETE FROM friendships WHERE id = $1;
+
+-- name: CancelEvent :one
+UPDATE events SET status = 'cancelled'
+WHERE id = $1
+RETURNING id, host_id, title, event_type, description,
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label;
+
+-- name: CancelSeries :exec
+UPDATE events SET status = 'cancelled' WHERE series_id = $1;
+
+-- name: DeleteGroup :exec
+DELETE FROM groups WHERE id = $1 AND owner_id = $2;
