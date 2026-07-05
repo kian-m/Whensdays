@@ -1,6 +1,6 @@
 # clSandbox — one entrypoint for the polyglot monorepo.
 # JS side via pnpm; Go side via the go toolchain; everything orchestrated here.
-.PHONY: help install dev dev-api dev-web build test e2e e2e-update fmt lint up down clean generate db-up db-down migrate migrate-down
+.PHONY: help install dev dev-api dev-web build test e2e e2e-update fmt lint up down clean generate db-up db-down migrate migrate-down scan-secrets install-hooks
 
 DATABASE_URL ?= postgres://clsandbox:clsandbox@localhost:5432/clsandbox?sslmode=disable
 GOOSE = go run github.com/pressly/goose/v3/cmd/goose@latest -dir apps/api/db/migrations postgres "$(DATABASE_URL)"
@@ -27,6 +27,15 @@ migrate: ## Apply DB migrations (goose up)
 
 migrate-down: ## Roll back the last migration (goose down)
 	$(GOOSE) down
+
+scan-secrets: ## Scan the repo + full git history for leaked secrets (gitleaks, Docker)
+	docker run --rm -v "$(PWD)":/repo -w /repo zricethezav/gitleaks:latest detect \
+		--source=/repo --config=/repo/.gitleaks.toml --redact --verbose
+
+install-hooks: ## Enable the local pre-commit secret guard (.githooks/pre-commit)
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-commit
+	@echo "✓ pre-commit secret scan enabled"
 
 dev: ## Run api + web with hot reload (two processes)
 	@$(MAKE) -j2 dev-api dev-web

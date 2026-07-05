@@ -6,6 +6,20 @@ on:
   pull_request:
 
 jobs:
+  secrets:
+    # Secret scanner — fails the build if any credential is committed (full
+    # history on push, PR range on pull_request). See .gitleaks.toml.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
   docs:
     # Flag PRs that change app code without updating the docs. Bypass with
     # "[skip-docs]" in the PR title when a change genuinely needs no doc update.

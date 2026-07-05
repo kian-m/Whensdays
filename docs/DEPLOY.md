@@ -52,6 +52,7 @@ Enables the **Calendars** page to connect a user's Google/Apple calendar. Skip i
 | `GCP_WIF_PROVIDER` | Workload Identity provider resource name |
 | `GCP_SERVICE_ACCOUNT` | deployer service account email |
 | `API_PUBLIC_URL` | Cloud Run service URL (e.g. `https://clsandbox-api-xxx.run.app`) |
+| `APP_ORIGIN` | Public site origin (e.g. `https://whensdays.com`) — link unfurls, email links, calendar OAuth redirect |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Pages token |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key (public; baked into web build + used by CI e2e) |
@@ -62,6 +63,19 @@ Enables the **Calendars** page to connect a user's Google/Apple calendar. Skip i
 | `POSTHOG_PROJECT_ID` | PostHog numeric project id (for deploy annotations) |
 
 > Repo **variables** (not secrets): `VITE_PUBLIC_POSTHOG_HOST` (e.g. `https://us.i.posthog.com`) and `VITE_PUBLIC_POSTHOG_RECORD` (`true`/`false`).
+
+### 7. Secret scanning (already wired)
+
+Secrets are guarded on two layers so a credential can't reach the remote:
+- **CI**: the `secrets` job (`.github/workflows/ci.yml`) runs [gitleaks](https://github.com/gitleaks/gitleaks) on every push/PR — a leak fails the build. Config: `.gitleaks.toml`.
+- **Local (opt-in)**: `make install-hooks` enables a pre-commit hook that scans staged changes before they're committed.
+- Ad-hoc full-history audit: `make scan-secrets`.
+
+Real secrets live only in **GCP Secret Manager** (API) and **GitHub Actions secrets** (build/deploy) — never in the repo. `.env` is gitignored; `.env.example` holds placeholders only.
+
+## Base secrets needed to boot
+
+The deploy references these in `--set-secrets` out of the box (create each with `gcloud secrets create <NAME> --data-file=-`): `DATABASE_URL`, `CLERK_SECRET_KEY`, `POSTHOG_API_KEY`, `POSTHOG_PERSONAL_API_KEY`, `GUEST_TOKEN_KEY` (`openssl rand -base64 32` — signs no-account guest tokens). Optional feature secrets (calendar §5b, email §5c) are appended to that line when you enable them.
 
 ## Migrations in prod
 
