@@ -28,6 +28,7 @@ export const EVENTS = {
   calendarConnectStarted: "calendar_connect_started",
   intentLinkClicked: "intent_link_clicked",
   followed: "followed",
+  gifPicked: "gif_picked",
 } as const;
 
 export function initAnalytics() {

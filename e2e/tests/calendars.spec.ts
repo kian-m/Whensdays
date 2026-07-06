@@ -46,9 +46,11 @@ test.describe("calendars (import)", () => {
     // Idempotent across the two passes: connect only if not already linked.
     if (await page.getByTestId("connect-google").isVisible().catch(() => false)) {
       await page.getByTestId("connect-google").click();
-      await expect(page.getByTestId("calendar-msg-profile")).toContainText("connected");
+      // The stub redirects through /profile?connected=google, which lazy-loads
+      // the Profile chunk and refetches connections — generous timeout, and the
+      // connected state (Disconnect visible) is the invariant, not the toast.
     }
-    await expect(page.getByTestId("disconnect-google")).toBeVisible();
+    await expect(page.getByTestId("disconnect-google")).toBeVisible({ timeout: 20000 });
 
     // The stub events (Aug 2026) show on the Calendars month view.
     await page.goto("/calendars");

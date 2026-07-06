@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiFn, DAYPARTS, getJSON, useApi } from "./lib";
+import { EVENTS, analytics } from "./analytics";
 
 // Small data-loading hook: runs `fn` on mount and exposes a reload().
 export function useAsync<T>(fn: (api: ApiFn) => Promise<T>, deps: unknown[] = []) {
@@ -226,7 +227,7 @@ export function GifPicker({ onPick }: { onPick: (url: string) => void }) {
         <div className="gif-grid" data-testid="gif-grid">
           {gifs.map((g, i) => (
             <button key={g.url} type="button" data-testid={`gif-${i}`} title={g.title}
-              onClick={() => { onPick(g.url); setGifs([]); }}>
+              onClick={() => { analytics.capture(EVENTS.gifPicked); onPick(g.url); setGifs([]); }}>
               <img src={g.preview} alt={g.title} loading="lazy" />
             </button>
           ))}
