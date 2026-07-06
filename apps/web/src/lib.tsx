@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 
 // --- shared domain types (mirror the Go API JSON) ---
 
-export type EventType = "dinner" | "drinks" | "movie" | "camping" | "party" | "trip" | "other";
+export type EventType = "dinner" | "drinks" | "movie" | "camping" | "party" | "trip" | "show" | "practice" | "openmic" | "other";
 
 export type Event = {
   id: string;
@@ -54,6 +54,9 @@ export const TYPE_COLORS: Record<EventType, string> = {
   camping: "#1f9d6b",
   party: "#e0559b",
   trip: "#2a9d8f",
+  show: "#c94f4f",
+  practice: "#4f7dc9",
+  openmic: "#b58a2c",
   other: "#8a879a",
 };
 export type Follow = { kind: "host" | "topic"; value: string };
@@ -69,6 +72,7 @@ export const CATEGORIES: { slug: string; label: string; emoji: string }[] = [
   { slug: "food-drink", label: "Food & drink", emoji: "🍜" },
   { slug: "outdoors", label: "Outdoors & travel", emoji: "🌲" },
   { slug: "arts", label: "Arts & crafts", emoji: "🎨" },
+  { slug: "performance", label: "Comedy & performance", emoji: "🎭" },
   { slug: "tech", label: "Tech & business", emoji: "💻" },
   { slug: "wellness", label: "Wellness", emoji: "🧘" },
   { slug: "social", label: "Community & social", emoji: "👥" },
@@ -104,7 +108,6 @@ export const CITIES = [
   "Manila", "Jakarta", "Sydney", "Melbourne", "Auckland", "Mexico City",
   "Guadalajara", "Bogotá", "Lima", "Santiago", "Buenos Aires", "São Paulo",
   "Rio de Janeiro", "Cape Town", "Johannesburg", "Nairobi", "Lagos", "Cairo",
-  "Tel Aviv",
 ];
 
 // What the city datalists offer: regions first, then cities.
@@ -127,7 +130,7 @@ const TZ_CITY: Record<string, string> = {
   "Asia/Tokyo": "Tokyo", "Asia/Seoul": "Seoul", "Asia/Bangkok": "Bangkok",
   "Australia/Sydney": "Sydney", "Australia/Melbourne": "Melbourne",
   "Pacific/Auckland": "Auckland", "Africa/Johannesburg": "Johannesburg",
-  "Africa/Lagos": "Lagos", "Africa/Cairo": "Cairo", "Asia/Jerusalem": "Tel Aviv",
+  "Africa/Lagos": "Lagos", "Africa/Cairo": "Cairo"
 };
 // --- theme (dark default, light opt-in; persisted) ---
 export type Theme = "dark" | "light";

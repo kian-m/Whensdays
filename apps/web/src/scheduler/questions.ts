@@ -31,6 +31,18 @@ export const QUESTIONS: Record<EventType, Question[]> = {
     { key: "destination", prompt: "Where are we headed?", placeholder: "Lake, city, mountains…" },
     { key: "nights", prompt: "How many nights?", placeholder: "1, 2, a long weekend…" },
   ],
+  show: [
+    { key: "role", prompt: "Performing or watching?", placeholder: "On stage / in the crowd" },
+    { key: "after", prompt: "Sticking around after?", placeholder: "Drinks, notes, heading out…" },
+  ],
+  practice: [
+    { key: "bring", prompt: "Bringing anything?", placeholder: "Props, scripts, gear, snacks…" },
+    { key: "focus", prompt: "Anything you want to work on?", placeholder: "New material, drills, a scene…" },
+  ],
+  openmic: [
+    { key: "performing", prompt: "Going up or just watching?", placeholder: "Performing / watching / maybe" },
+    { key: "minutes", prompt: "How much time do you need?", placeholder: "3 min, 5 min, n/a" },
+  ],
   other: [
     { key: "notes", prompt: "Anything the host should know?", placeholder: "Optional" },
   ],
@@ -43,6 +55,9 @@ export const EVENT_TYPES: { value: EventType; label: string; emoji: string }[] =
   { value: "camping", label: "Camping", emoji: "⛺" },
   { value: "party", label: "Party", emoji: "🎉" },
   { value: "trip", label: "Trip", emoji: "✈️" },
+  { value: "show", label: "Show", emoji: "🎭" },
+  { value: "practice", label: "Practice", emoji: "🎯" },
+  { value: "openmic", label: "Open mic", emoji: "🎤" },
   { value: "other", label: "Other", emoji: "✨" },
 ];
 

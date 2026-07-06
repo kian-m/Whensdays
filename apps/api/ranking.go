@@ -24,7 +24,7 @@ import (
 // the web shows them as chips). Curated for IRL + online communities.
 var categories = []string{
 	"gaming", "streams", "sports", "tabletop", "books", "music",
-	"food-drink", "outdoors", "arts", "tech", "wellness", "social", "other",
+	"food-drink", "outdoors", "arts", "performance", "tech", "wellness", "social", "other",
 }
 
 func validCategory(t string) bool { return oneOf(t, categories...) }
