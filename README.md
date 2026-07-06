@@ -109,7 +109,9 @@ the same grid as a heatmap.
 | **Profile** | First run / **Profile** | Set a display name + unique handle, a **profile photo**, and your **availability** — either a **recurring weekly** pattern (weekday × morning/afternoon/evening) or **specific dates** (paginated two weeks at a time, up to ~12 weeks ahead) | `PUT /api/profile`, `PUT /api/profile/avatar`, `PUT /api/availability` (weekly), `PUT /api/availability/days` (dates) — scoped to your user |
 | **See friends' availability** | **Friends** | Open an accepted friend to see their real upcoming free dates/times (+ what they're booked for) | `GET /api/friends/{id}/availability` |
 | **Create an event** | **+ New event** | Title, type (dinner/drinks/movie/camping/party/trip/other), location (your place + address *or* "help me find a venue"), and one of three scheduling modes (below) | `POST /api/events` (+ time options for specific-time polls) |
-| **Your plans** | Home | Events split into **Hosting** and **Going & invited** | `GET /api/events` |
+| **Your plans** | Home | A filter row (**All / Upcoming / Hosting / Attending**, with counts) narrows the event list; **NEW** badges on events you haven't opened | `GET /api/events` (returns `unseen` ids) |
+| **Dark / light theme** | Profile → Appearance | Dark by default; toggle to light (persisted, no-flash) | client-only, `data-theme` on `<html>` |
+| **Rich link previews** | Any shared invite | Texting an invite link shows a branded card (`og:image` + `summary_large_image`) with the event title & time | `handleOGPage` (`ogpage.go`) + `apps/web/public/og-card.png` |
 | **RSVP** | Event page | Going / Maybe / Can't | `POST /api/events/{id}/rsvp` |
 | **Scheduling — fixed time** | New event → "I'll set a time" | Host sets the date/time up front | `scheduling_mode: "fixed"` |
 | **Scheduling — specific-times poll** | Event page (poll events) | Guests vote 👍/🤷/👎 on each proposed time; host **Picks** one to lock it in | `POST /api/events/{id}/votes`, `POST /api/events/{id}/finalize` |

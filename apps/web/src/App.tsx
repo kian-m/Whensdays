@@ -233,26 +233,34 @@ function Landing() {
   useEffect(() => {
     analytics.reset();
   }, []);
+  const showcase = ["🍽️ Dinner", "🎬 Movie night", "⛺ Camping", "🎉 Party", "🏃 Run club", "🎲 Game night"];
   return (
     <div className="app">
-      <div className="hero stack" style={{ alignItems: "center" }}>
-        <div className="brand" style={{ fontSize: "1.3rem" }}>
+      <div className="land">
+        <div className="brand" style={{ fontSize: "1.3rem", justifyContent: "center" }}>
           <span className="dot" /> Whensdays
         </div>
-        <h1>Turn “we should hang out” into a Whensday.</h1>
-        <p className="muted" style={{ maxWidth: 440 }}>
-          Plans, minus the group-chat chaos. Spin up dinner, drinks, a movie
-          night or a camping trip in seconds. Pick a time — or let everyone
-          vote — and we'll sort out who's in.
+        <h1 className="land-title">Make plans that actually happen.</h1>
+        <p className="land-sub">
+          The group chat says “we should hang out.” Whensdays turns that into a
+          real plan — pick a time or let everyone weigh in, drop one link, and
+          watch the yeses roll in.
         </p>
-        <div className="row">
+        <div className="land-cta">
           <a href="/start" className="btn" data-testid="start-plan">Start a plan — no account needed</a>
-          {/* Clerk isn't mounted in dev/E2E; the sign-in modal only exists in prod. */}
           {!DEV_AUTH && (
             <SignInButton mode="modal">
               <button className="btn ghost" data-testid="sign-in">Sign in</button>
             </SignInButton>
           )}
+        </div>
+        <div className="land-showcase" aria-hidden>
+          {showcase.map((s) => <span key={s} className="chip">{s}</span>)}
+        </div>
+        <div className="land-points">
+          <span><b>No app</b> to download</span>
+          <span><b>No account</b> to RSVP</span>
+          <span><b>One link</b>, everyone's in</span>
         </div>
       </div>
     </div>

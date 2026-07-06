@@ -154,12 +154,11 @@ function PublicEventRow({ e, onOpen, canFollow, following, toggleFollow, viewerI
           </span>
         </span>
         {e.topic && (
-          <button type="button" className={`chip sm ${canFollow && following("topic", e.topic) ? "on" : ""}`}
-            data-testid={`follow-topic-${e.topic}`} disabled={!canFollow}
-            title={canFollow ? "Follow this category" : undefined}
-            onClick={() => toggleFollow("topic", e.topic)}>
+          // A plain category label (not interactive) — filtering by category
+          // is done with the chips at the top of the page.
+          <span className="cat-tag" data-testid={`cat-tag-${e.topic}`}>
             {CATEGORIES.find((c) => c.slug === e.topic)?.emoji ?? "#"} {CATEGORIES.find((c) => c.slug === e.topic)?.label ?? e.topic}
-          </button>
+          </span>
         )}
       </div>
       <div className="row between">

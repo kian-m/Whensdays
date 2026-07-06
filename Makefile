@@ -32,6 +32,10 @@ scan-secrets: ## Scan the repo + full git history for leaked secrets (gitleaks, 
 	docker run --rm -v "$(PWD)":/repo -w /repo zricethezav/gitleaks:latest detect \
 		--source=/repo --config=/repo/.gitleaks.toml --redact --verbose
 
+og-card: ## Regenerate the shared Open Graph share-card image (apps/web/public/og-card.png)
+	docker run --rm -v "$(PWD)":/work -w /work mcr.microsoft.com/playwright:v1.49.1-jammy \
+		sh -c "npm i -D @playwright/test@1.49.1 --no-audit --no-fund >/dev/null 2>&1 && node scripts/gen-og-card.mjs"
+
 install-hooks: ## Enable the local pre-commit secret guard (.githooks/pre-commit)
 	git config core.hooksPath .githooks
 	chmod +x .githooks/pre-commit

@@ -29,6 +29,9 @@ func (s *server) handleOGPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	target := "/ev/" + r.PathValue("id")
+	base := s.ogBaseURL(r)
+	image := base + "/og-card.png" // branded social card (apps/web/public)
+	pageURL := base + "/e/" + r.PathValue("id")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	fmt.Fprintf(w, `<!doctype html>
@@ -39,10 +42,33 @@ func (s *server) handleOGPage(w http.ResponseWriter, r *http.Request) {
 <meta property="og:description" content="%[2]s">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Whensdays">
-<meta name="twitter:card" content="summary">
+<meta property="og:url" content="%[4]s">
+<meta property="og:image" content="%[5]s">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="%[1]s">
+<meta name="twitter:description" content="%[2]s">
+<meta name="twitter:image" content="%[5]s">
 <meta name="description" content="%[2]s">
 <script>location.replace(%[3]q + location.search)</script>
 </head><body>
 <p><a href="%[3]s">Open the invite</a></p>
-</body></html>`, html.EscapeString(title), html.EscapeString(desc), target)
+</body></html>`, html.EscapeString(title), html.EscapeString(desc), target,
+		html.EscapeString(pageURL), html.EscapeString(image))
+}
+
+// ogBaseURL is the absolute site origin for OG tags: APP_ORIGIN in prod, else
+// derived from the request (X-Forwarded-Proto behind the proxy, else http).
+func (s *server) ogBaseURL(r *http.Request) string {
+	if s.appOrigin != "" {
+		return s.appOrigin
+	}
+	scheme := "http"
+	if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
+		scheme = p
+	} else if r.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
 }

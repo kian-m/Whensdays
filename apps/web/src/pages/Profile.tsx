@@ -5,10 +5,13 @@ import {
   DAYPARTS,
   ImportedEvent,
   Profile,
+  Theme,
   WEEKDAYS_FULL,
   WEEK_PARTS,
+  applyTheme,
   daysFrom,
   getJSON,
+  getTheme,
   importedBusy,
   sendJSON,
   useApi,
@@ -55,6 +58,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   // Availability: a mode toggle plus the two data sets.
   const [mode, setMode] = useState<"specific" | "weekly">("specific");
   const [editingAvail, setEditingAvail] = useState(false);
+  const [theme, setTheme] = useState<Theme>(getTheme());
   const [pageOffset, setPageOffset] = useState(0);
   const dates = daysFrom(pageOffset, PAGE);
 
@@ -228,6 +232,18 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
         </div>
       </form>
       )}
+
+      <div className="card stack" data-testid="appearance">
+        <div className="row between">
+          <h3 style={{ margin: 0 }}>Appearance</h3>
+          <div className="row" style={{ gap: 6 }}>
+            <button type="button" className={`chip sm ${theme === "dark" ? "on" : ""}`}
+              data-testid="theme-dark" onClick={() => { setTheme("dark"); applyTheme("dark"); }}>🌙 Dark</button>
+            <button type="button" className={`chip sm ${theme === "light" ? "on" : ""}`}
+              data-testid="theme-light" onClick={() => { setTheme("light"); applyTheme("light"); }}>☀️ Light</button>
+          </div>
+        </div>
+      </div>
 
       <div className="card stack">
         <div className="row between">

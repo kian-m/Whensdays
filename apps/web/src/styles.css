@@ -1,4 +1,22 @@
+/* Default theme = dark. Light theme opts in via <html data-theme="light">. */
 :root {
+  color-scheme: dark;
+  --bg: #131218;
+  --surface: #1d1b25;
+  --ink: #f2f0f7;
+  --muted: #9d9aab;
+  --line: #2d2a38;
+  --accent: #7b74ff;
+  --accent-soft: #272338;
+  --go: #3fbf88;
+  --maybe: #d7a441;
+  --no: #e2726e;
+  --radius: 16px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
   --bg: #faf7f2;
   --surface: #ffffff;
   --ink: #1b1a22;
@@ -9,7 +27,6 @@
   --go: #1f9d6b;
   --maybe: #c2871f;
   --no: #cf5e5e;
-  --radius: 16px;
   --shadow: 0 1px 2px rgba(27, 26, 34, 0.04), 0 8px 24px rgba(27, 26, 34, 0.06);
 }
 
@@ -183,6 +200,37 @@ textarea.input { resize: vertical; min-height: 64px; }
   -webkit-overflow-scrolling: touch; scrollbar-width: thin;
 }
 .emoji-strip .chip { flex: none; }
+
+/* static category label on discover cards (not interactive) */
+.cat-tag {
+  flex: none; font-size: 0.78rem; font-weight: 700; color: var(--muted);
+  background: var(--accent-soft); border-radius: 999px; padding: 0.2rem 0.6rem;
+}
+
+/* landing hero */
+.land { text-align: center; padding: 3rem 1rem 2rem; }
+.land-title {
+  font-size: clamp(2.4rem, 8vw, 4rem); font-weight: 850; letter-spacing: -0.03em;
+  line-height: 1.02; margin: 0.6rem auto 0; max-width: 12ch;
+  background: linear-gradient(120deg, var(--ink) 30%, var(--accent) 120%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.land-sub { color: var(--muted); max-width: 460px; margin: 1rem auto 1.6rem; font-size: 1.05rem; }
+.land-cta { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+.land-showcase { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 2.2rem auto 0; max-width: 520px; }
+.land-showcase .chip { cursor: default; }
+.land-points { display: flex; gap: 1.4rem; justify-content: center; flex-wrap: wrap; margin-top: 2.4rem; color: var(--muted); font-size: 0.9rem; }
+.land-points b { color: var(--ink); }
+
+/* filter chip row — scrolls horizontally on mobile */
+.filter-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+.filter-row .chip { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.filter-count {
+  background: var(--accent-soft); color: var(--accent); border-radius: 999px;
+  font-size: 0.7rem; font-weight: 800; min-width: 17px; height: 17px; padding: 0 5px;
+  display: inline-grid; place-items: center; line-height: 1;
+}
+.chip.on .filter-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
 
 /* toast: prominent, mobile-visible save confirmation (auto-dismiss) */
 .toast {

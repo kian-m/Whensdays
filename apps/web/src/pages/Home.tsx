@@ -1,13 +1,14 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Event, TYPE_COLORS, fmtDateTime, getJSON } from "../lib";
 import { eventEmoji, eventLabel } from "../scheduler/questions";
 import { Loading, Pill, useAsync } from "../ui";
 
 type EventsResp = { hosting: Event[]; attending: Event[]; unseen: string[] };
+type Filter = "all" | "upcoming" | "hosting" | "attending";
 
 const DAY = 86_400_000;
 
-// Relative "how soon" label for upcoming events (Today / Tomorrow / in N days).
 function soonLabel(iso: string): string {
   const d = new Date(iso);
   const startOfToday = new Date();
@@ -15,33 +16,52 @@ function soonLabel(iso: string): string {
   const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - startOfToday.getTime()) / DAY);
   if (days <= 0) return "Today";
   if (days === 1) return "Tomorrow";
-  return `In ${days} days`;
+  if (days < 7) return `In ${days} days`;
+  return "";
+}
+
+// Sort: scheduled events soonest-first, then time-less polls (newest first).
+function byWhen(a: Event, b: Event): number {
+  const at = a.starts_at ? new Date(a.starts_at).getTime() : Infinity;
+  const bt = b.starts_at ? new Date(b.starts_at).getTime() : Infinity;
+  if (at !== bt) return at - bt;
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 }
 
 export function Home() {
   const nav = useNavigate();
   const { data, loading } = useAsync<EventsResp>((api) => getJSON(api, "/api/events"));
+  const [filter, setFilter] = useState<Filter>("all");
 
-  if (loading) return <Loading />;
+  if (loading && !data) return <Loading />;
   const hosting = data?.hosting ?? [];
   const attending = data?.attending ?? [];
   const unseen = new Set(data?.unseen ?? []);
-  const empty = hosting.length === 0 && attending.length === 0;
-  const open = (id: string) => nav(`/e/${id}`);
-
-  // "Coming up": every event you're part of that's scheduled within the next
-  // week, soonest first — the thing you actually want to see on landing.
   const now = Date.now();
-  const seen = new Set<string>();
-  const upcoming = [...hosting, ...attending]
-    .filter((e) => {
-      if (e.status !== "scheduled" || !e.starts_at || seen.has(e.id)) return false;
-      const t = new Date(e.starts_at).getTime();
-      if (t < now || t > now + 7 * DAY) return false;
-      seen.add(e.id);
-      return true;
-    })
-    .sort((a, b) => new Date(a.starts_at!).getTime() - new Date(b.starts_at!).getTime());
+
+  // De-duped union for "all" / "upcoming".
+  const byId = new Map<string, Event>();
+  [...hosting, ...attending].forEach((e) => byId.set(e.id, e));
+  const all = [...byId.values()];
+  const upcoming = all.filter((e) => e.status === "scheduled" && e.starts_at && new Date(e.starts_at).getTime() >= now);
+
+  const counts: Record<Filter, number> = {
+    all: all.length, upcoming: upcoming.length, hosting: hosting.length, attending: attending.length,
+  };
+  const lists: Record<Filter, Event[]> = {
+    all: [...all].sort(byWhen),
+    upcoming: [...upcoming].sort(byWhen),
+    hosting: [...hosting].sort(byWhen),
+    attending: [...attending].sort(byWhen),
+  };
+  const shown = lists[filter];
+
+  const FILTERS: { key: Filter; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "upcoming", label: "Upcoming" },
+    { key: "hosting", label: "Hosting" },
+    { key: "attending", label: "Attending" },
+  ];
 
   return (
     <div className="stack">
@@ -53,7 +73,17 @@ export function Home() {
         </span>
       </div>
 
-      {empty && (
+      {/* Filter row — tap to narrow the list (Kalshi/Partiful-style). */}
+      <div className="filter-row" data-testid="event-filters">
+        {FILTERS.map((f) => (
+          <button key={f.key} type="button" className={`chip sm ${filter === f.key ? "on" : ""}`}
+            data-testid={`filter-${f.key}`} onClick={() => setFilter(f.key)}>
+            {f.label}{counts[f.key] > 0 && <span className="filter-count">{counts[f.key]}</span>}
+          </button>
+        ))}
+      </div>
+
+      {all.length === 0 ? (
         <div className="card empty stack" data-testid="events-empty">
           <div style={{ fontSize: "2.4rem" }}>🗓️</div>
           <h3>No plans yet</h3>
@@ -63,35 +93,18 @@ export function Home() {
             <Link to="/discover" className="btn ghost">Browse public events</Link>
           </div>
         </div>
-      )}
-
-      {upcoming.length > 0 && (
-        <>
-          <div className="section-h">Coming up</div>
-          <div className="stack" data-testid="coming-up">
-            {upcoming.map((e) => (
-              <EventRow key={e.id} e={e} isNew={unseen.has(e.id)} soon={soonLabel(e.starts_at!)} onClick={() => open(e.id)} />
-            ))}
-          </div>
-        </>
-      )}
-
-      {hosting.length > 0 && (
-        <>
-          <div className="section-h">Hosting</div>
-          <div className="stack">
-            {hosting.map((e) => <EventRow key={e.id} e={e} isNew={unseen.has(e.id)} onClick={() => open(e.id)} />)}
-          </div>
-        </>
-      )}
-
-      {attending.length > 0 && (
-        <>
-          <div className="section-h">Going & invited</div>
-          <div className="stack">
-            {attending.map((e) => <EventRow key={e.id} e={e} isNew={unseen.has(e.id)} onClick={() => open(e.id)} />)}
-          </div>
-        </>
+      ) : shown.length === 0 ? (
+        <p className="muted small" data-testid="filter-empty">
+          {filter === "upcoming" ? "Nothing scheduled yet — check your polls for times still being decided."
+            : filter === "hosting" ? "You're not hosting anything right now."
+            : "Nothing here — you haven't been added to any events."}
+        </p>
+      ) : (
+        <div className="stack" data-testid="event-list">
+          {shown.map((e) => (
+            <EventRow key={e.id} e={e} isNew={unseen.has(e.id)} soon={e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -110,7 +123,6 @@ function EventRow({ e, onClick, isNew, soon }: { e: Event; onClick: () => void; 
           </span>
           {soon ? <Pill kind="scheduled">{soon}</Pill>
             : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
-            : e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
             : <Pill kind="scheduled">Set</Pill>}
         </div>
         <div className="muted small">

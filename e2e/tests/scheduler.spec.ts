@@ -816,6 +816,43 @@ test.describe("scheduler", () => {
     }
   });
 
+  test("home filters: hosting vs attending", async ({ page }) => {
+    await ensureProfile(page);
+    const title = `Filtered ${test.info().testId}`;
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-11-01T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    await page.goto("/");
+    // Hosting filter shows it; Attending filter (host isn't attending) hides it.
+    await page.getByTestId("filter-hosting").click();
+    await expect(page.getByTestId("event-row").filter({ hasText: title }).first()).toBeVisible();
+    await page.getByTestId("filter-attending").click();
+    await expect(page.getByTestId("event-row").filter({ hasText: title })).toHaveCount(0);
+    await page.getByTestId("filter-all").click();
+    await expect(page.getByTestId("event-row").filter({ hasText: title }).first()).toBeVisible();
+  });
+
+  test("theme: dark by default, switch to light persists", async ({ page }) => {
+    await ensureProfile(page);
+    await page.goto("/profile");
+    const htmlEl = page.locator("html");
+    await expect(htmlEl).not.toHaveAttribute("data-theme", "light"); // dark default
+    await page.getByTestId("theme-light").click();
+    await expect(htmlEl).toHaveAttribute("data-theme", "light");
+    await page.reload(); // no-flash script re-applies from localStorage
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.getByTestId("theme-dark").click();
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light");
+  });
+
   test("cron reminders endpoint is key-gated", async ({ request }) => {
     const noKey = await request.post("/api/cron/reminders");
     expect(noKey.status()).toBe(401); // no CRON_KEY configured/matched

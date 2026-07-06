@@ -128,6 +128,26 @@ const TZ_CITY: Record<string, string> = {
   "Pacific/Auckland": "Auckland", "Africa/Johannesburg": "Johannesburg",
   "Africa/Lagos": "Lagos", "Africa/Cairo": "Cairo", "Asia/Jerusalem": "Tel Aviv",
 };
+// --- theme (dark default, light opt-in; persisted) ---
+export type Theme = "dark" | "light";
+export function getTheme(): Theme {
+  try {
+    return localStorage.getItem("whensdays.theme") === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+export function applyTheme(t: Theme) {
+  try {
+    localStorage.setItem("whensdays.theme", t);
+  } catch {
+    /* ignore */
+  }
+  const root = document.documentElement;
+  if (t === "light") root.setAttribute("data-theme", "light");
+  else root.removeAttribute("data-theme");
+}
+
 export function guessCity(): string {
   try {
     return TZ_CITY[Intl.DateTimeFormat().resolvedOptions().timeZone] ?? "";
