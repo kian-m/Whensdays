@@ -99,6 +99,32 @@ test.describe("scheduler", () => {
     await expect(page.getByText("Evening")).toBeVisible();
   });
 
+  test("performance preset types + deletable custom types", async ({ page }) => {
+    await ensureProfile(page);
+    await page.getByTestId("new-event").click();
+    // New presets for the local-scene crowd.
+    await expect(page.getByTestId("type-show")).toBeVisible();
+    await expect(page.getByTestId("type-practice")).toBeVisible();
+    await expect(page.getByTestId("type-openmic")).toBeVisible();
+    // Save a custom type, then delete it via the chip's ✕.
+    await page.getByTestId("type-add").click();
+    await page.getByTestId("newtype-name").fill("Jam Sesh");
+    await page.getByTestId("newtype-save").click();
+    await page.getByTestId("event-title").fill(`Custom del ${test.info().testId}`);
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-08-02T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(`Custom del ${test.info().testId}`);
+    // The saved chip is offered on the next create — delete it.
+    await page.goto("/new");
+    await expect(page.getByTestId("custom-jam sesh")).toBeVisible();
+    await page.getByTestId("custom-del-jam sesh").click();
+    await expect(page.getByTestId("custom-jam sesh")).toHaveCount(0);
+  });
+
   test("create form visual baseline", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();
@@ -136,6 +162,11 @@ test.describe("scheduler", () => {
     expect(href).toContain("action=TEMPLATE");
     expect(href).toContain("text=Calendar");
     expect(href).toMatch(/dates=20260801T\d{6}Z%2F20260801T\d{6}Z/);
+    expect(href).toContain("RSVP"); // details deep-link back to the event
+
+    // Apple/native path: a plain (auth-free) .ics link phones can open directly.
+    const appleHref = await page.getByTestId("add-apple").getAttribute("href");
+    expect(appleHref).toContain("/calendar.ics");
 
     // Download the .ics and assert it is a valid single-event VCALENDAR.
     const [download] = await Promise.all([
@@ -148,6 +179,9 @@ test.describe("scheduler", () => {
     expect(ics).toContain("BEGIN:VEVENT");
     expect(ics).toContain(`SUMMARY:${title}`);
     expect(ics).toContain("DTSTART:20260801T");
+    // The invite link rides along (URL + DESCRIPTION) so there's a way back.
+    expect(ics).toMatch(/URL:.*\/e\//);
+    expect(ics).toContain("RSVP & details:");
     // No pixel snapshot: text-content cards render 1px-height-unstable between
     // passes (same as the comments card). Behavior above is the contract.
   });
@@ -387,6 +421,9 @@ test.describe("scheduler", () => {
       // .first(): the persistent two-pass DB can hold duplicates of this title,
       // and it can appear in both the feed and browse sections.
       await expect(fan.getByText(title).first()).toBeVisible();
+      // Category chips are dynamic: only topics with an upcoming public event
+      // render. No spec ever creates a 'wellness' event → no chip.
+      await expect(fan.getByTestId("disc-cat-wellness")).toHaveCount(0);
       await fan.getByTestId("disc-cat-streams").click();
       await expect(fan.getByTestId("disc-event").filter({ hasText: title }).first()).toBeVisible();
 
@@ -467,9 +504,11 @@ test.describe("scheduler", () => {
 
   test("friends-visible events show in the feed's Friends scope", async ({ page, browser, request }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
-    // fv1 hosts a friends-visible event (not on public Discover).
+    // fv1 hosts a friends-visible event (not on public Discover). Date.now()
+    // keeps the title unique across the two e2e passes (persistent DB): pass 2
+    // must not target pass 1's copy, whose RSVP state has diverged.
     await ensureUser(page, "fv1", "F V One", "fv1");
-    const title = `Friends only ${test.info().testId}`;
+    const title = `Friends only ${test.info().testId}-${Date.now()}`;
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
@@ -501,7 +540,9 @@ test.describe("scheduler", () => {
       await fv2.goto("/discover");
       await fv2.getByTestId("scope-friends").click();
       const row = fv2.getByTestId("feed-event").filter({ hasText: title }).first();
-      await expect(row).toBeVisible();
+      // Ranked-feed fetch + render across two contexts — allow extra time under
+      // CI load (the default 5s flakes when the runner is starved).
+      await expect(row).toBeVisible({ timeout: 15000 });
       // Each event renders exactly once: it's in the For-you rail, so the
       // browse list below must NOT duplicate it — and it never leaks to the
       // anonymous public endpoint.
@@ -530,7 +571,7 @@ test.describe("scheduler", () => {
       await fv2.getByTestId("scope-friends").click();
       await expect(
         fv2.getByTestId("feed-event").filter({ hasText: title }).first().getByTestId("friends-going"),
-      ).toHaveText(/1 friend going/);
+      ).toHaveText(/1 friend going/, { timeout: 15000 });
     } finally {
       await otherCtx.close();
     }
@@ -788,6 +829,11 @@ test.describe("scheduler", () => {
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
     await expect(page.getByText("Which days work this month?")).toBeVisible();
+    // Select all / Clear bulk controls on the day chips.
+    await page.getByTestId("gp-days-all").click();
+    await expect(page.getByTestId("gp-day-27")).toHaveClass(/on/);
+    await page.getByTestId("gp-days-clear").click();
+    await expect(page.getByTestId("gp-day-27")).not.toHaveClass(/on/);
     await page.getByTestId("gp-day-5").click();
     await page.getByTestId("gp-day-12").click();
     await page.getByTestId("save-general").click();
