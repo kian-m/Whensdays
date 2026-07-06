@@ -455,6 +455,13 @@ test.describe("scheduler", () => {
       name: "icon.png", mimeType: "image/png", buffer: Buffer.from(png, "base64"),
     });
     await expect(page.getByTestId("group-icon-pick")).toHaveText("Change photo");
+
+    // A Klipy gif can be the icon too (stub picker).
+    await page.getByTestId("group-icon-gif").click();
+    await page.getByTestId("gif-q").fill("party");
+    await page.getByTestId("gif-go").click();
+    await page.getByTestId("gif-0").click();
+    await expect(page.getByTestId("avatar-img").first()).toHaveAttribute("src", /gif-stub/);
   });
 
   test("discover: public event browsable, topic filter, follow → feed", async ({ page, browser, request }) => {

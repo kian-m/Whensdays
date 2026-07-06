@@ -173,8 +173,10 @@ func (s *server) handleSetGroupIcon(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "image too large (max ~300KB)"})
 		return
 	}
-	if in.IconURL != "" && !strings.HasPrefix(in.IconURL, "data:image/") && !strings.HasPrefix(in.IconURL, "https://") {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "icon must be an image data URL or https URL"})
+	// Same policy as event covers: uploads or the Klipy CDN (validGifURL also
+	// admits the stub sentinel in test stacks) — never arbitrary remotes.
+	if in.IconURL != "" && !strings.HasPrefix(in.IconURL, "data:image/") && !validGifURL(in.IconURL) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "icon must be an uploaded image or a Klipy gif"})
 		return
 	}
 	updated, err := s.queries.SetGroupIcon(r.Context(), db.SetGroupIconParams{ID: g.ID, IconUrl: in.IconURL})

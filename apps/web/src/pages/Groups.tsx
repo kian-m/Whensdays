@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Event, Group, GroupDetail, TYPE_COLORS, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
-import { Avatar, BackLink, Loading, fileToAvatar, useAsync, EventThumb } from "../ui";
+import { Avatar, BackLink, GifPicker, Loading, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { eventEmoji } from "../scheduler/questions";
 
 // Group icons are an emoji from this palette or an uploaded photo — never free
@@ -96,6 +96,7 @@ export function GroupPage() {
   const [handle, setHandle] = useState("");
   const [addMsg, setAddMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [pickingGif, setPickingGif] = useState(false);
 
   async function onPickIcon(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -150,19 +151,30 @@ export function GroupPage() {
           </button>
         </div>
         {is_owner && (
-          <div className="row">
+          <div className="row wrap">
             <button type="button" className="btn ghost sm" data-testid="group-icon-pick"
               onClick={() => fileRef.current?.click()}>
               {group.icon_url ? "Change photo" : "Use a photo instead"}
             </button>
             <input ref={fileRef} type="file" accept="image/*" data-testid="group-icon-file"
               style={{ display: "none" }} onChange={onPickIcon} />
+            <button type="button" className="btn ghost sm" data-testid="group-icon-gif"
+              onClick={() => setPickingGif((p) => !p)}>GIF</button>
             <button type="button" className="btn ghost sm" style={{ color: "var(--no)" }} data-testid="group-delete"
               onClick={async () => {
                 if (!window.confirm(`Delete "${group.name}"? Its events stay, but the group and memberships go.`)) return;
                 await api(`/api/groups/${id}`, { method: "DELETE" });
                 nav("/groups");
               }}>Delete group</button>
+          </div>
+        )}
+        {is_owner && pickingGif && (
+          <div style={{ marginTop: 6 }}>
+            <GifPicker onPick={async (url) => {
+              await sendJSON(api, "PUT", `/api/groups/${id}/icon`, { icon_url: url });
+              setPickingGif(false);
+              reload();
+            }} />
           </div>
         )}
       </div>
