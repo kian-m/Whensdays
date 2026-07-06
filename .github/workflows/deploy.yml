@@ -6,6 +6,7 @@ name: deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch: # manual re-runs (e.g. after updating API_PUBLIC_URL)
 
 env:
   GCP_PROJECT: whensdays
