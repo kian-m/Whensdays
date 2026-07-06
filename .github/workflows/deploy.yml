@@ -91,4 +91,7 @@ jobs:
           packageManager: npm # isolate wrangler's own install from the pnpm workspace
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # First run creates the Pages project (the dashboard's default flow
+          # makes a Worker instead, which can't serve our _redirects proxy).
+          preCommands: wrangler pages project create whensdays --production-branch=main || true
           command: pages deploy apps/web/dist --project-name=whensdays
