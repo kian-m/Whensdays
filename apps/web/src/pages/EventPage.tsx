@@ -921,7 +921,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
     return m;
   };
   const heatStyle = (n: number, top: number): React.CSSProperties =>
-    n === 0 ? {} : { background: `rgba(91, 84, 230, ${0.18 + 0.82 * (n / top)})`, borderColor: "transparent", color: "#fff" };
+    n === 0 ? {} : { background: `rgba(238, 108, 77, ${0.18 + 0.82 * (n / top)})`, borderColor: "transparent", color: "#fff" };
 
   // general scope: month ranking + weekday×daypart heatmap.
   const monthCounts = countBy("month");

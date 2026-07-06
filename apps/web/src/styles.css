@@ -5,26 +5,26 @@
    (--cloud-*) that drift via one keyframe animation. */
 :root {
   color-scheme: dark;
-  --bg: #12131c;
-  --surface: #1d1b25;
-  --ink: #f2f0f7;
-  --muted: #a3a0b4;
-  --line: #312e3f;
-  --accent: #7b74ff;
-  --accent-soft: #2b2741;
-  --go: #3fbf88;
-  --maybe: #d7a441;
-  --no: #e2726e;
+  --bg: #10141f;
+  --surface: #1a1f2e;
+  --ink: #f4f1ec;
+  --muted: #a3a0ad;
+  --line: #2e3242;
+  --accent: #ee6c4d;
+  --accent-soft: #3b2823;
+  --go: #34b986;
+  --maybe: #e2a33d;
+  --no: #e2606e;
   --radius: 10px;      /* cards / panels */
   --radius-sm: 8px;    /* buttons / chips / inputs */
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 12px 32px rgba(0, 0, 0, 0.35);
-  /* dusk sky */
-  --sky: linear-gradient(180deg, #191b2e 0%, #141522 55%, #101018 100%);
-  --cloud-a: rgba(123, 116, 255, 0.34);
-  --cloud-b: rgba(96, 165, 250, 0.20);
-  --cloud-c: rgba(63, 191, 136, 0.16);
+  /* dusk sky — sunset through glass: coral glow sinking into teal-navy */
+  --sky: linear-gradient(180deg, #16203a 0%, #121728 55%, #0e1220 100%);
+  --cloud-a: rgba(238, 108, 77, 0.26);
+  --cloud-b: rgba(58, 163, 139, 0.18);
+  --cloud-c: rgba(233, 161, 59, 0.13);
   /* glass */
-  --glass: rgba(26, 25, 38, 0.52);
+  --glass: rgba(22, 25, 40, 0.52);
   --glass-2: rgba(255, 255, 255, 0.05);       /* inputs/chips resting on glass */
   --glass-line: rgba(255, 255, 255, 0.09);
   --glass-glint: rgba(255, 255, 255, 0.07);   /* top inner highlight */
@@ -32,22 +32,22 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #e8f0f8;
+  --bg: #eef1f5;
   --surface: #ffffff;
-  --ink: #16151d;
-  --muted: #5d5b6b;
-  --line: #d8dfe9;
-  --accent: #5b54e6;
-  --accent-soft: #e6e9f8;
-  --go: #1f9d6b;
-  --maybe: #c2871f;
-  --no: #cf5e5e;
+  --ink: #211a16;
+  --muted: #6b6560;
+  --line: #e3dcd2;
+  --accent: #d3572f;
+  --accent-soft: #fbe3d8;
+  --go: #178f63;
+  --maybe: #b57f1d;
+  --no: #cd4f5e;
   --shadow: 0 1px 2px rgba(27, 26, 34, 0.05), 0 12px 32px rgba(47, 66, 110, 0.12);
-  /* open day sky */
-  --sky: linear-gradient(180deg, #b7d3ee 0%, #d4e5f4 48%, #eff5fb 100%);
+  /* open day sky, warm sunlit horizon */
+  --sky: linear-gradient(180deg, #a9cbe8 0%, #d9e7f2 48%, #f7f1e8 100%);
   --cloud-a: rgba(255, 255, 255, 0.95);
   --cloud-b: rgba(255, 255, 255, 0.72);
-  --cloud-c: rgba(214, 231, 250, 0.85);
+  --cloud-c: rgba(250, 236, 219, 0.9);
   --glass: rgba(255, 255, 255, 0.52);
   --glass-2: rgba(255, 255, 255, 0.55);
   --glass-line: rgba(255, 255, 255, 0.75);
@@ -188,17 +188,17 @@ a { color: inherit; text-decoration: none; }
 .tile { border-left: 4px solid var(--line); }
 .tile-going {
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 18px rgba(91, 84, 230, 0.16);
-  background: linear-gradient(135deg, rgba(91, 84, 230, 0.10), var(--glass) 45%);
+  box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 18px rgba(238, 108, 77, 0.18);
+  background: linear-gradient(135deg, rgba(238, 108, 77, 0.10), var(--glass) 45%);
 }
 .tile-friend {
-  box-shadow: 0 0 0 1px rgba(31, 157, 107, 0.22), 0 6px 18px rgba(31, 157, 107, 0.13);
-  background: linear-gradient(135deg, rgba(31, 157, 107, 0.10), var(--glass) 45%);
+  box-shadow: 0 0 0 1px rgba(35, 160, 115, 0.24), 0 6px 18px rgba(35, 160, 115, 0.13);
+  background: linear-gradient(135deg, rgba(35, 160, 115, 0.10), var(--glass) 45%);
 }
 .friends-going {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 0.75rem; font-weight: 700; color: var(--go);
-  background: rgba(31, 157, 107, 0.1); border-radius: 999px; padding: 0.12rem 0.5rem;
+  background: rgba(35, 160, 115, 0.12); border-radius: 999px; padding: 0.12rem 0.5rem;
 }
 
 /* event card */
@@ -253,11 +253,11 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .pill { border-radius: 6px; padding: 0.15rem 0.6rem; font-size: 0.78rem; font-weight: 700; }
-.pill.going { background: rgba(31,157,107,0.12); color: var(--go); }
-.pill.maybe { background: rgba(194,135,31,0.14); color: var(--maybe); }
-.pill.declined { background: rgba(207,94,94,0.12); color: var(--no); }
+.pill.going { background: rgba(35,160,115,0.14); color: var(--go); }
+.pill.maybe { background: rgba(197,143,45,0.16); color: var(--maybe); }
+.pill.declined { background: rgba(210,90,105,0.14); color: var(--no); }
 .pill.polling { background: var(--accent-soft); color: var(--accent); }
-.pill.scheduled { background: rgba(31,157,107,0.12); color: var(--go); }
+.pill.scheduled { background: rgba(35,160,115,0.14); color: var(--go); }
 
 /* availability grid */
 .grid {
@@ -278,7 +278,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .cell.locked {
   cursor: not-allowed; border-color: transparent;
   background:
-    repeating-linear-gradient(45deg, transparent 0 5px, rgba(226, 114, 110, 0.35) 5px 7px),
+    repeating-linear-gradient(45deg, transparent 0 5px, rgba(226, 96, 110, 0.35) 5px 7px),
     color-mix(in srgb, var(--no) 16%, transparent);
 }
 /* Color key shown under every availability grid. */
@@ -333,7 +333,7 @@ textarea.input { resize: vertical; min-height: 64px; }
   bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 60;
   background: var(--go); color: #fff; font-weight: 700; font-size: 0.92rem;
   padding: 0.6rem 1.1rem; border-radius: var(--radius-sm);
-  box-shadow: 0 6px 20px rgba(31, 157, 107, 0.35);
+  box-shadow: 0 6px 20px rgba(35, 160, 115, 0.35);
   animation: toast-in 0.18s ease;
 }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }

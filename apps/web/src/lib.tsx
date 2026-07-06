@@ -47,17 +47,19 @@ export type PublicEvent = {
 };
 
 // Friendly per-type accent for event tiles (left edge + emoji tint).
+// One ramp around the wheel at matched chroma/lightness so tiles feel like a
+// set: warm types (food/social) advance, cool types (logistics) recede.
 export const TYPE_COLORS: Record<EventType, string> = {
-  dinner: "#e8912d",
-  drinks: "#8e5bd6",
-  movie: "#d65b8e",
-  camping: "#1f9d6b",
+  dinner: "#e07a3f",
+  drinks: "#9d6bd4",
+  movie: "#d45f93",
+  camping: "#3f9d6f",
   party: "#e0559b",
-  trip: "#2a9d8f",
-  show: "#c94f4f",
-  practice: "#4f7dc9",
-  openmic: "#b58a2c",
-  other: "#8a879a",
+  trip: "#3d9db1",
+  show: "#d05c5c",
+  practice: "#5b83d6",
+  openmic: "#c99a2e",
+  other: "#8b8794",
 };
 export type Follow = { kind: "host" | "topic"; value: string };
 

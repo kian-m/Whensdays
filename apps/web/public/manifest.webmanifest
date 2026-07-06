@@ -4,8 +4,8 @@
   "description": "Plans, minus the group-chat chaos.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#12131c",
-  "theme_color": "#5b54e6",
+  "background_color": "#10141f",
+  "theme_color": "#ee6c4d",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
