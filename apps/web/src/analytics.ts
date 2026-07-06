@@ -38,6 +38,8 @@ export function initAnalytics() {
   }
   posthog.init(KEY, {
     api_host: HOST,
+    // Dated defaults preset — opts into PostHog's current recommended behaviors.
+    defaults: "2026-05-30",
     // When HOST is a reverse proxy (prod: PostHog managed proxy on our domain,
     // so adblockers don't eat events), links/toolbar still need the real UI.
     ui_host: "https://us.posthog.com",
