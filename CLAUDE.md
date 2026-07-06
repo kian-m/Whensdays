@@ -23,7 +23,7 @@ Priorities, in order, that drive every decision here: **security → speed → s
 | Auth | **Clerk** (managed) | JWT verified in Go (`clerkhttp`); React via `@clerk/clerk-react`. Lowest auth-bug risk; free at sandbox scale |
 | Hosting | API → **Cloud Run**, web → **Cloudflare Pages**, DB → **Neon** | All scale-to-zero / serverless: ~$0 idle, managed security, autoscale. See `docs/DEPLOY.md` |
 
-**Prod data flow:** browser → Cloudflare Pages (static React) → `/api/*` proxied via Pages `_redirects` → Cloud Run (Go) → Neon. Single origin, no CORS. Deploy runs on green `main` (`.github/workflows/deploy.yml`); GCP auth is keyless (Workload Identity Federation), secrets (DB URL, Clerk) via Secret Manager.
+**Prod data flow:** browser → Cloudflare Pages (static React) → `/api/*` + `/e/*` proxied via a Pages Function (generated in CI; `_redirects` can't proxy non-GET) → Cloud Run (Go) → Neon. Single origin, no CORS. Deploy runs on green `main` (`.github/workflows/deploy.yml`); GCP auth is keyless (Workload Identity Federation), secrets (DB URL, Clerk) via Secret Manager.
 
 All six foundational decisions are made; extend the app feature by feature from here.
 
@@ -97,7 +97,7 @@ Local toolchains: Node, pnpm, and Docker are present. **Go is not installed loca
 
 ## How the pieces fit
 
-- **Single origin.** The browser only ever talks to the web origin; `/api/*` is reverse-proxied to the Go service — Vite proxy in dev, nginx in the container, Cloudflare Pages `_redirects` in prod. No CORS, no hardcoded API URLs.
+- **Single origin.** The browser only ever talks to the web origin; `/api/*` is reverse-proxied to the Go service — Vite proxy in dev, nginx in the container, a CI-generated Cloudflare Pages Function in prod (`_redirects` only proxies GET). No CORS, no hardcoded API URLs.
 - **Auth.** The React app wraps everything in `ClerkProvider`; protected UI sits inside `<SignedIn>`. Every API call attaches the Clerk session token (`Authorization: Bearer`). On the API, protected routes are wrapped with `clerkhttp.RequireHeaderAuthorization()`; handlers read the user id via `userIDFrom(ctx)` (the Clerk `sub`) and scope all queries to it. Never trust a user id from the request body — always from the verified token.
 - **API design.** `apps/api/main.go` connects a `pgxpool`, builds `*db.Queries`, and wires routes on the stdlib mux with `securityHeaders` + `requestLogger` middleware and graceful shutdown. Handlers hang off `*server`, return JSON via `writeJSON`, and bound request bodies with `MaxBytesReader`. Keep dependencies minimal — `pgx` is the only direct one.
 - **Data flow (the Notes feature is the reference example).** Define schema in `db/migrations/*.sql` → write SQL in `db/query/*.sql` → `make generate` produces type-safe Go in `internal/db` → call it from a handler. Never hand-write SQL strings in handlers or edit `internal/db` by hand.

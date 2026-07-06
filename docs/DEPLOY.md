@@ -3,7 +3,7 @@
 API → **Google Cloud Run**. Web → **Cloudflare Pages**. DB → **Neon**.
 CI/CD lives in `.github/workflows/deploy.yml` and runs on green `main`.
 
-Architecture in prod: browser → Cloudflare Pages (static React) → `/api/*` proxied (Pages `_redirects`) → Cloud Run (Go) → Neon (Postgres). Single origin, no CORS, scale-to-zero everywhere.
+Architecture in prod: browser → Cloudflare Pages (static React) → `/api/*` + `/e/*` proxied via a Pages Function (CI-generated; `_redirects` only proxies GET) → Cloud Run (Go) → Neon (Postgres). Single origin, no CORS, scale-to-zero everywhere.
 
 ## One-time setup
 
