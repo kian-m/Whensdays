@@ -1,7 +1,7 @@
 -- ========================= event comments =========================
 
 -- name: ListEventComments :many
-SELECT c.id, c.event_id, c.user_id, c.body, c.created_at,
+SELECT c.id, c.event_id, c.user_id, c.body, c.gif_url, c.created_at,
        p.display_name, p.avatar_url
 FROM event_comments c
 LEFT JOIN profiles p ON p.user_id = c.user_id
@@ -9,9 +9,9 @@ WHERE c.event_id = $1
 ORDER BY c.created_at;
 
 -- name: AddEventComment :one
-INSERT INTO event_comments (event_id, user_id, body)
-VALUES ($1, $2, $3)
-RETURNING id, event_id, user_id, body, created_at;
+INSERT INTO event_comments (event_id, user_id, body, gif_url)
+VALUES ($1, $2, $3, $4)
+RETURNING id, event_id, user_id, body, gif_url, created_at;
 
 -- name: GetEventComment :one
 SELECT id, event_id, user_id, body, created_at

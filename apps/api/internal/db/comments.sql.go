@@ -28,25 +28,41 @@ func (q *Queries) AddCohost(ctx context.Context, arg AddCohostParams) error {
 }
 
 const addEventComment = `-- name: AddEventComment :one
-INSERT INTO event_comments (event_id, user_id, body)
-VALUES ($1, $2, $3)
-RETURNING id, event_id, user_id, body, created_at
+INSERT INTO event_comments (event_id, user_id, body, gif_url)
+VALUES ($1, $2, $3, $4)
+RETURNING id, event_id, user_id, body, gif_url, created_at
 `
 
 type AddEventCommentParams struct {
 	EventID pgtype.UUID `json:"event_id"`
 	UserID  string      `json:"user_id"`
 	Body    string      `json:"body"`
+	GifUrl  string      `json:"gif_url"`
 }
 
-func (q *Queries) AddEventComment(ctx context.Context, arg AddEventCommentParams) (EventComment, error) {
-	row := q.db.QueryRow(ctx, addEventComment, arg.EventID, arg.UserID, arg.Body)
-	var i EventComment
+type AddEventCommentRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	EventID   pgtype.UUID        `json:"event_id"`
+	UserID    string             `json:"user_id"`
+	Body      string             `json:"body"`
+	GifUrl    string             `json:"gif_url"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) AddEventComment(ctx context.Context, arg AddEventCommentParams) (AddEventCommentRow, error) {
+	row := q.db.QueryRow(ctx, addEventComment,
+		arg.EventID,
+		arg.UserID,
+		arg.Body,
+		arg.GifUrl,
+	)
+	var i AddEventCommentRow
 	err := row.Scan(
 		&i.ID,
 		&i.EventID,
 		&i.UserID,
 		&i.Body,
+		&i.GifUrl,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -67,9 +83,17 @@ FROM event_comments
 WHERE id = $1
 `
 
-func (q *Queries) GetEventComment(ctx context.Context, id pgtype.UUID) (EventComment, error) {
+type GetEventCommentRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	EventID   pgtype.UUID        `json:"event_id"`
+	UserID    string             `json:"user_id"`
+	Body      string             `json:"body"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetEventComment(ctx context.Context, id pgtype.UUID) (GetEventCommentRow, error) {
 	row := q.db.QueryRow(ctx, getEventComment, id)
-	var i EventComment
+	var i GetEventCommentRow
 	err := row.Scan(
 		&i.ID,
 		&i.EventID,
@@ -144,7 +168,7 @@ func (q *Queries) ListCohosts(ctx context.Context, eventID pgtype.UUID) ([]ListC
 
 const listEventComments = `-- name: ListEventComments :many
 
-SELECT c.id, c.event_id, c.user_id, c.body, c.created_at,
+SELECT c.id, c.event_id, c.user_id, c.body, c.gif_url, c.created_at,
        p.display_name, p.avatar_url
 FROM event_comments c
 LEFT JOIN profiles p ON p.user_id = c.user_id
@@ -157,6 +181,7 @@ type ListEventCommentsRow struct {
 	EventID     pgtype.UUID        `json:"event_id"`
 	UserID      string             `json:"user_id"`
 	Body        string             `json:"body"`
+	GifUrl      string             `json:"gif_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	DisplayName pgtype.Text        `json:"display_name"`
 	AvatarUrl   pgtype.Text        `json:"avatar_url"`
@@ -177,6 +202,7 @@ func (q *Queries) ListEventComments(ctx context.Context, eventID pgtype.UUID) ([
 			&i.EventID,
 			&i.UserID,
 			&i.Body,
+			&i.GifUrl,
 			&i.CreatedAt,
 			&i.DisplayName,
 			&i.AvatarUrl,

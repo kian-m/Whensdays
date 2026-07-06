@@ -23,6 +23,7 @@ services:
       DATABASE_URL: postgres://clsandbox:clsandbox@db:5432/clsandbox?sslmode=disable
       AUTH_MODE: dev # stubbed auth — hermetic test only
       CALENDAR_MODE: stub # stubbed calendar providers — hermetic test only
+      KLIPY_MODE: stub # deterministic gif picker, no key/network
       RUN_MIGRATIONS: "true" # apply schema on boot
     depends_on:
       db:

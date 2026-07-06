@@ -304,6 +304,8 @@ textarea.input { resize: vertical; min-height: 64px; }
   border-radius: var(--radius); align-self: center; display: block; margin: 0 auto;
   box-shadow: var(--shadow);
 }
+/* a gif attached to a comment */
+.comment-gif { max-width: 180px; border-radius: var(--radius-sm); display: block; }
 /* klipy gif results */
 .gif-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .gif-grid button { border: 1px solid var(--glass-line); background: var(--glass-2); border-radius: var(--radius-sm); padding: 0; cursor: pointer; overflow: hidden; }

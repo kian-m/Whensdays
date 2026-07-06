@@ -33,7 +33,32 @@ func validCoverURL(u string) bool {
 	return strings.HasPrefix(u, "https://static.klipy.com/") && len(u) <= 500
 }
 
+// validGifURL: comment/cover gifs may only come from the Klipy CDN (or the
+// stub sentinel in KLIPY_MODE=stub test stacks) — never arbitrary remotes.
+func validGifURL(u string) bool {
+	if u == "" {
+		return true
+	}
+	return (strings.HasPrefix(u, "https://static.klipy.com/") || strings.HasPrefix(u, "/gif-stub/")) && len(u) <= 500
+}
+
+// stubGifs mirrors CALENDAR_MODE=stub: fixed, network-free results so E2E and
+// docs stacks can exercise the picker without a key. Never enable in prod.
+var stubGifs = []map[string]string{
+	{"url": "/gif-stub/party-1.gif", "preview": "/gif-stub/party-1.gif", "title": "Stub party"},
+	{"url": "/gif-stub/party-2.gif", "preview": "/gif-stub/party-2.gif", "title": "Stub confetti"},
+}
+
 func (s *server) handleGifSearch(w http.ResponseWriter, r *http.Request) {
+	if s.klipyStub {
+		q := strings.TrimSpace(r.URL.Query().Get("q"))
+		if q == "" {
+			writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "gifs": []any{}})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "gifs": stubGifs})
+		return
+	}
 	if s.klipyKey == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"enabled": false, "gifs": []any{}})
 		return

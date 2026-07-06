@@ -185,6 +185,7 @@ export type Comment = {
   event_id: string;
   user_id: string;
   body: string;
+  gif_url: string;
   created_at: string;
   display_name: string | null;
   avatar_url: string | null;

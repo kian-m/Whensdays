@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiFn, DAYPARTS, useApi } from "./lib";
+import { ApiFn, DAYPARTS, getJSON, useApi } from "./lib";
 
 // Small data-loading hook: runs `fn` on mount and exposes a reload().
 export function useAsync<T>(fn: (api: ApiFn) => Promise<T>, deps: unknown[] = []) {
@@ -168,4 +168,54 @@ export function Avatar({ url, name, size = 36 }: { url?: string | null; name?: s
   if (url) return <img className="avatar" style={style} src={url} alt={name ?? ""} data-testid="avatar-img" />;
   const initial = (name ?? "?").trim().charAt(0).toUpperCase() || "?";
   return <span className="avatar avatar-fallback" style={style} aria-hidden>{initial}</span>;
+}
+
+// Klipy GIF search (server-proxied — the API key never reaches the browser).
+// Hidden entirely when the server reports the integration unconfigured.
+export function GifPicker({ onPick }: { onPick: (url: string) => void }) {
+  const api = useApi();
+  const [enabled, setEnabled] = useState(false);
+  const [q, setQ] = useState("");
+  const [gifs, setGifs] = useState<{ url: string; preview: string; title: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    getJSON<{ enabled: boolean }>(api, "/api/gifs/search").then((b) => setEnabled(b.enabled)).catch(() => {});
+  }, [api]);
+  if (!enabled) return null;
+
+  async function search() {
+    if (!q.trim()) return;
+    setSearching(true);
+    try {
+      const b = await getJSON<{ gifs: { url: string; preview: string; title: string }[] }>(
+        api, `/api/gifs/search?q=${encodeURIComponent(q.trim())}`);
+      setGifs(b.gifs);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="row">
+        <input className="input" data-testid="gif-q" value={q} placeholder="…or search GIFs (Klipy)"
+          onChange={(ev) => setQ(ev.target.value)}
+          onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); search(); } }} />
+        <button type="button" className="btn soft sm" data-testid="gif-go" disabled={searching} onClick={search}>
+          {searching ? "…" : "Search"}
+        </button>
+      </div>
+      {gifs.length > 0 && (
+        <div className="gif-grid" data-testid="gif-grid">
+          {gifs.map((g, i) => (
+            <button key={g.url} type="button" data-testid={`gif-${i}`} title={g.title}
+              onClick={() => { onPick(g.url); setGifs([]); }}>
+              <img src={g.preview} alt={g.title} loading="lazy" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

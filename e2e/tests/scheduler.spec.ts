@@ -226,6 +226,24 @@ test.describe("scheduler", () => {
     // passes (same as the comments card). Behavior above is the contract.
   });
 
+  test("comments: a GIF rides along (stub picker)", async ({ page }) => {
+    await ensureProfile(page);
+    const title = `Gif chat ${test.info().testId}`;
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-when").fill("2026-10-11T18:00");
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    // Pick a gif (KLIPY_MODE=stub serves fixed results), post with no text.
+    await page.getByTestId("comment-gif-open").click();
+    await page.getByTestId("gif-q").fill("party");
+    await page.getByTestId("gif-go").click();
+    await page.getByTestId("gif-0").click();
+    await expect(page.getByTestId("comment-gif-preview")).toBeVisible();
+    await page.getByTestId("comment-post").click();
+    await expect(page.getByTestId("comment").last().getByTestId("comment-gif")).toHaveAttribute("src", /gif-stub/);
+  });
+
   test("comments: post, delete, and the host can disable them", async ({ page }) => {
     await ensureProfile(page);
     const title = `Comments ${test.info().testId}`;

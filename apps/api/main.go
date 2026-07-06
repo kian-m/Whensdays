@@ -45,6 +45,7 @@ type server struct {
 	notify    *notify.Client
 	appOrigin string
 	klipyKey  string
+	klipyStub bool
 }
 
 func main() {
@@ -86,6 +87,7 @@ func main() {
 		notify:    notify.New(os.Getenv("EMAIL_API_KEY"), os.Getenv("EMAIL_FROM"), logger),
 		appOrigin: strings.TrimRight(os.Getenv("APP_ORIGIN"), "/"),
 		klipyKey:  os.Getenv("KLIPY_API_KEY"),
+		klipyStub: os.Getenv("KLIPY_MODE") == "stub",
 	}
 	auth := s.authMiddleware()
 

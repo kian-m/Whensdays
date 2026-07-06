@@ -68,13 +68,18 @@ func (s *server) handlePostComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Body string `json:"body"`
+		Body   string `json:"body"`
+		GifUrl string `json:"gif_url"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
 	in.Body = strings.TrimSpace(in.Body)
-	if in.Body == "" {
+	if !validGifURL(in.GifUrl) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "gif must come from the picker"})
+		return
+	}
+	if in.Body == "" && in.GifUrl == "" {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "comment is required"})
 		return
 	}
@@ -82,14 +87,18 @@ func (s *server) handlePostComment(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "comment too long"})
 		return
 	}
-	c, err := s.queries.AddEventComment(r.Context(), db.AddEventCommentParams{EventID: id, UserID: uid, Body: in.Body})
+	c, err := s.queries.AddEventComment(r.Context(), db.AddEventCommentParams{EventID: id, UserID: uid, Body: in.Body, GifUrl: in.GifUrl})
 	if err != nil {
 		s.internal(w, "add comment", err)
 		return
 	}
 	s.analytics.Capture(uid, "comment_posted", map[string]any{"event_id": r.PathValue("id")})
 	if p, perr := s.queries.GetProfile(r.Context(), uid); perr == nil {
-		s.notifyHost(r.Context(), ev, uid, "New comment on "+ev.Title, p.DisplayName+": "+in.Body)
+				note := in.Body
+		if note == "" {
+			note = "sent a GIF"
+		}
+		s.notifyHost(r.Context(), ev, uid, "New comment on "+ev.Title, p.DisplayName+": "+note)
 	}
 	writeJSON(w, http.StatusCreated, c)
 }

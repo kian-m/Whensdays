@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Attendee,
@@ -25,7 +25,7 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { Avatar, BackLink, DayGrid, Loading, Pill, fileToAvatar, useAsync } from "../ui";
+import { Avatar, BackLink, DayGrid, GifPicker, Loading, Pill, fileToAvatar, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 export function EventPage() {
@@ -769,56 +769,6 @@ function HeroCard({ data, reload, canEdit }: { data: EventDetail; reload: () => 
   );
 }
 
-// Klipy GIF search (server-proxied — the API key never reaches the browser).
-// Hidden entirely when the server reports the integration unconfigured.
-function GifPicker({ onPick }: { onPick: (url: string) => void }) {
-  const api = useApi();
-  const [enabled, setEnabled] = useState(false);
-  const [q, setQ] = useState("");
-  const [gifs, setGifs] = useState<{ url: string; preview: string; title: string }[]>([]);
-  const [searching, setSearching] = useState(false);
-
-  useEffect(() => {
-    getJSON<{ enabled: boolean }>(api, "/api/gifs/search").then((b) => setEnabled(b.enabled)).catch(() => {});
-  }, [api]);
-  if (!enabled) return null;
-
-  async function search() {
-    if (!q.trim()) return;
-    setSearching(true);
-    try {
-      const b = await getJSON<{ gifs: { url: string; preview: string; title: string }[] }>(
-        api, `/api/gifs/search?q=${encodeURIComponent(q.trim())}`);
-      setGifs(b.gifs);
-    } finally {
-      setSearching(false);
-    }
-  }
-
-  return (
-    <div className="stack" style={{ gap: 6 }}>
-      <div className="row">
-        <input className="input" data-testid="gif-q" value={q} placeholder="…or search GIFs (Klipy)"
-          onChange={(ev) => setQ(ev.target.value)}
-          onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); search(); } }} />
-        <button type="button" className="btn soft sm" data-testid="gif-go" disabled={searching} onClick={search}>
-          {searching ? "…" : "Search"}
-        </button>
-      </div>
-      {gifs.length > 0 && (
-        <div className="gif-grid" data-testid="gif-grid">
-          {gifs.map((g, i) => (
-            <button key={g.url} type="button" data-testid={`gif-${i}`} title={g.title}
-              onClick={() => { onPick(g.url); setGifs([]); }}>
-              <img src={g.preview} alt={g.title} loading="lazy" />
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Host-only controls: toggle the comment thread + manage cohosts.
 function HostControls({ data, reload }: { data: EventDetail; reload: () => void }) {
   const api = useApi();
@@ -896,12 +846,16 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
   const api = useApi();
   const e = data.event;
   const [body, setBody] = useState("");
+  const [gif, setGif] = useState("");      // a picked Klipy gif riding on the next post
+  const [picking, setPicking] = useState(false);
 
   async function post() {
-    if (!body.trim()) return;
-    const res = await sendJSON(api, "POST", `/api/events/${e.id}/comments`, { body });
+    if (!body.trim() && !gif) return;
+    const res = await sendJSON(api, "POST", `/api/events/${e.id}/comments`, { body, gif_url: gif });
     if (res.ok) {
       setBody("");
+      setGif("");
+      setPicking(false);
       reload();
     }
   }
@@ -920,7 +874,8 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
             <Avatar url={c.avatar_url} name={c.display_name} size={28} />
             <span className="stack" style={{ gap: 1 }}>
               <strong className="small">{c.display_name || "Someone"}</strong>
-              <span>{c.body}</span>
+              {c.body && <span>{c.body}</span>}
+              {c.gif_url && <img className="comment-gif" data-testid="comment-gif" src={c.gif_url} alt="gif" loading="lazy" />}
             </span>
           </span>
           {(c.user_id === data.viewer_id || data.can_manage) && (
@@ -929,10 +884,21 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
         </div>
       ))}
       {e.comments_enabled ? (
-        <div className="row">
-          <input className="input" data-testid="comment-input" value={body} placeholder="Add a comment…"
-            onChange={(ev) => setBody(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && post()} />
-          <button className="btn sm" data-testid="comment-post" onClick={post}>Post</button>
+        <div className="stack" style={{ gap: 6 }}>
+          {gif && (
+            <span className="row" style={{ gap: 6 }}>
+              <img className="comment-gif" data-testid="comment-gif-preview" src={gif} alt="chosen gif" />
+              <button type="button" className="btn ghost sm" onClick={() => setGif("")}>✕</button>
+            </span>
+          )}
+          <div className="row">
+            <input className="input" data-testid="comment-input" value={body} placeholder="Add a comment…"
+              onChange={(ev) => setBody(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && post()} />
+            <button type="button" className="btn ghost sm" data-testid="comment-gif-open"
+              onClick={() => setPicking((p) => !p)}>GIF</button>
+            <button className="btn sm" data-testid="comment-post" onClick={post}>Post</button>
+          </div>
+          {picking && <GifPicker onPick={(url) => { setGif(url); setPicking(false); }} />}
         </div>
       ) : (
         <p className="muted small" data-testid="comments-off">Comments are turned off for this event.</p>
