@@ -45,7 +45,7 @@ jobs:
             --min-instances 0 \
             --max-instances 2 \
             --port 8080 \
-            --set-env-vars "APP_ENV=production,POSTHOG_HOST=https://us.i.posthog.com,APP_VERSION=${GITHUB_SHA},APP_ORIGIN=${{ secrets.APP_ORIGIN }}" \
+            --set-env-vars "APP_ENV=production,RUN_MIGRATIONS=true,POSTHOG_HOST=https://us.i.posthog.com,APP_VERSION=${GITHUB_SHA},APP_ORIGIN=${{ secrets.APP_ORIGIN }}" \
             --set-secrets "DATABASE_URL=DATABASE_URL:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest,POSTHOG_API_KEY=POSTHOG_API_KEY:latest,POSTHOG_PERSONAL_API_KEY=POSTHOG_PERSONAL_API_KEY:latest,GUEST_TOKEN_KEY=GUEST_TOKEN_KEY:latest,KLIPY_API_KEY=KLIPY_API_KEY:latest"
           # To enable optional features, create their secrets (docs/DEPLOY.md §5b/5c)
           # and append to the --set-secrets line above, e.g.:
@@ -88,6 +88,7 @@ jobs:
           VITE_PUBLIC_POSTHOG_RECORD: ${{ vars.VITE_PUBLIC_POSTHOG_RECORD }}
       - uses: cloudflare/wrangler-action@v3
         with:
+          packageManager: npm # isolate wrangler's own install from the pnpm workspace
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy apps/web/dist --project-name=whensdays
