@@ -9,3 +9,7 @@ ON CONFLICT (user_id, label) DO UPDATE SET emoji = EXCLUDED.emoji;
 SELECT label, emoji FROM custom_event_types
 WHERE user_id = $1
 ORDER BY created_at;
+
+-- name: DeleteCustomType :exec
+DELETE FROM custom_event_types
+WHERE user_id = $1 AND label = $2;

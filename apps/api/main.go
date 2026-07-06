@@ -99,6 +99,7 @@ func main() {
 	// Follows + personal feed.
 	mux.Handle("GET /api/feed", auth(http.HandlerFunc(s.handleFeed)))
 	mux.Handle("GET /api/event-types", auth(http.HandlerFunc(s.handleListCustomTypes)))
+	mux.Handle("DELETE /api/event-types/{label}", auth(http.HandlerFunc(s.handleDeleteCustomType)))
 	mux.Handle("GET /api/badges", auth(http.HandlerFunc(s.handleBadges)))
 	mux.Handle("POST /api/events/{id}/invites", auth(http.HandlerFunc(s.handleInviteFriend)))
 	mux.Handle("GET /api/discover/mine", auth(http.HandlerFunc(s.handleDiscoverMine)))

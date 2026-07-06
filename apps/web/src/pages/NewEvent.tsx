@@ -43,7 +43,7 @@ export function NewEvent() {
 
   const { data: fr } = useAsync<{ friends: Friend[] }>((a) => getJSON(a, "/api/friends"));
   const friends = fr?.friends ?? [];
-  const { data: ct } = useAsync<{ types: { label: string; emoji: string }[] }>((a) => getJSON(a, "/api/event-types"));
+  const { data: ct, reload: reloadTypes } = useAsync<{ types: { label: string; emoji: string }[] }>((a) => getJSON(a, "/api/event-types"));
   const savedTypes = ct?.types ?? [];
 
   // User-defined type: emoji + short name (server caps at 10 chars).
@@ -175,12 +175,26 @@ export function NewEvent() {
                   </button>
                 )}
                 {savedTypes.map((t) => (
-                  <button type="button" key={t.label}
+                  /* Selectable chip with a nested delete ✕. The wrapper carries
+                     the testid + `on` styling and handles selection (buttons
+                     can't nest, so only the ✕ is a real <button>). */
+                  <span key={t.label} role="button" tabIndex={0}
                     className={`chip ${custom?.label === t.label ? "on" : ""}`}
                     data-testid={`custom-${t.label.toLowerCase()}`}
-                    onClick={() => { setType("other"); setCustom({ emoji: t.emoji, label: t.label }); }}>
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                    onClick={() => { setType("other"); setCustom({ emoji: t.emoji, label: t.label }); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setType("other"); setCustom({ emoji: t.emoji, label: t.label }); } }}>
                     {t.emoji} {t.label}
-                  </button>
+                    <button type="button" aria-label={`Delete ${t.label}`}
+                      data-testid={`custom-del-${t.label.toLowerCase()}`}
+                      style={{ all: "unset", cursor: "pointer", opacity: 0.6, paddingLeft: 2 }}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await api(`/api/event-types/${encodeURIComponent(t.label)}`, { method: "DELETE" });
+                        if (custom?.label === t.label) setCustom(null);
+                        reloadTypes();
+                      }}>✕</button>
+                  </span>
                 ))}
                 <button type="button" className={`chip ${addingType ? "on" : ""}`} data-testid="type-add"
                   onClick={() => setAddingType((a) => !a)}>＋</button>

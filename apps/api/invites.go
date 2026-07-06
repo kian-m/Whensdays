@@ -82,3 +82,20 @@ func (s *server) handleListCustomTypes(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"types": types})
 }
+
+// handleDeleteCustomType removes one of the user's saved custom types (by its
+// label). Existing events keep their custom emoji/label — this only removes
+// the reusable wizard chip.
+func (s *server) handleDeleteCustomType(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	label := r.PathValue("label")
+	if label == "" || len(label) > 40 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid label"})
+		return
+	}
+	if err := s.queries.DeleteCustomType(r.Context(), db.DeleteCustomTypeParams{UserID: uid, Label: label}); err != nil {
+		s.internal(w, "delete custom type", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}

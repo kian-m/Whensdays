@@ -9,6 +9,21 @@ import (
 	"context"
 )
 
+const deleteCustomType = `-- name: DeleteCustomType :exec
+DELETE FROM custom_event_types
+WHERE user_id = $1 AND label = $2
+`
+
+type DeleteCustomTypeParams struct {
+	UserID string `json:"user_id"`
+	Label  string `json:"label"`
+}
+
+func (q *Queries) DeleteCustomType(ctx context.Context, arg DeleteCustomTypeParams) error {
+	_, err := q.db.Exec(ctx, deleteCustomType, arg.UserID, arg.Label)
+	return err
+}
+
 const listCustomTypes = `-- name: ListCustomTypes :many
 SELECT label, emoji FROM custom_event_types
 WHERE user_id = $1
