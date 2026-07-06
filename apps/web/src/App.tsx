@@ -108,7 +108,7 @@ function GuestOrLanding() {
     return (
       <div className="app">
         <nav className="nav">
-          <NavLink to="/" className="brand" aria-label="Whensdays"><span className="dot" /></NavLink>
+          <NavLink to="/" className="brand" aria-label="Whensdays"><span className="dot" /><span className="word" /></NavLink>
           <SignInButton mode="modal"><button className="btn sm">Sign in</button></SignInButton>
         </nav>
         <Suspense fallback={<Loading />}><Discover /></Suspense>
@@ -183,8 +183,8 @@ function GuestJoin({ eventId, onJoined }: { eventId: string | null; onJoined: (a
   return (
     <div className="app">
       <div className="hero stack" style={{ alignItems: "center" }}>
-        <div className="brand" style={{ fontSize: "1.3rem" }}>
-          <span className="dot" /> Whensdays
+        <div className="brand" aria-label="Whensdays">
+          <span className="dot" /><span className="word" />
         </div>
         <h1>{eventId ? "You're invited 🎉" : "Let's make a plan ⚡"}</h1>
         <p className="muted" style={{ maxWidth: 420 }}>
@@ -237,13 +237,13 @@ function Landing() {
   return (
     <div className="app">
       <div className="land">
-        <div className="brand" style={{ fontSize: "1.3rem", justifyContent: "center" }}>
-          <span className="dot" /> Whensdays
+        <div className="brand" aria-label="Whensdays" style={{ justifyContent: "center" }}>
+          <span className="dot" /><span className="word" />
         </div>
         <h1 className="land-title">Make plans that actually happen.</h1>
         <p className="land-sub">
           The group chat says “we should hang out.” Whensdays turns that into a
-          real plan — pick a time or let everyone weigh in, drop one link, and
+          real plan. Pick a time or let everyone weigh in, drop one link, and
           watch the yeses roll in.
         </p>
         <div className="land-cta">
@@ -348,7 +348,7 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
     <div className="app">
       <nav className="nav">
         <NavLink to="/" className="brand" aria-label="Whensdays">
-          <span className="dot" />
+          <span className="dot" /><span className="word" />
         </NavLink>
         {!hideNav && (
           <div className="nav-right">
