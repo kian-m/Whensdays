@@ -304,6 +304,8 @@ textarea.input { resize: vertical; min-height: 64px; }
   border-radius: var(--radius); align-self: center; display: block; margin: 0 auto;
   box-shadow: var(--shadow);
 }
+/* event tile thumbnail (cover photo/gif as the tile's main visual) */
+.thumb { border-radius: 10px; object-fit: cover; flex: none; display: block; box-shadow: var(--shadow); }
 /* a gif attached to a comment */
 .comment-gif { max-width: 180px; border-radius: var(--radius-sm); display: block; }
 /* klipy gif results */

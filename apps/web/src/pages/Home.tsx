@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Event, TYPE_COLORS, fmtDateTime, getJSON } from "../lib";
 import { eventEmoji, eventLabel } from "../scheduler/questions";
-import { Avatar, Loading, Pill, useAsync } from "../ui";
+import { Avatar, EventThumb, Loading, Pill, useAsync } from "../ui";
 
 // Avatar-stack preview: the API sends ≤6 prioritized faces (friends → people
 // with photos → initials-only) + the total going count per event.
@@ -124,7 +124,7 @@ function EventRow({ e, pile, onClick, isNew, soon }: {
   const extra = (pile?.going ?? 0) - faces.length;
   return (
     <div className="card ev tile" data-testid="event-row" onClick={onClick} style={{ borderLeftColor: color }}>
-      <div className="emoji" style={{ background: `${color}22` }}>{eventEmoji(e)}</div>
+      <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={color} size={e.photo_url ? 72 : 46} />
       <div style={{ flex: 1 }}>
         <div className="row between">
           <span className="title row" style={{ gap: 6 }}>

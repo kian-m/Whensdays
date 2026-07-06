@@ -57,6 +57,7 @@ export type PublicEvent = {
   from_friend: boolean;
   custom_emoji: string;
   custom_label: string;
+  photo_url: string;
 };
 
 // Friendly per-type accent for event tiles (left edge + emoji tint).

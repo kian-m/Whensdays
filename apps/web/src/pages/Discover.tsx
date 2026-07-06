@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CATEGORIES, CITY_OPTIONS, Follow, PublicEvent, TYPE_COLORS, fmtDateTime, sendJSON, useApi, useProfile } from "../lib";
-import { Avatar } from "../ui";
+import { Avatar, EventThumb } from "../ui";
 import { eventEmoji } from "../scheduler/questions";
 import { EVENTS, analytics } from "../analytics";
 
@@ -150,7 +150,7 @@ function PublicEventRow({ e, onOpen, canFollow, following, toggleFollow, viewerI
       style={{ gap: 6, borderLeftColor: typeColor }}>
       <div className="row between">
         <span className="row" style={{ gap: 10, cursor: "pointer" }} onClick={onOpen}>
-          <span className="emoji" style={{ width: 40, height: 40, display: "grid", placeItems: "center", background: `${typeColor}22` }}>{eventEmoji(e)}</span>
+          <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={typeColor} size={e.photo_url ? 64 : 40} />
           <span className="stack" style={{ gap: 1 }}>
             <strong>{e.title}</strong>
             <span className="muted small">

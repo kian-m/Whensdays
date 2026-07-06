@@ -170,6 +170,22 @@ export function Avatar({ url, name, size = 36 }: { url?: string | null; name?: s
   return <span className="avatar avatar-fallback" style={style} aria-hidden>{initial}</span>;
 }
 
+// Event tile thumbnail: the cover photo/GIF is the main visual when set;
+// otherwise the type-colored emoji square. Shared by Home, Discover and Groups.
+export function EventThumb({ photo, emoji, color, size = 46 }: {
+  photo?: string; emoji: string; color: string; size?: number;
+}) {
+  if (photo) {
+    return <img className="thumb" data-testid="event-thumb" src={photo} alt=""
+      style={{ width: size, height: size }} loading="lazy" />;
+  }
+  return (
+    <div className="emoji" style={{ width: size, height: size, fontSize: size * 0.52, display: "grid", placeItems: "center", background: `${color}22`, flex: "none" }}>
+      {emoji}
+    </div>
+  );
+}
+
 // Klipy GIF search (server-proxied — the API key never reaches the browser).
 // Hidden entirely when the server reports the integration unconfigured.
 export function GifPicker({ onPick }: { onPick: (url: string) => void }) {

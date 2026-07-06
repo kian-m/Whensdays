@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Event, Group, GroupDetail, TYPE_COLORS, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
-import { Avatar, BackLink, Loading, fileToAvatar, useAsync } from "../ui";
+import { Avatar, BackLink, Loading, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { eventEmoji } from "../scheduler/questions";
 
 // Group icons are an emoji from this palette or an uploaded photo — never free
@@ -228,7 +228,7 @@ function GroupEventRow({ event, onClick }: { event: Event; onClick: () => void }
       style={{ cursor: "pointer", borderLeftColor: TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other }}
       onClick={onClick}
     >
-      <div className="emoji" style={{ background: `${TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other}22` }}>{eventEmoji(event)}</div>
+      <EventThumb photo={event.photo_url} emoji={eventEmoji(event)} color={TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other} size={event.photo_url ? 64 : 46} />
       <div style={{ flex: 1 }}>
         <div className="title">{event.title}</div>
         <div className="muted small">

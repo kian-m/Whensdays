@@ -88,6 +88,7 @@ type EventComment struct {
 	UserID    string             `json:"user_id"`
 	Body      string             `json:"body"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	GifUrl    string             `json:"gif_url"`
 }
 
 type EventGeneralVote struct {

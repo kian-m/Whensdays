@@ -158,6 +158,11 @@ test.describe("scheduler", () => {
     await page.reload();
     await expect(page.getByTestId("event-cover")).toHaveAttribute("src", /^data:image\//);
     await expect(page.locator(".event-theme.theme-party")).toBeVisible();
+    // The cover is now the tile's main visual on the dashboard.
+    await page.goto("/");
+    const covRow = page.getByTestId("event-row").filter({ hasText: title }).first();
+    await expect(covRow.getByTestId("event-thumb")).toHaveAttribute("src", /^data:image\//);
+    await covRow.click();
     // Clean up the theme+cover so other shared-user tests see a plain hero.
     await page.getByTestId("edit-event-open").click();
     await page.getByTestId("cover-remove").click();
