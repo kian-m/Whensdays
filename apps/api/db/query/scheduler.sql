@@ -27,7 +27,7 @@ RETURNING user_id, display_name, handle, avatar_url, created_at, email;
 -- ======================== availability ============================
 
 -- name: ListAvailability :many
-SELECT user_id, weekday, part_of_day
+SELECT user_id, weekday, part_of_day, status
 FROM availability_slots
 WHERE user_id = $1
 ORDER BY weekday, part_of_day;
@@ -37,14 +37,14 @@ DELETE FROM availability_slots
 WHERE user_id = $1;
 
 -- name: AddAvailabilitySlot :exec
-INSERT INTO availability_slots (user_id, weekday, part_of_day)
-VALUES ($1, $2, $3)
+INSERT INTO availability_slots (user_id, weekday, part_of_day, status)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT DO NOTHING;
 
 -- ===================== date-based availability ====================
 
 -- name: ListAvailabilityDays :many
-SELECT day, daypart
+SELECT day, daypart, status
 FROM availability_days
 WHERE user_id = $1 AND day >= CURRENT_DATE
 ORDER BY day, daypart;
@@ -54,8 +54,8 @@ DELETE FROM availability_days
 WHERE user_id = $1;
 
 -- name: AddAvailabilityDay :exec
-INSERT INTO availability_days (user_id, day, daypart)
-VALUES ($1, $2, $3)
+INSERT INTO availability_days (user_id, day, daypart, status)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT DO NOTHING;
 
 -- ========================= friendships ============================

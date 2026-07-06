@@ -1026,6 +1026,37 @@ test.describe("scheduler", () => {
     await expect(page.getByText("Availability saved ✓")).toBeVisible();
   });
 
+  test("availability: legend + tri-state free/busy painting", async ({ page }) => {
+    await ensureProfile(page);
+    await page.goto("/profile");
+    await page.getByTestId("avail-edit").click();
+    // A color key explains the three states.
+    await expect(page.getByTestId("avail-legend")).toContainText("Free");
+    await expect(page.getByTestId("avail-legend")).toContainText("Busy");
+    await expect(page.getByTestId("avail-legend")).toContainText("Not set");
+    const cell = page.getByTestId("avail-cell-0-morning");
+    // Default brush is "free": a cell tap turns it green (.on).
+    await expect(page.getByTestId("paint-free")).toHaveClass(/on/);
+    await cell.click();
+    await expect(cell).toHaveClass(/on/);
+    // Switch to the "busy" brush: tapping the same cell repaints it red, never green.
+    await page.getByTestId("paint-busy").click();
+    await cell.click();
+    await expect(cell).toHaveClass(/busy-mark/);
+    await expect(cell).not.toHaveClass(/\bon\b/);
+    // Tapping a busy cell again clears it back to unselected (neither class).
+    await cell.click();
+    await expect(cell).not.toHaveClass(/busy-mark/);
+    await expect(cell).not.toHaveClass(/\bon\b/);
+    // Busy marks persist through a save + reload (the real bug being fixed).
+    await cell.click(); // busy again
+    await page.getByTestId("save-availability").click();
+    await expect(page.getByText("Availability saved ✓")).toBeVisible();
+    await page.reload();
+    await page.getByTestId("avail-edit").click();
+    await expect(page.getByTestId("avail-cell-0-morning")).toHaveClass(/busy-mark/);
+  });
+
   test("availability weekly grid visual baseline", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for a clean, unsaved availability state");
     // A fresh user with no saved availability → deterministic empty grid.

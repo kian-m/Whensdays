@@ -37,8 +37,8 @@ func (q *Queries) AcceptFriendRequest(ctx context.Context, arg AcceptFriendReque
 }
 
 const addAvailabilityDay = `-- name: AddAvailabilityDay :exec
-INSERT INTO availability_days (user_id, day, daypart)
-VALUES ($1, $2, $3)
+INSERT INTO availability_days (user_id, day, daypart, status)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT DO NOTHING
 `
 
@@ -46,16 +46,22 @@ type AddAvailabilityDayParams struct {
 	UserID  string      `json:"user_id"`
 	Day     pgtype.Date `json:"day"`
 	Daypart string      `json:"daypart"`
+	Status  string      `json:"status"`
 }
 
 func (q *Queries) AddAvailabilityDay(ctx context.Context, arg AddAvailabilityDayParams) error {
-	_, err := q.db.Exec(ctx, addAvailabilityDay, arg.UserID, arg.Day, arg.Daypart)
+	_, err := q.db.Exec(ctx, addAvailabilityDay,
+		arg.UserID,
+		arg.Day,
+		arg.Daypart,
+		arg.Status,
+	)
 	return err
 }
 
 const addAvailabilitySlot = `-- name: AddAvailabilitySlot :exec
-INSERT INTO availability_slots (user_id, weekday, part_of_day)
-VALUES ($1, $2, $3)
+INSERT INTO availability_slots (user_id, weekday, part_of_day, status)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT DO NOTHING
 `
 
@@ -63,10 +69,16 @@ type AddAvailabilitySlotParams struct {
 	UserID    string `json:"user_id"`
 	Weekday   int16  `json:"weekday"`
 	PartOfDay string `json:"part_of_day"`
+	Status    string `json:"status"`
 }
 
 func (q *Queries) AddAvailabilitySlot(ctx context.Context, arg AddAvailabilitySlotParams) error {
-	_, err := q.db.Exec(ctx, addAvailabilitySlot, arg.UserID, arg.Weekday, arg.PartOfDay)
+	_, err := q.db.Exec(ctx, addAvailabilitySlot,
+		arg.UserID,
+		arg.Weekday,
+		arg.PartOfDay,
+		arg.Status,
+	)
 	return err
 }
 
@@ -569,7 +581,7 @@ func (q *Queries) ListAttendees(ctx context.Context, eventID pgtype.UUID) ([]Lis
 
 const listAvailability = `-- name: ListAvailability :many
 
-SELECT user_id, weekday, part_of_day
+SELECT user_id, weekday, part_of_day, status
 FROM availability_slots
 WHERE user_id = $1
 ORDER BY weekday, part_of_day
@@ -585,7 +597,12 @@ func (q *Queries) ListAvailability(ctx context.Context, userID string) ([]Availa
 	items := []AvailabilitySlot{}
 	for rows.Next() {
 		var i AvailabilitySlot
-		if err := rows.Scan(&i.UserID, &i.Weekday, &i.PartOfDay); err != nil {
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Weekday,
+			&i.PartOfDay,
+			&i.Status,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -598,7 +615,7 @@ func (q *Queries) ListAvailability(ctx context.Context, userID string) ([]Availa
 
 const listAvailabilityDays = `-- name: ListAvailabilityDays :many
 
-SELECT day, daypart
+SELECT day, daypart, status
 FROM availability_days
 WHERE user_id = $1 AND day >= CURRENT_DATE
 ORDER BY day, daypart
@@ -607,6 +624,7 @@ ORDER BY day, daypart
 type ListAvailabilityDaysRow struct {
 	Day     pgtype.Date `json:"day"`
 	Daypart string      `json:"daypart"`
+	Status  string      `json:"status"`
 }
 
 // ===================== date-based availability ====================
@@ -619,7 +637,7 @@ func (q *Queries) ListAvailabilityDays(ctx context.Context, userID string) ([]Li
 	items := []ListAvailabilityDaysRow{}
 	for rows.Next() {
 		var i ListAvailabilityDaysRow
-		if err := rows.Scan(&i.Day, &i.Daypart); err != nil {
+		if err := rows.Scan(&i.Day, &i.Daypart, &i.Status); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

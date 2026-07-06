@@ -47,13 +47,17 @@ export function Pill({ kind, children }: { kind: string; children: React.ReactNo
 // A toggle grid of rows (dates or weekdays) × columns (time-of-day buckets).
 // Defaults to the 6 DAYPARTS / "avail" test ids (explicit date availability);
 // pass `cols`/`idPrefix` to reuse it for the recurring weekly grid.
+// Cells are tri-state: `free` (green), `busy` (red, user-marked), or neither
+// (neutral gray = unselected). `locked` cells come from an imported calendar —
+// hatched red and non-interactive (you can't edit what your calendar says).
 export function DayGrid({
-  dates, selected, busy, cols = DAYPARTS, idPrefix = "avail",
+  dates, free, busy, locked, cols = DAYPARTS, idPrefix = "avail",
   onToggle, onToggleRow, onToggleCol, readOnly, testid,
 }: {
   dates: { value: string; label: string }[];
-  selected: Set<string>;
+  free: Set<string>;
   busy?: Set<string>;
+  locked?: Set<string>;
   cols?: { value: string; short: string }[];
   idPrefix?: string;
   onToggle?: (day: string, dp: string) => void;
@@ -63,6 +67,18 @@ export function DayGrid({
   testid?: string;
 }) {
   const key = (day: string, dp: string) => `${day}:${dp}`;
+  const cellClass = (k: string) => {
+    if (locked?.has(k)) return "cell locked";
+    if (free.has(k)) return "cell on";
+    if (busy?.has(k)) return "cell busy-mark";
+    return "cell";
+  };
+  const cellTitle = (k: string) => {
+    if (locked?.has(k)) return "busy (from your calendar)";
+    if (free.has(k)) return "free";
+    if (busy?.has(k)) return "busy";
+    return "not set";
+  };
   return (
     <div className="grid" style={{ gridTemplateColumns: `auto repeat(${cols.length}, 1fr)` }} data-testid={testid}>
       <div />
@@ -84,18 +100,32 @@ export function DayGrid({
           )}
           {cols.map((dp) => {
             const k = key(d.value, dp.value);
-            const isBusy = busy?.has(k);
-            const cls = `cell ${isBusy ? "busy" : selected.has(k) ? "on" : ""}`;
+            const isLocked = locked?.has(k);
             return readOnly ? (
-              <div key={dp.value} className={cls} title={isBusy ? "busy" : undefined} />
+              <div key={dp.value} className={cellClass(k)} title={cellTitle(k)} />
             ) : (
               <button key={dp.value} type="button" data-testid={`${idPrefix}-cell-${i}-${dp.value}`}
-                className={cls} disabled={isBusy} title={isBusy ? "busy" : undefined}
+                className={cellClass(k)} disabled={isLocked} title={cellTitle(k)}
                 onClick={() => onToggle?.(d.value, dp.value)} />
             );
           })}
         </Fragment>
       ))}
+    </div>
+  );
+}
+
+// Color key for the tri-state availability grid. Rendered under every grid
+// (your own + a friend's) so the three states are self-explanatory.
+export function AvailLegend({ hasCalendar }: { hasCalendar?: boolean }) {
+  return (
+    <div className="legend" data-testid="avail-legend">
+      <span className="sw"><i style={{ background: "var(--go)" }} /> Free</span>
+      <span className="sw"><i style={{ background: "var(--no)" }} /> Busy</span>
+      <span className="sw"><i style={{ background: "var(--line)" }} /> Not set</span>
+      {hasCalendar && (
+        <span className="sw"><i className="cell locked" style={{ height: 15, borderRadius: 4 }} /> From your calendar</span>
+      )}
     </div>
   );
 }

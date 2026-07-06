@@ -12,12 +12,14 @@ type AvailabilityDay struct {
 	UserID  string      `json:"user_id"`
 	Day     pgtype.Date `json:"day"`
 	Daypart string      `json:"daypart"`
+	Status  string      `json:"status"`
 }
 
 type AvailabilitySlot struct {
 	UserID    string `json:"user_id"`
 	Weekday   int16  `json:"weekday"`
 	PartOfDay string `json:"part_of_day"`
+	Status    string `json:"status"`
 }
 
 type CalendarConnection struct {

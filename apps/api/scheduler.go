@@ -70,9 +70,22 @@ func parseDate(s string) (pgtype.Date, bool) {
 func formatDays(rows []db.ListAvailabilityDaysRow) []map[string]string {
 	out := make([]map[string]string, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, map[string]string{"day": r.Day.Time.Format("2006-01-02"), "daypart": r.Daypart})
+		out = append(out, map[string]string{"day": r.Day.Time.Format("2006-01-02"), "daypart": r.Daypart, "status": r.Status})
 	}
 	return out
+}
+
+// availStatus validates an availability cell status. Empty is allowed for
+// backward compatibility (older clients that only sent free cells) and is
+// treated as "free" by orFree.
+func availStatus(s string) bool { return s == "" || s == "free" || s == "busy" }
+
+// orFree defaults an empty status to "free".
+func orFree(s string) string {
+	if s == "" {
+		return "free"
+	}
+	return s
 }
 
 // dayparts are the coarse time-of-day buckets used by general-availability polls.
@@ -299,13 +312,14 @@ func (s *server) handlePutAvailability(w http.ResponseWriter, r *http.Request) {
 		Slots []struct {
 			Weekday   int16  `json:"weekday"`
 			PartOfDay string `json:"part_of_day"`
+			Status    string `json:"status"`
 		} `json:"slots"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
 	for _, sl := range in.Slots {
-		if sl.Weekday < 0 || sl.Weekday > 6 || !oneOf(sl.PartOfDay, "morning", "afternoon", "evening") {
+		if sl.Weekday < 0 || sl.Weekday > 6 || !oneOf(sl.PartOfDay, "morning", "afternoon", "evening") || !availStatus(sl.Status) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid slot"})
 			return
 		}
@@ -316,7 +330,7 @@ func (s *server) handlePutAvailability(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, sl := range in.Slots {
 		if err := s.queries.AddAvailabilitySlot(r.Context(), db.AddAvailabilitySlotParams{
-			UserID: uid, Weekday: sl.Weekday, PartOfDay: sl.PartOfDay,
+			UserID: uid, Weekday: sl.Weekday, PartOfDay: sl.PartOfDay, Status: orFree(sl.Status),
 		}); err != nil {
 			s.internal(w, "add availability", err)
 			return
@@ -343,6 +357,7 @@ func (s *server) handlePutAvailabilityDays(w http.ResponseWriter, r *http.Reques
 		Days []struct {
 			Day     string `json:"day"`
 			Daypart string `json:"daypart"`
+			Status  string `json:"status"`
 		} `json:"days"`
 	}
 	if !decodeJSON(w, r, &in) {
@@ -355,17 +370,18 @@ func (s *server) handlePutAvailabilityDays(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	type cell struct {
-		d  pgtype.Date
-		dp string
+		d      pgtype.Date
+		dp     string
+		status string
 	}
 	cells := make([]cell, 0, len(in.Days))
 	for _, c := range in.Days {
 		d, ok := parseDate(c.Day)
-		if !ok || !oneOf(c.Daypart, dayparts...) {
+		if !ok || !oneOf(c.Daypart, dayparts...) || !availStatus(c.Status) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid availability cell"})
 			return
 		}
-		cells = append(cells, cell{d, c.Daypart})
+		cells = append(cells, cell{d, c.Daypart, orFree(c.Status)})
 	}
 	if err := s.queries.ClearAvailabilityDays(r.Context(), uid); err != nil {
 		s.internal(w, "clear availability days", err)
@@ -373,7 +389,7 @@ func (s *server) handlePutAvailabilityDays(w http.ResponseWriter, r *http.Reques
 	}
 	for _, c := range cells {
 		if err := s.queries.AddAvailabilityDay(r.Context(), db.AddAvailabilityDayParams{
-			UserID: uid, Day: c.d, Daypart: c.dp,
+			UserID: uid, Day: c.d, Daypart: c.dp, Status: c.status,
 		}); err != nil {
 			s.internal(w, "add availability day", err)
 			return

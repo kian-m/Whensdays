@@ -204,7 +204,8 @@ export type EventDetail = {
 export type Badges = { invites: number; friend_requests: number };
 
 export type Profile = { user_id: string; display_name: string; handle: string; avatar_url: string; created_at: string; email: string };
-export type AvailabilitySlot = { user_id: string; weekday: number; part_of_day: string };
+export type AvailStatus = "free" | "busy";
+export type AvailabilitySlot = { user_id: string; weekday: number; part_of_day: string; status?: AvailStatus };
 export type Friend = { id: string; friend_id: string; display_name: string; handle: string; avatar_url: string };
 export type FriendRequest = { id: string; requester_id?: string; addressee_id?: string; display_name: string; handle: string };
 export type Commitment = { id: string; title: string; starts_at: string };
@@ -271,7 +272,7 @@ export const DAYPARTS: { value: string; label: string; short: string }[] = [
   { value: "night", label: "Night", short: "Night" },
 ];
 
-export type AvailabilityDay = { day: string; daypart: string };
+export type AvailabilityDay = { day: string; daypart: string; status?: AvailStatus };
 
 // n calendar days starting `startOffset` days from today, as
 // { value: "YYYY-MM-DD", label: "Fri Jun 27" }. Used for paginating the explicit

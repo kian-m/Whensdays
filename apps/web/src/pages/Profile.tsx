@@ -18,7 +18,7 @@ import {
   useProfile,
 } from "../lib";
 import { useSearchParams } from "react-router-dom";
-import { Avatar, DayGrid, Loading, Toast, fileToAvatar, useAsync } from "../ui";
+import { AvailLegend, Avatar, DayGrid, Loading, Toast, fileToAvatar, useAsync } from "../ui";
 import { CalendarConnections } from "./Calendars";
 
 const PAGE = 14; // days of explicit availability shown per page
@@ -57,28 +57,45 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
 
   // Availability: a mode toggle plus the two data sets.
   const [mode, setMode] = useState<"specific" | "weekly">("specific");
+  // Which color a header-fill tap paints. Cells always toggle; the toggle just
+  // flips whether "fill row/column" means mark-free or mark-busy.
+  const [paintMode, setPaintMode] = useState<"free" | "busy">("free");
   const [editingAvail, setEditingAvail] = useState(false);
   const [theme, setTheme] = useState<Theme>(getTheme());
   const [pageOffset, setPageOffset] = useState(0);
   const dates = daysFrom(pageOffset, PAGE);
 
+  // Each grid is tri-state: a cell is in `free` (green), `busy` (red), or neither
+  // (unselected). The two sets are always disjoint — painting one clears the other.
+  const [free, setFree] = useState<Set<string>>(new Set());
+  const [dayBusy, setDayBusy] = useState<Set<string>>(new Set());
+  const [week, setWeek] = useState<Set<string>>(new Set());
+  const [weekBusy, setWeekBusy] = useState<Set<string>>(new Set());
+
+  const asFree = (rows: { key: string; status?: string }[]) => new Set(rows.filter((r) => r.status !== "busy").map((r) => r.key));
+  const asBusy = (rows: { key: string; status?: string }[]) => new Set(rows.filter((r) => r.status === "busy").map((r) => r.key));
+
   // Explicit date-based availability (the full set across all pages).
   const { data: days, loading } = useAsync<AvailabilityDay[]>((a) => getJSON(a, "/api/availability/days"));
-  const [free, setFree] = useState<Set<string>>(new Set());
   useEffect(() => {
-    if (days) setFree(new Set(days.map((d) => `${d.day}:${d.daypart}`)));
+    if (!days) return;
+    const rows = days.map((d) => ({ key: `${d.day}:${d.daypart}`, status: d.status }));
+    setFree(asFree(rows));
+    setDayBusy(asBusy(rows));
   }, [days]);
 
   // Recurring weekly availability.
   const { data: slots } = useAsync<AvailabilitySlot[]>((a) => getJSON(a, "/api/availability"));
+  useEffect(() => {
+    if (!slots) return;
+    const rows = slots.map((s) => ({ key: `${s.weekday}:${s.part_of_day}`, status: s.status }));
+    setWeek(asFree(rows));
+    setWeekBusy(asBusy(rows));
+  }, [slots]);
 
-  // Imported-calendar busy times overlay the specific-dates grid (read-only).
+  // Imported-calendar busy times lock cells in the specific-dates grid (read-only).
   const { data: cal } = useAsync<{ events: ImportedEvent[] }>((a) => getJSON(a, "/api/calendar/events"));
   const busyCells = importedBusy(cal?.events ?? []).cells;
-  const [week, setWeek] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (slots) setWeek(new Set(slots.map((s) => `${s.weekday}:${s.part_of_day}`)));
-  }, [slots]);
 
   function mutate(setter: typeof setFree, fn: (s: Set<string>) => void) {
     setter((prev) => {
@@ -88,31 +105,49 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
     });
   }
 
-  // --- explicit-date grid handlers (operate on `free`) ---
-  const toggleCell = (day: string, dp: string) => mutate(setFree, (s) => (s.has(`${day}:${dp}`) ? s.delete(`${day}:${dp}`) : s.add(`${day}:${dp}`)));
-  const toggleRow = (day: string) => mutate(setFree, (s) => {
-    const keys = DAYPARTS.map((dp) => `${day}:${dp.value}`);
-    const full = keys.every((k) => s.has(k));
-    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
-  });
-  const toggleCol = (dp: string) => mutate(setFree, (s) => {
-    const keys = dates.map((d) => `${d.value}:${dp}`);
-    const full = keys.every((k) => s.has(k));
-    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
-  });
+  type Grid = {
+    free: Set<string>; setFree: typeof setFree;
+    busy: Set<string>; setBusy: typeof setFree;
+    locked?: Set<string>;
+  };
 
-  // --- weekly grid handlers (operate on `week`, keyed "weekday:part") ---
-  const toggleWeekCell = (wd: string, dp: string) => mutate(setWeek, (s) => (s.has(`${wd}:${dp}`) ? s.delete(`${wd}:${dp}`) : s.add(`${wd}:${dp}`)));
-  const toggleWeekRow = (wd: string) => mutate(setWeek, (s) => {
-    const keys = WEEK_PARTS.map((p) => `${wd}:${p.value}`);
-    const full = keys.every((k) => s.has(k));
-    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
-  });
-  const toggleWeekCol = (dp: string) => mutate(setWeek, (s) => {
-    const keys = WEEK_ROWS.map((r) => `${r.value}:${dp}`);
-    const full = keys.every((k) => s.has(k));
-    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
-  });
+  // Tap a cell: paint it the active brush's color, or clear it if it already is.
+  // In "busy" mode a tap can never turn a cell green (and vice-versa).
+  function paintCell(g: Grid, k: string) {
+    if (paintMode === "free") {
+      if (g.free.has(k)) mutate(g.setFree, (s) => s.delete(k));
+      else { mutate(g.setFree, (s) => s.add(k)); mutate(g.setBusy, (s) => s.delete(k)); }
+    } else {
+      if (g.busy.has(k)) mutate(g.setBusy, (s) => s.delete(k));
+      else { mutate(g.setBusy, (s) => s.add(k)); mutate(g.setFree, (s) => s.delete(k)); }
+    }
+  }
+
+  // Tap a row/date or column header: fill the whole line with the active brush,
+  // or clear it if the line is already entirely that color. Locked cells are skipped.
+  function paintLine(g: Grid, keys: string[]) {
+    const cells = keys.filter((k) => !g.locked?.has(k));
+    if (paintMode === "free") {
+      if (cells.every((k) => g.free.has(k))) mutate(g.setFree, (s) => cells.forEach((k) => s.delete(k)));
+      else { mutate(g.setFree, (s) => cells.forEach((k) => s.add(k))); mutate(g.setBusy, (s) => cells.forEach((k) => s.delete(k))); }
+    } else {
+      if (cells.every((k) => g.busy.has(k))) mutate(g.setBusy, (s) => cells.forEach((k) => s.delete(k)));
+      else { mutate(g.setBusy, (s) => cells.forEach((k) => s.add(k))); mutate(g.setFree, (s) => cells.forEach((k) => s.delete(k))); }
+    }
+  }
+
+  const dateGrid: Grid = { free, setFree, busy: dayBusy, setBusy: setDayBusy, locked: busyCells };
+  const weekGrid: Grid = { free: week, setFree: setWeek, busy: weekBusy, setBusy: setWeekBusy };
+
+  // --- explicit-date grid handlers ---
+  const toggleCell = (day: string, dp: string) => paintCell(dateGrid, `${day}:${dp}`);
+  const toggleRow = (day: string) => paintLine(dateGrid, DAYPARTS.map((dp) => `${day}:${dp.value}`));
+  const toggleCol = (dp: string) => paintLine(dateGrid, dates.map((d) => `${d.value}:${dp}`));
+
+  // --- weekly grid handlers (keyed "weekday:part") ---
+  const toggleWeekCell = (wd: string, dp: string) => paintCell(weekGrid, `${wd}:${dp}`);
+  const toggleWeekRow = (wd: string) => paintLine(weekGrid, WEEK_PARTS.map((p) => `${wd}:${p.value}`));
+  const toggleWeekCol = (dp: string) => paintLine(weekGrid, WEEK_ROWS.map((r) => `${r.value}:${dp}`));
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -148,20 +183,20 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   }
 
   async function saveAvailability() {
-    const payload = [...free].map((k) => {
-      const [day, daypart] = k.split(":");
-      return { day, daypart };
-    });
+    const payload = [
+      ...[...free].map((k) => { const [day, daypart] = k.split(":"); return { day, daypart, status: "free" }; }),
+      ...[...dayBusy].map((k) => { const [day, daypart] = k.split(":"); return { day, daypart, status: "busy" }; }),
+    ];
     await sendJSON(api, "PUT", "/api/availability/days", { days: payload });
     setSavedMsg("Availability saved ✓");
     setEditingAvail(false);
   }
 
   async function saveWeekly() {
-    const slotsPayload = [...week].map((k) => {
-      const [wd, part_of_day] = k.split(":");
-      return { weekday: Number(wd), part_of_day };
-    });
+    const slotsPayload = [
+      ...[...week].map((k) => { const [wd, part_of_day] = k.split(":"); return { weekday: Number(wd), part_of_day, status: "free" }; }),
+      ...[...weekBusy].map((k) => { const [wd, part_of_day] = k.split(":"); return { weekday: Number(wd), part_of_day, status: "busy" }; }),
+    ];
     await sendJSON(api, "PUT", "/api/availability", { slots: slotsPayload });
     setSavedMsg("Availability saved ✓");
     setEditingAvail(false);
@@ -169,8 +204,16 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
 
   // Discard edits: restore both grids from the last-loaded server data.
   function cancelAvail() {
-    if (days) setFree(new Set(days.map((d) => `${d.day}:${d.daypart}`)));
-    if (slots) setWeek(new Set(slots.map((sl) => `${sl.weekday}:${sl.part_of_day}`)));
+    if (days) {
+      const rows = days.map((d) => ({ key: `${d.day}:${d.daypart}`, status: d.status }));
+      setFree(asFree(rows));
+      setDayBusy(asBusy(rows));
+    }
+    if (slots) {
+      const rows = slots.map((sl) => ({ key: `${sl.weekday}:${sl.part_of_day}`, status: sl.status }));
+      setWeek(asFree(rows));
+      setWeekBusy(asBusy(rows));
+    }
     setEditingAvail(false);
   }
 
@@ -263,21 +306,31 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
 
         {!editingAvail && (
           <p className="muted small" data-testid="avail-readonly">
-            {(mode === "weekly" ? week.size : free.size) === 0
-              ? "You haven't set your availability yet. Tap Edit to add the times you're free — friends can see this."
-              : "The times you're free (friends can see this). Tap Edit to change."}
+            {(mode === "weekly" ? week.size + weekBusy.size : free.size + dayBusy.size) === 0
+              ? "You haven't set your availability yet. Tap Edit, then mark when you're free (green) or busy (red) — friends can see this."
+              : "Green is when you're free, red is when you're busy, blank is unset (friends can see this). Tap Edit to change."}
           </p>
+        )}
+
+        {editingAvail && (
+          <div className="row" style={{ gap: 8, alignItems: "center" }} data-testid="paint-toggle">
+            <span className="muted small">Tap to mark cells as:</span>
+            <button type="button" className={`chip sm ${paintMode === "free" ? "on" : ""}`}
+              data-testid="paint-free" onClick={() => setPaintMode("free")}>🟩 Free</button>
+            <button type="button" className={`chip sm ${paintMode === "busy" ? "on" : ""}`}
+              data-testid="paint-busy" onClick={() => setPaintMode("busy")}>🟥 Busy</button>
+          </div>
         )}
 
         {mode === "weekly" ? (
           <>
-            {editingAvail && <p className="muted small">Tap the times you're usually free each week.</p>}
-            <DayGrid dates={WEEK_ROWS} selected={week} cols={WEEK_PARTS} idPrefix="wk" readOnly={!editingAvail}
+            {editingAvail && <p className="muted small">Tap a cell to mark it {paintMode}; tap again to clear it. A row/column header fills the whole line.</p>}
+            <DayGrid dates={WEEK_ROWS} free={week} busy={weekBusy} cols={WEEK_PARTS} idPrefix="wk" readOnly={!editingAvail}
               onToggle={toggleWeekCell} onToggleRow={toggleWeekRow} onToggleCol={toggleWeekCol} testid="weekly-grid" />
           </>
         ) : (
           <>
-            {editingAvail && <p className="muted small">Tap the times you're free on each date (tap a date or column header to fill it).</p>}
+            {editingAvail && <p className="muted small">Tap a cell to mark it {paintMode}; tap again to clear it. A date/column header fills the whole line.</p>}
             <div className="row between" style={{ alignItems: "center" }}>
               <button type="button" className="btn ghost sm" data-testid="avail-earlier"
                 disabled={pageOffset === 0} onClick={() => setPageOffset((o) => Math.max(0, o - PAGE))}>← Earlier</button>
@@ -285,10 +338,12 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
               <button type="button" className="btn ghost sm" data-testid="avail-later"
                 disabled={pageOffset >= MAX_OFFSET} onClick={() => setPageOffset((o) => Math.min(MAX_OFFSET, o + PAGE))}>Later →</button>
             </div>
-            <DayGrid dates={dates} selected={free} busy={busyCells} readOnly={!editingAvail}
+            <DayGrid dates={dates} free={free} busy={dayBusy} locked={busyCells} readOnly={!editingAvail}
               onToggle={toggleCell} onToggleRow={toggleRow} onToggleCol={toggleCol} testid="availability-grid" />
           </>
         )}
+
+        <AvailLegend hasCalendar={mode === "specific" && busyCells.size > 0} />
 
         {editingAvail && (
           <div className="row">

@@ -10,7 +10,7 @@ import {
   sendJSON,
   useApi,
 } from "../lib";
-import { Avatar, DayGrid, Loading, useAsync } from "../ui";
+import { AvailLegend, Avatar, DayGrid, Loading, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 type Suggestion = { friend_id: string; display_name: string; handle: string; avatar_url: string; score: number; shared_events: number };
@@ -142,7 +142,8 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
     setOpen((o) => !o);
   }
 
-  const free = new Set((avail?.days ?? []).map((d) => `${d.day}:${d.daypart}`));
+  const free = new Set((avail?.days ?? []).filter((d) => d.status !== "busy").map((d) => `${d.day}:${d.daypart}`));
+  const busy = new Set((avail?.days ?? []).filter((d) => d.status === "busy").map((d) => `${d.day}:${d.daypart}`));
 
   return (
     <div className="card stack">
@@ -161,7 +162,8 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
       </div>
       {open && avail && (
         <div className="stack">
-          <DayGrid dates={nextDays(14)} selected={free} readOnly testid="friend-availability" />
+          <DayGrid dates={nextDays(14)} free={free} busy={busy} readOnly testid="friend-availability" />
+          <AvailLegend />
           {avail.commitments.length > 0 && (
             <div className="small">
               <span className="muted">Booked: </span>

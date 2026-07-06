@@ -185,11 +185,26 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .grid .hd { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-align: center; }
 .grid .day { font-size: 0.85rem; font-weight: 600; }
+/* Availability cells are tri-state:
+   neutral (unselected) · green .on (free) · red .busy-mark (busy). */
 .cell {
-  height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer;
+  height: 34px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
 }
-.cell.on { background: var(--accent); border-color: var(--accent); }
-.cell.busy { background: rgba(207, 94, 94, 0.18); border-color: transparent; cursor: not-allowed; }
+.cell.on { background: var(--go); border-color: var(--go); }
+.cell.busy-mark { background: var(--no); border-color: var(--no); }
+/* Busy pulled from an imported calendar — locked, hatched red so it reads as
+   "busy, and not yours to edit". */
+.cell.locked {
+  cursor: not-allowed; border-color: transparent;
+  background:
+    repeating-linear-gradient(45deg, transparent 0 5px, rgba(226, 114, 110, 0.35) 5px 7px),
+    color-mix(in srgb, var(--no) 16%, var(--surface));
+}
+/* Color key shown under every availability grid. */
+.legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 0.8rem; color: var(--muted); }
+.legend .sw { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw i { width: 15px; height: 15px; border-radius: 4px; display: inline-block; }
 /* clickable row/column labels in the availability grid */
 .gp-head { background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
 .gp-head:hover { color: var(--accent); }
