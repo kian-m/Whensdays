@@ -89,7 +89,13 @@ func (s *server) discoverFor(w http.ResponseWriter, r *http.Request, viewer stri
 		s.internal(w, "discover", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+	// Category chips render only for topics with something to show.
+	topics, err := s.queries.ListActiveTopics(r.Context())
+	if err != nil {
+		s.internal(w, "active topics", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events, "topics": topics})
 }
 
 // handleFeed returns the ranked "For you" feed (auth required): every upcoming

@@ -19,6 +19,7 @@ export function Discover() {
   const [events, setEvents] = useState<PublicEvent[] | null>(null);
   const [feed, setFeed] = useState<PublicEvent[]>([]);
   const [follows, setFollows] = useState<Follow[]>([]);
+  const [activeTopics, setActiveTopics] = useState<string[]>([]);
 
   // Browse: the public endpoint signed-out; the authed twin adds per-viewer
   // annotations (friends going, your RSVP, friend-hosted) for tile styling.
@@ -29,7 +30,11 @@ export function Discover() {
     const res = profile
       ? await api(`/api/discover/mine?${p.toString()}`)
       : await fetch(`/api/discover?${p.toString()}`);
-    if (res.ok) setEvents((await res.json()).events ?? []);
+    if (res.ok) {
+      const b = await res.json();
+      setEvents(b.events ?? []);
+      setActiveTopics(b.topics ?? []);
+    }
   }, [topic, city, profile, api]);
   useEffect(() => {
     load();
@@ -73,8 +78,10 @@ export function Discover() {
       <h1>Discover</h1>
       <p className="muted small">Public Whensdays anyone can join — streams, meetups, game nights. Filter by topic or city.</p>
 
+      {/* Only categories that currently have an upcoming public event render
+          (the selected one stays visible so it can be unselected). */}
       <div className="row wrap" style={{ gap: 4 }}>
-        {CATEGORIES.map((c) => (
+        {CATEGORIES.filter((c) => activeTopics.includes(c.slug) || topic === c.slug).map((c) => (
           <button key={c.slug} type="button" className={`chip sm ${topic === c.slug ? "on" : ""}`}
             data-testid={`disc-cat-${c.slug}`}
             onClick={() => setTopic(topic === c.slug ? "" : c.slug)}>{c.emoji} {c.label}</button>

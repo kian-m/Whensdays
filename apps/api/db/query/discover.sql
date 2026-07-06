@@ -149,3 +149,12 @@ WHERE me.user_id = $1
 GROUP BY other.user_id, p.display_name, p.handle, p.avatar_url
 ORDER BY score DESC, shared_events DESC
 LIMIT 12;
+
+-- name: ListActiveTopics :many
+-- Topics that currently have at least one upcoming public event — drives the
+-- Discover category chips (only categories with something to show render).
+SELECT DISTINCT topic
+FROM events
+WHERE visibility = 'public' AND status <> 'cancelled' AND topic <> ''
+  AND (starts_at IS NULL OR starts_at >= now())
+ORDER BY topic;

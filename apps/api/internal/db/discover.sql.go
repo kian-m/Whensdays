@@ -98,6 +98,36 @@ func (q *Queries) CountGoingForPublicUpcoming(ctx context.Context) ([]CountGoing
 	return items, nil
 }
 
+const listActiveTopics = `-- name: ListActiveTopics :many
+SELECT DISTINCT topic
+FROM events
+WHERE visibility = 'public' AND status <> 'cancelled' AND topic <> ''
+  AND (starts_at IS NULL OR starts_at >= now())
+ORDER BY topic
+`
+
+// Topics that currently have at least one upcoming public event — drives the
+// Discover category chips (only categories with something to show render).
+func (q *Queries) ListActiveTopics(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveTopics)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var topic string
+		if err := rows.Scan(&topic); err != nil {
+			return nil, err
+		}
+		items = append(items, topic)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEventsNeedingReminder = `-- name: ListEventsNeedingReminder :many
 
 SELECT id, host_id, title, event_type, description,
