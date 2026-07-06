@@ -92,6 +92,7 @@ jobs:
           rm -f apps/web/public/_redirects
       - run: pnpm build:web
         env:
+          VITE_APP_ORIGIN: ${{ secrets.APP_ORIGIN }} # absolute URLs for the landing og: tags
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
           VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST }}
