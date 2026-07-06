@@ -44,9 +44,14 @@ ON CONFLICT DO NOTHING;
 -- ===================== date-based availability ====================
 
 -- name: ListAvailabilityDays :many
+-- The `- 1 day` tolerance keeps "today" from being pruned when the server (UTC)
+-- is a calendar day ahead of the client's local date — otherwise an evening save
+-- in a western-hemisphere timezone loses its top (today) row on reload. One extra
+-- past day is harmless: the client's grid starts at its own local today and never
+-- renders it.
 SELECT day, daypart, status
 FROM availability_days
-WHERE user_id = $1 AND day >= CURRENT_DATE
+WHERE user_id = $1 AND day >= CURRENT_DATE - INTERVAL '1 day'
 ORDER BY day, daypart;
 
 -- name: ClearAvailabilityDays :exec
