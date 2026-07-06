@@ -112,7 +112,13 @@ a { color: inherit; text-decoration: none; }
   padding: 1.1rem 0 1.4rem;
 }
 .brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.15rem; }
-.brand .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); display: inline-block; }
+/* The dot is the logo (apps/web/public/icon.svg) — same asset as the favicon/PWA icon. */
+.brand .dot {
+  width: 24px; height: 24px; display: inline-block;
+  background: url("/icon.svg") center / contain no-repeat;
+}
+/* Top-corner navs show the logo alone (no wordmark) — give it more presence. */
+.nav .brand .dot { width: 34px; height: 34px; }
 .nav-right { display: flex; align-items: center; gap: 0.4rem; }
 .nav-links { display: flex; align-items: center; gap: 0.4rem; }
 .nav-links a {

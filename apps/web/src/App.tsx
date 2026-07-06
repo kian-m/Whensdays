@@ -108,7 +108,7 @@ function GuestOrLanding() {
     return (
       <div className="app">
         <nav className="nav">
-          <NavLink to="/" className="brand"><span className="dot" /> Whensdays</NavLink>
+          <NavLink to="/" className="brand" aria-label="Whensdays"><span className="dot" /></NavLink>
           <SignInButton mode="modal"><button className="btn sm">Sign in</button></SignInButton>
         </nav>
         <Suspense fallback={<Loading />}><Discover /></Suspense>
@@ -347,8 +347,8 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
   return (
     <div className="app">
       <nav className="nav">
-        <NavLink to="/" className="brand">
-          <span className="dot" /> Whensdays
+        <NavLink to="/" className="brand" aria-label="Whensdays">
+          <span className="dot" />
         </NavLink>
         {!hideNav && (
           <div className="nav-right">
