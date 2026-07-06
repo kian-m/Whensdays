@@ -61,9 +61,11 @@ test: ## Run unit tests (go) + typecheck (web)
 e2e: ## Run Playwright visual end-to-end tests (needs local toolchains)
 	pnpm e2e
 
+# NOTE: down -v must run even when the suite fails — a leaked DB volume feeds
+# the next run's "fresh" pass with stale events and cascades into bogus failures.
 e2e-docker: ## Run the FULL e2e in containers — only Docker required, nothing else installed
-	docker compose -f compose.e2e.yaml up --build --abort-on-container-exit --exit-code-from e2e
-	docker compose -f compose.e2e.yaml down -v
+	docker compose -f compose.e2e.yaml up --build --abort-on-container-exit --exit-code-from e2e; \
+	ec=$$?; docker compose -f compose.e2e.yaml down -v; exit $$ec
 
 docs-shots: ## Regenerate README feature screenshots from the live app (Docker only)
 	docker compose -f compose.docs.yaml up --build --abort-on-container-exit --exit-code-from shots
