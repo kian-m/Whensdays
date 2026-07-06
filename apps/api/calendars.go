@@ -54,20 +54,23 @@ func (s *server) handleEventICS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ics := buildICS(ev, time.Now().UTC())
+	ics := buildICS(ev, time.Now().UTC(), s.ogBaseURL(r)+"/e/"+uuidStr(ev.ID))
 	s.analytics.Capture(uid, "event_exported", map[string]any{
 		"event_id": uuidStr(ev.ID),
 		"format":   "ics",
 	})
 	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", icsFilename(ev.Title)))
+	// inline (not attachment): iOS/macOS Safari then open the event preview
+	// directly in Calendar instead of routing through the download manager.
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", icsFilename(ev.Title)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(ics))
 }
 
 // buildICS renders a one-event VCALENDAR. now stamps DTSTAMP (passed in so the
-// output is deterministic in tests).
-func buildICS(ev db.Event, now time.Time) string {
+// output is deterministic in tests). link (the event's invite URL) rides in
+// URL: and at the end of DESCRIPTION so every calendar app keeps a way back.
+func buildICS(ev db.Event, now time.Time, link string) string {
 	start := ev.StartsAt.Time.UTC()
 	end := start.Add(exportDuration)
 
@@ -90,8 +93,18 @@ func buildICS(ev db.Event, now time.Time) string {
 	b.WriteString("DTSTART:" + start.Format(icsTimeFmt) + "\r\n")
 	b.WriteString("DTEND:" + end.Format(icsTimeFmt) + "\r\n")
 	b.WriteString("SUMMARY:" + icsEscape(ev.Title) + "\r\n")
-	if ev.Description != "" {
-		b.WriteString("DESCRIPTION:" + icsEscape(ev.Description) + "\r\n")
+	desc := ev.Description
+	if link != "" {
+		if desc != "" {
+			desc += "\n\n"
+		}
+		desc += "RSVP & details: " + link
+	}
+	if desc != "" {
+		b.WriteString("DESCRIPTION:" + icsEscape(desc) + "\r\n")
+	}
+	if link != "" {
+		b.WriteString("URL:" + link + "\r\n")
 	}
 	b.WriteString("LOCATION:" + icsEscape(location) + "\r\n")
 	b.WriteString("END:VEVENT\r\n")

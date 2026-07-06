@@ -134,7 +134,10 @@ func main() {
 	mux.Handle("PUT /api/events/{id}/comments-enabled", auth(http.HandlerFunc(s.handleSetCommentsEnabled)))
 	mux.Handle("POST /api/events/{id}/cohosts", auth(http.HandlerFunc(s.handleAddCohost)))
 	mux.Handle("DELETE /api/events/{id}/cohosts/{userId}", auth(http.HandlerFunc(s.handleRemoveCohost)))
-	mux.Handle("GET /api/events/{id}/calendar.ics", auth(http.HandlerFunc(s.handleEventICS)))
+	// Public on purpose: the event id IS the invite capability (same fields the
+	// OG unfurl already serves), and a bare <a href> can't attach a bearer —
+	// this is what lets iOS open the invite directly in Calendar.
+	mux.Handle("GET /api/events/{id}/calendar.ics", http.HandlerFunc(s.handleEventICS))
 
 	// Calendar import (see calendars_import.go). The Google OAuth callback is
 	// intentionally UNauthenticated — Google redirects the browser to it with no

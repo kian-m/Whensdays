@@ -171,7 +171,7 @@ func testEvent(t *testing.T) db.Event {
 func TestBuildICS(t *testing.T) {
 	ev := testEvent(t)
 	now := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
-	got := buildICS(ev, now)
+	got := buildICS(ev, now, "https://whensdays.app/e/11111111-2222-3333-4444-555555555555")
 
 	wants := []string{
 		"BEGIN:VCALENDAR\r\n",
@@ -182,7 +182,8 @@ func TestBuildICS(t *testing.T) {
 		"DTSTART:20260715T190000Z\r\n",
 		"DTEND:20260715T210000Z\r\n",         // +2h default duration
 		"SUMMARY:Dinner\\; with friends\r\n", // semicolon escaped
-		"DESCRIPTION:Bring a bottle\\nof wine\r\n",
+		"DESCRIPTION:Bring a bottle\\nof wine\\n\\nRSVP & details: https://whensdays.app/e/11111111-2222-3333-4444-555555555555\r\n",
+		"URL:https://whensdays.app/e/11111111-2222-3333-4444-555555555555\r\n",
 		"LOCATION:12 Main St\r\n",
 		"END:VEVENT\r\n",
 		"END:VCALENDAR\r\n",
@@ -198,13 +199,13 @@ func TestBuildICSLocationModes(t *testing.T) {
 	ev := testEvent(t)
 	ev.LocationMode = "find_venue"
 	ev.LocationAddress = ""
-	if !strings.Contains(buildICS(ev, time.Now()), "LOCATION:Venue to be decided\r\n") {
+	if !strings.Contains(buildICS(ev, time.Now(), ""), "LOCATION:Venue to be decided\r\n") {
 		t.Error("find_venue should render a placeholder location")
 	}
 
 	ev.LocationMode = "host_place"
 	ev.LocationAddress = ""
-	if !strings.Contains(buildICS(ev, time.Now()), "LOCATION:Address to come\r\n") {
+	if !strings.Contains(buildICS(ev, time.Now(), ""), "LOCATION:Address to come\r\n") {
 		t.Error("empty host_place address should render a placeholder")
 	}
 }
@@ -239,7 +240,11 @@ func TestICSFilename(t *testing.T) {
 func TestEmptyDescriptionOmitted(t *testing.T) {
 	ev := testEvent(t)
 	ev.Description = ""
-	if strings.Contains(buildICS(ev, time.Now()), "DESCRIPTION:") {
-		t.Error("empty description should be omitted entirely")
+	if strings.Contains(buildICS(ev, time.Now(), ""), "DESCRIPTION:") {
+		t.Error("empty description with no link should be omitted entirely")
+	}
+	// With a link, DESCRIPTION carries the way back to the event.
+	if !strings.Contains(buildICS(ev, time.Now(), "https://x/e/1"), "DESCRIPTION:RSVP & details: https://x/e/1\r\n") {
+		t.Error("link should synthesize a DESCRIPTION")
 	}
 }

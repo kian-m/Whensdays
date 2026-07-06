@@ -175,11 +175,12 @@ function googleCalendarUrl(e: EventDetail["event"]): string {
   const start = new Date(e.starts_at!);
   const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
   const location = e.location_mode === "find_venue" ? "Venue to be decided" : e.location_address || "Address to come";
+  const link = `${window.location.origin}/e/${e.id}`;
   const p = new URLSearchParams({
     action: "TEMPLATE",
     text: e.title,
     dates: `${gcalStamp(start)}/${gcalStamp(end)}`,
-    details: e.description || "",
+    details: `${e.description ? e.description + "\n\n" : ""}RSVP & details: ${link}`,
     location,
   });
   return `https://calendar.google.com/calendar/render?${p.toString()}`;
@@ -212,11 +213,13 @@ function AddToCalendar({ event }: { event: EventDetail["event"] }) {
   return (
     <div className="card stack" data-testid="add-to-calendar">
       <h3 style={{ margin: 0 }}>Add to your calendar</h3>
-      <p className="muted small" style={{ margin: 0 }}>Save this get-together to Apple, Google, Outlook or any other calendar.</p>
+      <p className="muted small" style={{ margin: 0 }}>One tap — title, time and a link back to this page ride along.</p>
       <div className="row" style={{ gap: "0.6rem", flexWrap: "wrap" }}>
-        <button className="btn sm" data-testid="download-ics" disabled={busy} onClick={downloadICS}>
-          ⬇️ Download .ics
-        </button>
+        {/* Plain link (no fetch): iPhone/Mac open the .ics straight in Calendar. */}
+        <a className="btn sm" data-testid="add-apple" href={`/api/events/${event.id}/calendar.ics`}
+          onClick={() => analytics.capture(EVENTS.addToCalendarClicked, { target: "apple" })}>
+           Apple Calendar
+        </a>
         <a
           className="btn ghost sm"
           data-testid="add-google"
@@ -225,8 +228,11 @@ function AddToCalendar({ event }: { event: EventDetail["event"] }) {
           rel="noopener noreferrer"
           onClick={() => analytics.capture(EVENTS.addToCalendarClicked, { target: "google" })}
         >
-          📅 Add to Google Calendar
+          📅 Google Calendar
         </a>
+        <button className="btn ghost sm" data-testid="download-ics" disabled={busy} onClick={downloadICS}>
+          ⬇️ .ics file
+        </button>
       </div>
     </div>
   );
