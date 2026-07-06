@@ -29,12 +29,12 @@ test.describe("docs screenshots", () => {
     // Feature: home dashboard (this is the gallery home-page screenshot).
     await page.goto("/");
     await page.getByTestId("event-row").first().waitFor();
-    await page.screenshot({ path: `${OUT}/01-scheduler-home.png`, fullPage: true });
+    await page.screenshot({ path: `${OUT}/01-scheduler-home.png`, fullPage: true, animations: "disabled" });
 
     // Feature: event page (host view) with the invite link + management.
     await page.getByTestId("event-row").first().click();
     await page.getByTestId("share-link").waitFor();
-    await page.screenshot({ path: `${OUT}/02-scheduler-event.png`, fullPage: true });
+    await page.screenshot({ path: `${OUT}/02-scheduler-event.png`, fullPage: true, animations: "disabled" });
 
     // Feature: general-availability poll — the per-day time grid (guest view).
     await page.goto("/new");
@@ -50,7 +50,7 @@ test.describe("docs screenshots", () => {
       await page.getByTestId(cell).click();
     }
     await page.getByTestId("gp-month-0").click();
-    await page.screenshot({ path: `${OUT}/03-scheduler-general-poll.png`, fullPage: true });
+    await page.screenshot({ path: `${OUT}/03-scheduler-general-poll.png`, fullPage: true, animations: "disabled" });
 
     // Feature: explicit date-based availability on the profile.
     await page.goto("/profile");
@@ -59,7 +59,7 @@ test.describe("docs screenshots", () => {
     for (const c of ["avail-cell-1-evening", "avail-cell-2-noon", "avail-cell-2-afternoon", "avail-cell-5-morning", "avail-cell-6-evening"]) {
       await page.getByTestId(c).click();
     }
-    await page.screenshot({ path: `${OUT}/04-scheduler-availability.png`, fullPage: true });
+    await page.screenshot({ path: `${OUT}/04-scheduler-availability.png`, fullPage: true, animations: "disabled" });
 
     // Feature: calendar view (connect via profile in stub mode, then the grid).
     await page.goto("/profile");
@@ -68,7 +68,7 @@ test.describe("docs screenshots", () => {
     }
     await page.goto("/calendars");
     await page.getByTestId("cal-month").waitFor();
-    await page.screenshot({ path: `${OUT}/05-scheduler-calendars.png`, fullPage: true });
+    await page.screenshot({ path: `${OUT}/05-scheduler-calendars.png`, fullPage: true, animations: "disabled" });
   });
 });
 
