@@ -1013,6 +1013,7 @@ test.describe("scheduler", () => {
       await expect(guest.getByTestId("event-title")).toHaveText(title);
       // The conversion nudge shows for guest identities.
       await expect(guest.getByTestId("guest-banner")).toBeVisible();
+      await expect(guest.getByTestId("guest-signup")).toBeVisible(); // conversion CTA
       await guest.getByTestId("rsvp-going").click();
       await guest.getByTestId("comment-input").fill("So excited!");
       await guest.getByTestId("comment-post").click();

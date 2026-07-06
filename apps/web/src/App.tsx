@@ -378,9 +378,13 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
           <span className="row" style={{ gap: 6 }}>
             <button className="btn ghost sm" data-testid="guest-reset"
               onClick={() => { localStorage.removeItem(GUEST_KEY); location.href = "/"; }}>Start over</button>
-            {!DEV_AUTH && (
+            {DEV_AUTH ? (
+              /* Dev has no Clerk modal — simulate the conversion (guest → signed-in dev user). */
+              <button className="btn sm" data-testid="guest-signup"
+                onClick={() => { localStorage.removeItem(GUEST_KEY); location.href = "/"; }}>Sign up</button>
+            ) : (
               <SignInButton mode="modal">
-                <button className="btn sm">Sign up</button>
+                <button className="btn sm" data-testid="guest-signup">Sign up</button>
               </SignInButton>
             )}
           </span>
