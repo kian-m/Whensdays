@@ -439,7 +439,42 @@ func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	for _, u := range unseenRows {
 		unseen = append(unseen, uuidStr(u))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending, "unseen": unseen})
+
+	// Avatar-stack previews: one batched query over every listed event. Keyed
+	// by event id; each entry carries ≤6 prioritized faces + the going total.
+	ids := make([]pgtype.UUID, 0, len(hosting)+len(attending))
+	for _, ev := range hosting {
+		ids = append(ids, ev.ID)
+	}
+	for _, ev := range attending {
+		ids = append(ids, ev.ID)
+	}
+	type face struct {
+		Name     string `json:"name"`
+		Avatar   string `json:"avatar_url"`
+		IsFriend bool   `json:"is_friend"`
+	}
+	type pile struct {
+		Faces []face `json:"faces"`
+		Going int32  `json:"going"`
+	}
+	faces := map[string]*pile{}
+	if len(ids) > 0 {
+		rows, err := s.queries.ListGoingFaces(r.Context(), db.ListGoingFacesParams{RequesterID: uid, Column2: ids})
+		if err != nil {
+			s.internal(w, "list going faces", err)
+			return
+		}
+		for _, row := range rows {
+			k := uuidStr(row.EventID)
+			if faces[k] == nil {
+				faces[k] = &pile{Faces: []face{}}
+			}
+			faces[k].Faces = append(faces[k].Faces, face{Name: row.DisplayName, Avatar: row.AvatarUrl, IsFriend: row.IsFriend})
+			faces[k].Going = row.GoingCount
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending, "unseen": unseen, "faces": faces})
 }
 
 // requireActiveEvent loads an event and rejects writes against cancelled ones

@@ -289,6 +289,15 @@ textarea.input { resize: vertical; min-height: 64px; }
 .gp-head { background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
 .gp-head:hover { color: var(--accent); }
 
+/* facepile: overlapping avatar stack on event tiles ("who's going") */
+.facepile { display: flex; align-items: center; margin-top: 6px; }
+.facepile .face { display: inline-flex; margin-left: -7px; border-radius: 50%; }
+.facepile .face:first-child { margin-left: 0; }
+/* ring separates overlapped faces from each other and the glass */
+.facepile .face .avatar { box-shadow: 0 0 0 2px var(--surface); }
+/* friends get the accent ring — they're why you'd tap in */
+.facepile .face-friend .avatar { box-shadow: 0 0 0 2px var(--accent); }
+
 /* horizontally scrollable emoji picker strip */
 .emoji-strip {
   display: flex; gap: 4px; overflow-x: auto; padding-bottom: 6px;

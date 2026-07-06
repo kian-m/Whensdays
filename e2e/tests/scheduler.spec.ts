@@ -69,6 +69,13 @@ test.describe("scheduler", () => {
     // Back in the host view, the guest's answer is summarized.
     await page.getByTestId("preview-toggle").click();
     await expect(page.getByText("Vegetarian")).toBeVisible();
+
+    // The dashboard tile now carries an avatar stack: the RSVP shows as a
+    // face (initial fallback) with the going tally.
+    await page.goto("/");
+    const row = page.getByTestId("event-row").filter({ hasText: title }).first();
+    await expect(row.getByTestId("facepile")).toBeVisible();
+    await expect(row.getByTestId("facepile")).toContainText("going");
   });
 
   test("create a general-availability poll and respond", async ({ page }) => {

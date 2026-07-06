@@ -896,6 +896,79 @@ func (q *Queries) ListGeneralVotesForEvent(ctx context.Context, eventID pgtype.U
 	return items, nil
 }
 
+const listGoingFaces = `-- name: ListGoingFaces :many
+SELECT event_id, user_id, display_name, avatar_url, is_friend, going_count
+FROM (
+    SELECT a.event_id, a.user_id,
+           COALESCE(p.display_name, 'Guest') AS display_name,
+           COALESCE(p.avatar_url, '')        AS avatar_url,
+           EXISTS (
+               SELECT 1 FROM friendships f WHERE f.status = 'accepted'
+                 AND ((f.requester_id = $1 AND f.addressee_id = a.user_id)
+                   OR (f.requester_id = a.user_id AND f.addressee_id = $1))
+           ) AS is_friend,
+           count(*) OVER (PARTITION BY a.event_id)::int AS going_count,
+           row_number() OVER (
+               PARTITION BY a.event_id
+               ORDER BY EXISTS (
+                            SELECT 1 FROM friendships f WHERE f.status = 'accepted'
+                              AND ((f.requester_id = $1 AND f.addressee_id = a.user_id)
+                                OR (f.requester_id = a.user_id AND f.addressee_id = $1))
+                        ) DESC,
+                        (COALESCE(p.avatar_url, '') <> '') DESC,
+                        COALESCE(p.display_name, '')
+           ) AS rn
+    FROM event_attendees a
+    LEFT JOIN profiles p ON p.user_id = a.user_id
+    WHERE a.rsvp = 'going' AND a.event_id = ANY($2::uuid[])
+) x
+WHERE rn <= 6
+`
+
+type ListGoingFacesParams struct {
+	RequesterID string        `json:"requester_id"`
+	Column2     []pgtype.UUID `json:"column_2"`
+}
+
+type ListGoingFacesRow struct {
+	EventID     pgtype.UUID `json:"event_id"`
+	UserID      string      `json:"user_id"`
+	DisplayName string      `json:"display_name"`
+	AvatarUrl   string      `json:"avatar_url"`
+	IsFriend    bool        `json:"is_friend"`
+	GoingCount  int32       `json:"going_count"`
+}
+
+// Avatar-stack preview for event tiles: up to 6 'going' attendees per event,
+// prioritized for the viewer — friends first, then people with a photo, then
+// initials-only — plus the total going count for the "+N more" tail.
+func (q *Queries) ListGoingFaces(ctx context.Context, arg ListGoingFacesParams) ([]ListGoingFacesRow, error) {
+	rows, err := q.db.Query(ctx, listGoingFaces, arg.RequesterID, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGoingFacesRow{}
+	for rows.Next() {
+		var i ListGoingFacesRow
+		if err := rows.Scan(
+			&i.EventID,
+			&i.UserID,
+			&i.DisplayName,
+			&i.AvatarUrl,
+			&i.IsFriend,
+			&i.GoingCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIncomingRequests = `-- name: ListIncomingRequests :many
 SELECT f.id, f.requester_id, p.display_name, p.handle
 FROM friendships f

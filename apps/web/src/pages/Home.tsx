@@ -2,9 +2,13 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Event, TYPE_COLORS, fmtDateTime, getJSON } from "../lib";
 import { eventEmoji, eventLabel } from "../scheduler/questions";
-import { Loading, Pill, useAsync } from "../ui";
+import { Avatar, Loading, Pill, useAsync } from "../ui";
 
-type EventsResp = { hosting: Event[]; attending: Event[]; unseen: string[] };
+// Avatar-stack preview: the API sends ≤6 prioritized faces (friends → people
+// with photos → initials-only) + the total going count per event.
+type Face = { name: string; avatar_url: string; is_friend: boolean };
+type Pile = { faces: Face[]; going: number };
+type EventsResp = { hosting: Event[]; attending: Event[]; unseen: string[]; faces?: Record<string, Pile> };
 type Filter = "all" | "upcoming" | "hosting" | "attending";
 
 const DAY = 86_400_000;
@@ -102,7 +106,8 @@ export function Home() {
       ) : (
         <div className="stack" data-testid="event-list">
           {shown.map((e) => (
-            <EventRow key={e.id} e={e} isNew={unseen.has(e.id)} soon={e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
+            <EventRow key={e.id} e={e} pile={data?.faces?.[e.id]} isNew={unseen.has(e.id)}
+              soon={e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
           ))}
         </div>
       )}
@@ -110,8 +115,13 @@ export function Home() {
   );
 }
 
-function EventRow({ e, onClick, isNew, soon }: { e: Event; onClick: () => void; isNew?: boolean; soon?: string }) {
+function EventRow({ e, pile, onClick, isNew, soon }: {
+  e: Event; pile?: Pile; onClick: () => void; isNew?: boolean; soon?: string;
+}) {
   const color = TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other;
+  // Fit the row: show up to 5 faces, fold the rest into "+N more".
+  const faces = (pile?.faces ?? []).slice(0, 5);
+  const extra = (pile?.going ?? 0) - faces.length;
   return (
     <div className="card ev tile" data-testid="event-row" onClick={onClick} style={{ borderLeftColor: color }}>
       <div className="emoji" style={{ background: `${color}22` }}>{eventEmoji(e)}</div>
@@ -131,6 +141,18 @@ function EventRow({ e, onClick, isNew, soon }: { e: Event; onClick: () => void; 
         <div className="muted small">
           {e.location_mode === "find_venue" ? "📍 Venue TBD" : `📍 ${e.location_address || "Host's place"}`}
         </div>
+        {faces.length > 0 && (
+          <div className="facepile" data-testid="facepile">
+            {faces.map((f, i) => (
+              <span key={i} className={`face ${f.is_friend ? "face-friend" : ""}`} title={f.name}>
+                <Avatar url={f.avatar_url || null} name={f.name} size={22} />
+              </span>
+            ))}
+            <span className="muted small" style={{ marginLeft: 6 }}>
+              {extra > 0 ? `+${extra} more going` : "going"}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

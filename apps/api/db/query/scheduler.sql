@@ -181,6 +181,37 @@ WHERE a.user_id = $1 AND a.rsvp = 'going'
   AND e.status = 'scheduled' AND e.starts_at >= now()
 ORDER BY e.starts_at;
 
+-- name: ListGoingFaces :many
+-- Avatar-stack preview for event tiles: up to 6 'going' attendees per event,
+-- prioritized for the viewer — friends first, then people with a photo, then
+-- initials-only — plus the total going count for the "+N more" tail.
+SELECT event_id, user_id, display_name, avatar_url, is_friend, going_count
+FROM (
+    SELECT a.event_id, a.user_id,
+           COALESCE(p.display_name, 'Guest') AS display_name,
+           COALESCE(p.avatar_url, '')        AS avatar_url,
+           EXISTS (
+               SELECT 1 FROM friendships f WHERE f.status = 'accepted'
+                 AND ((f.requester_id = $1 AND f.addressee_id = a.user_id)
+                   OR (f.requester_id = a.user_id AND f.addressee_id = $1))
+           ) AS is_friend,
+           count(*) OVER (PARTITION BY a.event_id)::int AS going_count,
+           row_number() OVER (
+               PARTITION BY a.event_id
+               ORDER BY EXISTS (
+                            SELECT 1 FROM friendships f WHERE f.status = 'accepted'
+                              AND ((f.requester_id = $1 AND f.addressee_id = a.user_id)
+                                OR (f.requester_id = a.user_id AND f.addressee_id = $1))
+                        ) DESC,
+                        (COALESCE(p.avatar_url, '') <> '') DESC,
+                        COALESCE(p.display_name, '')
+           ) AS rn
+    FROM event_attendees a
+    LEFT JOIN profiles p ON p.user_id = a.user_id
+    WHERE a.rsvp = 'going' AND a.event_id = ANY($2::uuid[])
+) x
+WHERE rn <= 6;
+
 -- ====================== event time options ========================
 
 -- name: AddTimeOption :one
