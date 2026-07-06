@@ -29,6 +29,7 @@ export function NewEvent() {
   const [locationMode, setLocationMode] = useState<"host_place" | "find_venue">("host_place");
   const [address, setAddress] = useState("");
   const [schedulingMode, setSchedulingMode] = useState<"fixed" | "poll" | "general">("fixed");
+  const [generalScope, setGeneralScope] = useState<"week" | "month" | "general">("general");
   const [startsAt, setStartsAt] = useState("");
   const [repeat, setRepeat] = useState<"" | "weekly" | "biweekly" | "monthly">("");
   const [repeatCount, setRepeatCount] = useState(4);
@@ -114,7 +115,10 @@ export function NewEvent() {
         .filter((o) => o.trim() !== "")
         .map((o) => new Date(o).toISOString());
     }
-    // general: no extra fields — guests submit month/weekday/daypart after creation.
+    if (schedulingMode === "general") {
+      // Scope shapes the question guests answer (this week / this month / generally).
+      body.general_scope = generalScope;
+    }
     const res = await sendJSON(api, "POST", "/api/events", body);
     if (!res.ok) {
       setSaving(false);
@@ -273,10 +277,20 @@ export function NewEvent() {
               </div>
             )}
             {schedulingMode === "general" && (
-              <p className="muted small" style={{ marginTop: 8 }}>
-                Guests pick their ideal months, days of the week, and times of day
-                (early morning → night). You'll lock in a time from the results.
-              </p>
+              <div className="stack" style={{ marginTop: 8, gap: 6 }}>
+                <div className="row wrap" style={{ gap: 6 }}>
+                  <span className="muted small">Ask about:</span>
+                  {([["week", "This week"], ["month", "This month"], ["general", "Generally"]] as const).map(([v, l]) => (
+                    <button key={v} type="button" className={`chip sm ${generalScope === v ? "on" : ""}`}
+                      data-testid={`scope-${v}`} onClick={() => setGeneralScope(v)}>{l}</button>
+                  ))}
+                </div>
+                <p className="muted small" style={{ margin: 0 }}>
+                  {generalScope === "week" && "Guests mark which days and times work over the next 7 days. You'll lock in a time from the results."}
+                  {generalScope === "month" && "Guests tap the days that work over the next 4 weeks. You'll lock in a time from the results."}
+                  {generalScope === "general" && "Guests pick their ideal months, days of the week, and times of day (early morning → night). You'll lock in a time from the results."}
+                </p>
+              </div>
             )}
           </div>
         )}

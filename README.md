@@ -98,9 +98,10 @@ isn't fixed), the guest list, and a summary of everyone's preferences. Tap
 
 ### General availability — pick times per day
 
-For a general poll, guests choose ideal months and tap a **per-day grid** of times
-of day (tap a day header or a row label to fill a whole column/row). The host sees
-the same grid as a heatmap.
+A general poll is scoped by the host: **this week** (guests tap a grid of the next
+7 concrete dates × times of day), **this month** (guests tap the days that work over
+the next 4 weeks), or **generally** (ideal months + a weekday × time-of-day grid,
+fill a row/column from its header). The host sees a matching heatmap or day ranking.
 
 ![General availability grid](docs/screenshots/03-scheduler-general-poll.png)
 
@@ -115,7 +116,7 @@ the same grid as a heatmap.
 | **RSVP** | Event page | Going / Maybe / Can't | `POST /api/events/{id}/rsvp` |
 | **Scheduling — fixed time** | New event → "I'll set a time" | Host sets the date/time up front | `scheduling_mode: "fixed"` |
 | **Scheduling — specific-times poll** | Event page (poll events) | Guests vote 👍/🤷/👎 on each proposed time; host **Picks** one to lock it in | `POST /api/events/{id}/votes`, `POST /api/events/{id}/finalize` |
-| **Scheduling — general availability poll** | Event page (general events) | Guests pick ideal **months** + a **per-day grid** of times of day (early morning → night); host reads the heatmap and finalizes a time | `POST /api/events/{id}/general-votes`, `POST /api/events/{id}/finalize` |
+| **Scheduling — general availability poll** | Event page (general events) | The host scopes the ask — **this week** (concrete dates × times grid), **this month** (tap the days that work), or **generally** (ideal months + weekday grid); attendees answer in that shape and the host reads a matching heatmap/ranking, then finalizes a time. Date windows anchor at the event's creation so everyone answers about the same days | `POST /api/events` (`general_scope`), `POST /api/events/{id}/general-votes`, `POST /api/events/{id}/finalize` |
 | **Preference questions** | Event page, after RSVP | One question at a time, tuned to the event type (e.g. dietary + cuisine for dinner) | `POST /api/events/{id}/preferences` |
 | **Host view + guest preview** | Event page (host only) | Invite link, poll results, guests, preference summary; toggle to preview the guest flow | role-aware `GET /api/events/{id}` |
 | **Comments** | Event page | A comment thread on each event; anyone with the invite can post. Authors delete their own; the host (or a cohost) moderates any. The host can turn the thread on/off | `POST/DELETE /api/events/{id}/comments`, `PUT /api/events/{id}/comments-enabled` |

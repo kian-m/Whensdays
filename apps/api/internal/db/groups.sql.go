@@ -124,7 +124,7 @@ func (q *Queries) ListGoingAttendeeEmails(ctx context.Context, eventID pgtype.UU
 
 const listGroupEvents = `-- name: ListGroupEvents :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope
 FROM events
 WHERE group_id = $1 AND status <> 'cancelled'
 ORDER BY created_at DESC
@@ -161,6 +161,7 @@ func (q *Queries) ListGroupEvents(ctx context.Context, groupID pgtype.UUID) ([]E
 			&i.City,
 			&i.CustomEmoji,
 			&i.CustomLabel,
+			&i.GeneralScope,
 		); err != nil {
 			return nil, err
 		}

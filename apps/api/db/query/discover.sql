@@ -2,7 +2,7 @@
 
 -- name: ListEventsNeedingReminder :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope
 FROM events
 WHERE status = 'scheduled' AND reminder_sent = false
   AND starts_at > now() AND starts_at <= now() + interval '24 hours';

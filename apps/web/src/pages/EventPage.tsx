@@ -13,6 +13,7 @@ import {
   Vote,
   WEEKDAYS,
   busyConflict,
+  daysFromDate,
   fmtDate,
   fmtDateTime,
   getJSON,
@@ -23,7 +24,7 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { Avatar, BackLink, Loading, Pill, useAsync } from "../ui";
+import { Avatar, BackLink, DayGrid, Loading, Pill, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 export function EventPage() {
@@ -295,7 +296,7 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
         <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} reload={reload} />
       )}
       {e.scheduling_mode === "general" && e.status === "polling" && (
-        <GeneralPoll eventId={e.id} votes={data.general_votes} viewerId={data.viewer_id} reload={reload} />
+        <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id} reload={reload} />
       )}
       <PrefFlow eventId={e.id} type={e.event_type} answers={data.preference_answers.filter((a) => a.user_id === data.viewer_id)} reload={reload} />
     </div>
@@ -377,10 +378,17 @@ function PollVote({ eventId, options, votes, viewerId, reload }: {
 // the whole row). The whole set is saved at once (replace semantics on the API).
 const slotKey = (wd: number, dp: string) => `${wd}:${dp}`;
 
-function GeneralPoll({ eventId, votes, viewerId, reload }: {
-  eventId: string; votes: GeneralVote[]; viewerId: string; reload: () => void;
+// The attendee's side of a general poll. The event's scope decides the question:
+//   week    → "which days & times work this week?"  (7 concrete dates × dayparts)
+//   month   → "which days work this month?"          (28 concrete date chips)
+//   general → "when do things usually work?"         (months + weekday × daypart)
+// The date windows are anchored at the event's created_at so every attendee
+// answers about the same days.
+function GeneralPoll({ event, votes, viewerId, reload }: {
+  event: EventDetail["event"]; votes: GeneralVote[]; viewerId: string; reload: () => void;
 }) {
   const api = useApi();
+  const scope = event.general_scope;
   const months = nextMonths(6);
   const mine = votes.filter((v) => v.user_id === viewerId);
 
@@ -389,6 +397,12 @@ function GeneralPoll({ eventId, votes, viewerId, reload }: {
   );
   const [cells, setCells] = useState<Set<string>>(
     new Set(mine.filter((v) => v.dimension === "slot").map((v) => v.value)),
+  );
+  const [dayCells, setDayCells] = useState<Set<string>>(
+    new Set(mine.filter((v) => v.dimension === "dayslot").map((v) => v.value)),
+  );
+  const [days, setDays] = useState<Set<string>>(
+    new Set(mine.filter((v) => v.dimension === "day").map((v) => v.value)),
   );
   const [saved, setSaved] = useState(false);
 
@@ -414,49 +428,108 @@ function GeneralPoll({ eventId, votes, viewerId, reload }: {
     keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
   });
 
+  // Week scope: 7 concrete dates × dayparts (same DayGrid as availability).
+  const weekDates = daysFromDate(event.created_at, 7);
+  const toggleDayCell = (day: string, dp: string) => mutate(setDayCells, (s) => (s.has(`${day}:${dp}`) ? s.delete(`${day}:${dp}`) : s.add(`${day}:${dp}`)));
+  const toggleDayRow = (day: string) => mutate(setDayCells, (s) => {
+    const keys = DAYPARTS.map((dp) => `${day}:${dp.value}`);
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
+  const toggleDayCol = (dp: string) => mutate(setDayCells, (s) => {
+    const keys = weekDates.map((d) => `${d.value}:${dp}`);
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
+
+  // Month scope: 28 concrete date chips.
+  const monthDates = daysFromDate(event.created_at, 28);
+  const toggleDay = (d: string) => mutate(setDays, (s) => (s.has(d) ? s.delete(d) : s.add(d)));
+
   async function save() {
-    const slots = [...cells].map((k) => {
-      const [wd, dp] = k.split(":");
-      return { weekday: Number(wd), daypart: dp };
-    });
-    await sendJSON(api, "POST", `/api/events/${eventId}/general-votes`, { months: [...selMonths], slots });
+    const body: Record<string, unknown> = {};
+    if (scope === "week") {
+      body.day_slots = [...dayCells].map((k) => {
+        const [day, dp] = k.split(":");
+        return { day, daypart: dp };
+      });
+    } else if (scope === "month") {
+      body.days = [...days];
+    } else {
+      body.months = [...selMonths];
+      body.slots = [...cells].map((k) => {
+        const [wd, dp] = k.split(":");
+        return { weekday: Number(wd), daypart: dp };
+      });
+    }
+    await sendJSON(api, "POST", `/api/events/${event.id}/general-votes`, body);
     setSaved(true);
     reload();
   }
 
   return (
     <div className="card stack">
-      <h3>When works for you?</h3>
-      <div>
-        <div className="muted small" style={{ marginBottom: 6 }}>Ideal months</div>
-        <div className="row wrap">
-          {months.map((m, i) => (
-            <button key={m.value} className={`chip sm ${selMonths.has(m.value) ? "on" : ""}`}
-              data-testid={`gp-month-${i}`} onClick={() => toggleMonth(m.value)}>{m.label}</button>
-          ))}
+      <h3>
+        {scope === "week" ? "When are you free this week?"
+          : scope === "month" ? "Which days work this month?"
+          : "When works for you?"}
+      </h3>
+
+      {scope === "week" && (
+        <div>
+          <div className="muted small" style={{ marginBottom: 6 }}>Tap the times that work (a date or column header fills the line)</div>
+          <DayGrid dates={weekDates} free={dayCells} idPrefix="gpw" testid="gp-week-grid"
+            onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleDayCol} />
         </div>
-      </div>
-      <div>
-        <div className="muted small" style={{ marginBottom: 6 }}>Times that work (tap a day or row label to fill it)</div>
-        <div className="grid" style={{ gridTemplateColumns: "auto repeat(7, 1fr)" }}>
-          <div />
-          {WEEKDAYS.map((d, wd) => (
-            <button key={wd} type="button" className="hd gp-head" data-testid={`gp-col-${wd}`}
-              onClick={() => toggleColumn(wd)}>{d}</button>
-          ))}
-          {DAYPARTS.map((dp) => (
-            <Fragment key={dp.value}>
-              <button type="button" className="day gp-head" style={{ textAlign: "left" }}
-                data-testid={`gp-row-${dp.value}`} onClick={() => toggleRow(dp.value)}>{dp.label}</button>
-              {WEEKDAYS.map((_, wd) => {
-                const k = slotKey(wd, dp.value);
-                return <button key={wd} type="button" data-testid={`gp-cell-${wd}-${dp.value}`}
-                  className={`cell ${cells.has(k) ? "on" : ""}`} onClick={() => toggleCell(k)} />;
-              })}
-            </Fragment>
-          ))}
+      )}
+
+      {scope === "month" && (
+        <div>
+          <div className="muted small" style={{ marginBottom: 6 }}>Tap every day that works over the next 4 weeks</div>
+          <div className="row wrap" style={{ gap: 6 }} data-testid="gp-month-days">
+            {monthDates.map((d, i) => (
+              <button key={d.value} type="button" className={`chip sm ${days.has(d.value) ? "on" : ""}`}
+                data-testid={`gp-day-${i}`} onClick={() => toggleDay(d.value)}>{d.label}</button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {scope === "general" && (
+        <>
+          <div>
+            <div className="muted small" style={{ marginBottom: 6 }}>Ideal months</div>
+            <div className="row wrap">
+              {months.map((m, i) => (
+                <button key={m.value} className={`chip sm ${selMonths.has(m.value) ? "on" : ""}`}
+                  data-testid={`gp-month-${i}`} onClick={() => toggleMonth(m.value)}>{m.label}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="muted small" style={{ marginBottom: 6 }}>Times that work (tap a day or row label to fill it)</div>
+            <div className="grid" style={{ gridTemplateColumns: "auto repeat(7, 1fr)" }}>
+              <div />
+              {WEEKDAYS.map((d, wd) => (
+                <button key={wd} type="button" className="hd gp-head" data-testid={`gp-col-${wd}`}
+                  onClick={() => toggleColumn(wd)}>{d}</button>
+              ))}
+              {DAYPARTS.map((dp) => (
+                <Fragment key={dp.value}>
+                  <button type="button" className="day gp-head" style={{ textAlign: "left" }}
+                    data-testid={`gp-row-${dp.value}`} onClick={() => toggleRow(dp.value)}>{dp.label}</button>
+                  {WEEKDAYS.map((_, wd) => {
+                    const k = slotKey(wd, dp.value);
+                    return <button key={wd} type="button" data-testid={`gp-cell-${wd}-${dp.value}`}
+                      className={`cell ${cells.has(k) ? "on" : ""}`} onClick={() => toggleCell(k)} />;
+                  })}
+                </Fragment>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       <button className="btn soft sm" style={{ alignSelf: "flex-start" }} data-testid="save-general" onClick={save}>
         {saved ? "Saved ✓" : "Save availability"}
       </button>
@@ -811,32 +884,51 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
   );
 }
 
-// Aggregates the general poll: a month ranking plus a weekday×daypart heatmap
-// (darker = more people free), then lets the host finalize a concrete time.
+// Aggregates the general poll for the host, shaped by the event's scope:
+//   week    → a dates × dayparts heatmap over the event's 7-day window
+//   month   → a ranked list of the most-picked days
+//   general → month ranking + weekday×daypart heatmap (the original)
+// Darker = more people free; then the host finalizes a concrete time.
 function GeneralResults({ data, reload }: { data: EventDetail; reload: () => void }) {
   const api = useApi();
   const [when, setWhen] = useState("");
+  const scope = data.event.general_scope;
 
   const voters = new Set(data.general_votes.map((v) => v.user_id)).size;
 
-  // Month ranking.
-  const monthCounts = new Map<string, number>();
-  data.general_votes.filter((v) => v.dimension === "month")
-    .forEach((v) => monthCounts.set(v.value, (monthCounts.get(v.value) ?? 0) + 1));
+  const countBy = (dimension: string) => {
+    const m = new Map<string, number>();
+    data.general_votes.filter((v) => v.dimension === dimension)
+      .forEach((v) => m.set(v.value, (m.get(v.value) ?? 0) + 1));
+    return m;
+  };
+  const heatStyle = (n: number, top: number): React.CSSProperties =>
+    n === 0 ? {} : { background: `rgba(91, 84, 230, ${0.18 + 0.82 * (n / top)})`, borderColor: "transparent", color: "#fff" };
+
+  // general scope: month ranking + weekday×daypart heatmap.
+  const monthCounts = countBy("month");
   const months = [...monthCounts.entries()].sort((a, b) => b[1] - a[1]);
   const monthLabel = (v: string) => {
     const [y, mo] = v.split("-").map(Number);
     return new Date(y, mo - 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
   };
   const monthTop = Math.max(1, ...monthCounts.values());
-
-  // Slot heatmap (weekday×daypart).
-  const slotCounts = new Map<string, number>();
-  data.general_votes.filter((v) => v.dimension === "slot")
-    .forEach((v) => slotCounts.set(v.value, (slotCounts.get(v.value) ?? 0) + 1));
+  const slotCounts = countBy("slot");
   const slotTop = Math.max(1, ...slotCounts.values());
-  const cellStyle = (n: number): React.CSSProperties =>
-    n === 0 ? {} : { background: `rgba(91, 84, 230, ${0.18 + 0.82 * (n / slotTop)})`, borderColor: "transparent", color: "#fff" };
+
+  // week scope: dates × dayparts heatmap over the event's answer window.
+  const weekDates = daysFromDate(data.event.created_at, 7);
+  const dayslotCounts = countBy("dayslot");
+  const dayslotTop = Math.max(1, ...dayslotCounts.values());
+
+  // month scope: ranked days.
+  const dayCounts = countBy("day");
+  const days = [...dayCounts.entries()].sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1));
+  const dayTop = Math.max(1, ...dayCounts.values());
+  const dayLabel = (v: string) => {
+    const [y, mo, d] = v.split("-").map(Number);
+    return new Date(y, mo - 1, d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  };
 
   async function finalize() {
     if (!when) return;
@@ -848,40 +940,85 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
     <div className="card stack">
       <div className="row between"><h3>Group availability</h3><span className="muted small">{voters} responded</span></div>
 
-      <div>
-        <div className="section-h" style={{ margin: "0 0 4px" }}>Months</div>
-        {months.length === 0 ? <p className="muted small">No picks yet.</p> : (
-          <div className="stack" style={{ gap: 4 }}>
-            {months.map(([value, n]) => (
-              <div key={value} className="stack" style={{ gap: 2 }}>
-                <div className="row between"><span className="small">{monthLabel(value)}</span><span className="muted small">{n}</span></div>
-                <div className="tally"><span style={{ width: `${(n / monthTop) * 100}%` }} /></div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div>
-        <div className="section-h" style={{ margin: "0 0 4px" }}>Best times</div>
-        <div className="grid" style={{ gridTemplateColumns: "auto repeat(7, 1fr)" }}>
-          <div />
-          {WEEKDAYS.map((d, wd) => <div key={wd} className="hd">{d}</div>)}
-          {DAYPARTS.map((dp) => (
-            <Fragment key={dp.value}>
-              <div className="day" style={{ textAlign: "left" }}>{dp.label}</div>
-              {WEEKDAYS.map((_, wd) => {
-                const n = slotCounts.get(slotKey(wd, dp.value)) ?? 0;
-                return (
-                  <div key={wd} className="cell" style={{ ...cellStyle(n), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700 }}>
-                    {n > 0 ? n : ""}
-                  </div>
-                );
-              })}
-            </Fragment>
-          ))}
+      {scope === "week" && (
+        <div>
+          <div className="section-h" style={{ margin: "0 0 4px" }}>Best times this week</div>
+          {dayslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
+            <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-week-heat">
+              <div />
+              {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
+              {weekDates.map((d) => (
+                <Fragment key={d.value}>
+                  <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
+                  {DAYPARTS.map((dp) => {
+                    const n = dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0;
+                    return (
+                      <div key={dp.value} className="cell" style={{ ...heatStyle(n, dayslotTop), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700 }}>
+                        {n > 0 ? n : ""}
+                      </div>
+                    );
+                  })}
+                </Fragment>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {scope === "month" && (
+        <div>
+          <div className="section-h" style={{ margin: "0 0 4px" }}>Most-picked days</div>
+          {days.length === 0 ? <p className="muted small">No picks yet.</p> : (
+            <div className="stack" style={{ gap: 4 }} data-testid="gr-month-days">
+              {days.map(([value, n]) => (
+                <div key={value} className="stack" style={{ gap: 2 }}>
+                  <div className="row between"><span className="small">{dayLabel(value)}</span><span className="muted small">{n}</span></div>
+                  <div className="tally"><span style={{ width: `${(n / dayTop) * 100}%` }} /></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {scope === "general" && (
+        <>
+          <div>
+            <div className="section-h" style={{ margin: "0 0 4px" }}>Months</div>
+            {months.length === 0 ? <p className="muted small">No picks yet.</p> : (
+              <div className="stack" style={{ gap: 4 }}>
+                {months.map(([value, n]) => (
+                  <div key={value} className="stack" style={{ gap: 2 }}>
+                    <div className="row between"><span className="small">{monthLabel(value)}</span><span className="muted small">{n}</span></div>
+                    <div className="tally"><span style={{ width: `${(n / monthTop) * 100}%` }} /></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="section-h" style={{ margin: "0 0 4px" }}>Best times</div>
+            <div className="grid" style={{ gridTemplateColumns: "auto repeat(7, 1fr)" }}>
+              <div />
+              {WEEKDAYS.map((d, wd) => <div key={wd} className="hd">{d}</div>)}
+              {DAYPARTS.map((dp) => (
+                <Fragment key={dp.value}>
+                  <div className="day" style={{ textAlign: "left" }}>{dp.label}</div>
+                  {WEEKDAYS.map((_, wd) => {
+                    const n = slotCounts.get(slotKey(wd, dp.value)) ?? 0;
+                    return (
+                      <div key={wd} className="cell" style={{ ...heatStyle(n, slotTop), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700 }}>
+                        {n > 0 ? n : ""}
+                      </div>
+                    );
+                  })}
+                </Fragment>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="divider" />
       <div className="muted small">Pick the final date &amp; time:</div>

@@ -24,6 +24,7 @@ export type Event = {
   city: string;
   custom_emoji: string;
   custom_label: string;
+  general_scope: "week" | "month" | "general";
   created_at: string;
 };
 
@@ -181,7 +182,8 @@ export type Cohost = {
 export type TimeOption = { id: string; event_id: string; starts_at: string };
 export type Vote = { id: string; option_id: string; user_id: string; response: "yes" | "no" | "maybe" };
 // dimension 'month' -> value "YYYY-MM"; dimension 'slot' -> value "<weekday>:<daypart>".
-export type GeneralVote = { user_id: string; dimension: "month" | "slot"; value: string };
+// dimension: month + slot (general scope), day (month scope), dayslot (week scope).
+export type GeneralVote = { user_id: string; dimension: "month" | "slot" | "day" | "dayslot"; value: string };
 export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined"; display_name: string | null; avatar_url: string | null };
 export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
 
@@ -289,6 +291,18 @@ export function daysFrom(startOffset: number, n: number): { value: string; label
 // The next n calendar days from today.
 export function nextDays(n: number): { value: string; label: string }[] {
   return daysFrom(0, n);
+}
+
+// n calendar days starting at an ISO timestamp (e.g. an event's created_at).
+// Scoped general polls anchor their answer window here so every attendee sees
+// the same dates no matter when they open the invite.
+export function daysFromDate(startISO: string, n: number): { value: string; label: string }[] {
+  const s = new Date(startISO);
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(s.getFullYear(), s.getMonth(), s.getDate() + i);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return { value, label: d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) };
+  });
 }
 
 // The next n calendar months as { value: "YYYY-MM", label: "Aug 2026" }.

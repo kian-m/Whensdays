@@ -478,8 +478,9 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		Visibility      string   `json:"visibility"`   // optional: private (default) | public
 		Topic           string   `json:"topic"`        // optional slug, for public discovery
 		City            string   `json:"city"`         // optional, for public discovery
-		CustomEmoji     string   `json:"custom_emoji"` // optional user-defined type (with label)
-		CustomLabel     string   `json:"custom_label"` // ≤20 chars; forces event_type=other
+		CustomEmoji     string   `json:"custom_emoji"`  // optional user-defined type (with label)
+		CustomLabel     string   `json:"custom_label"`  // ≤20 chars; forces event_type=other
+		GeneralScope    string   `json:"general_scope"` // general mode: week|month|general (default general)
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -519,6 +520,15 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid scheduling_mode"})
 		return
 	}
+	// The scope shapes what a general poll asks ("this week" / "this month" /
+	// "generally"); it's meaningless for other modes, so normalize those.
+	if in.GeneralScope == "" || in.SchedulingMode != "general" {
+		in.GeneralScope = "general"
+	}
+	if !oneOf(in.GeneralScope, "week", "month", "general") {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid general_scope"})
+		return
+	}
 
 	in.Topic = strings.ToLower(strings.TrimSpace(in.Topic))
 	in.City = strings.TrimSpace(in.City)
@@ -533,7 +543,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		HostID: uid, Title: in.Title, EventType: in.EventType, Description: in.Description,
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress, SchedulingMode: in.SchedulingMode,
 		Visibility: in.Visibility, Topic: in.Topic, City: in.City,
-		CustomEmoji: in.CustomEmoji, CustomLabel: in.CustomLabel,
+		CustomEmoji: in.CustomEmoji, CustomLabel: in.CustomLabel, GeneralScope: in.GeneralScope,
 	}
 	if in.GroupID != "" {
 		gid, ok := parseUUID(in.GroupID)
@@ -825,9 +835,15 @@ func (s *server) handleVotes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handleGeneralVotes saves a guest's coarse availability for a general poll:
-// ideal months (YYYY-MM), weekdays (0-6), and dayparts. The guest's whole set is
-// replaced each save.
+// handleGeneralVotes saves a guest's availability for a general poll. What it
+// accepts depends on the event's general_scope:
+//
+//	week    → day_slots: concrete date+daypart cells inside the event's week window
+//	month   → days: concrete dates inside the event's month window
+//	general → months (YYYY-MM) + slots (weekday×daypart) — the original shape
+//
+// The guest's whole set is replaced each save. Windows are anchored at the
+// event's created_at so every attendee answers about the same dates.
 func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	id, ok := parseUUID(r.PathValue("id"))
@@ -835,7 +851,8 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
 		return
 	}
-	if _, active := s.requireActiveEvent(w, r, id); !active {
+	ev, active := s.requireActiveEvent(w, r, id)
+	if !active {
 		return
 	}
 	var in struct {
@@ -844,24 +861,77 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 			Weekday int16  `json:"weekday"`
 			Daypart string `json:"daypart"`
 		} `json:"slots"`
+		Days     []string `json:"days"` // YYYY-MM-DD (month scope)
+		DaySlots []struct {
+			Day     string `json:"day"` // YYYY-MM-DD (week scope)
+			Daypart string `json:"daypart"`
+		} `json:"day_slots"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if len(in.Months) > 24 || len(in.Slots) > 7*len(dayparts) {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "too many selections"})
-		return
+
+	// A scoped date must fall inside the answer window: created_at .. +horizon
+	// days (±1 day of timezone tolerance on each edge).
+	inWindow := func(day string, horizon int) bool {
+		t, err := time.Parse("2006-01-02", day)
+		if err != nil {
+			return false
+		}
+		start := ev.CreatedAt.Time.UTC().Truncate(24 * time.Hour)
+		return !t.Before(start.AddDate(0, 0, -1)) && !t.After(start.AddDate(0, 0, horizon+1))
 	}
-	for _, m := range in.Months {
-		if !validMonth(m) {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid month"})
+
+	// Validate + flatten into (dimension, value) rows according to the scope.
+	type vote struct{ dimension, value string }
+	var rows []vote
+	fail := func(msg string) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": msg})
+	}
+	switch ev.GeneralScope {
+	case "week":
+		if len(in.DaySlots) > 8*len(dayparts) {
+			fail("too many selections")
 			return
 		}
-	}
-	for _, sl := range in.Slots {
-		if sl.Weekday < 0 || sl.Weekday > 6 || !oneOf(sl.Daypart, dayparts...) {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid slot"})
+		for _, dsl := range in.DaySlots {
+			if !inWindow(dsl.Day, 7) || !oneOf(dsl.Daypart, dayparts...) {
+				fail("invalid day slot")
+				return
+			}
+			rows = append(rows, vote{"dayslot", dsl.Day + ":" + dsl.Daypart})
+		}
+	case "month":
+		if len(in.Days) > 32 {
+			fail("too many selections")
 			return
+		}
+		for _, d := range in.Days {
+			if !inWindow(d, 28) {
+				fail("invalid day")
+				return
+			}
+			rows = append(rows, vote{"day", d})
+		}
+	default: // general
+		if len(in.Months) > 24 || len(in.Slots) > 7*len(dayparts) {
+			fail("too many selections")
+			return
+		}
+		for _, m := range in.Months {
+			if !validMonth(m) {
+				fail("invalid month")
+				return
+			}
+			rows = append(rows, vote{"month", m})
+		}
+		for _, sl := range in.Slots {
+			if sl.Weekday < 0 || sl.Weekday > 6 || !oneOf(sl.Daypart, dayparts...) {
+				fail("invalid slot")
+				return
+			}
+			// value "<weekday>:<daypart>", e.g. "6:evening".
+			rows = append(rows, vote{"slot", strconv.Itoa(int(sl.Weekday)) + ":" + sl.Daypart})
 		}
 	}
 
@@ -869,30 +939,18 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "clear general votes", err)
 		return
 	}
-	add := func(dimension, value string) bool {
+	for _, v := range rows {
 		if err := s.queries.AddGeneralVote(r.Context(), db.AddGeneralVoteParams{
-			EventID: id, UserID: uid, Dimension: dimension, Value: value,
+			EventID: id, UserID: uid, Dimension: v.dimension, Value: v.value,
 		}); err != nil {
 			s.internal(w, "add general vote", err)
-			return false
-		}
-		return true
-	}
-	for _, m := range in.Months {
-		if !add("month", m) {
-			return
-		}
-	}
-	for _, sl := range in.Slots {
-		// value "<weekday>:<daypart>", e.g. "6:evening".
-		if !add("slot", strconv.Itoa(int(sl.Weekday))+":"+sl.Daypart) {
 			return
 		}
 	}
 	s.analytics.Capture(uid, "general_voted", map[string]any{
 		"event_id": r.PathValue("id"),
-		"months":   len(in.Months),
-		"slots":    len(in.Slots),
+		"scope":    ev.GeneralScope,
+		"picks":    len(rows),
 	})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

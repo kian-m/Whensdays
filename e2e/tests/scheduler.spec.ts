@@ -739,12 +739,61 @@ test.describe("scheduler", () => {
     const title = `Fast avail ${test.info().testId}`;
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-avail").click();
+    // Quick defaults to asking about THIS WEEK (scope chips let the host widen it).
+    await expect(page.getByTestId("quick-scope-week")).toHaveClass(/on/);
     await page.getByTestId("quick-create").click();
-    // Lands as a general-availability poll; guests get the when-works grid.
+    // Lands as a scoped general poll; guests get a concrete-dates week grid.
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await expect(page.getByText("Time being decided")).toBeVisible();
     await page.getByTestId("preview-toggle").click();
-    await expect(page.getByTestId("gp-cell-6-evening")).toBeVisible();
+    await expect(page.getByText("When are you free this week?")).toBeVisible();
+    await expect(page.getByTestId("gpw-cell-0-evening")).toBeVisible();
+  });
+
+  test("general poll scopes: this week and this month shape the ask", async ({ page }) => {
+    await ensureProfile(page);
+
+    // Week scope via Quick: attendee answers a concrete-dates grid; the host
+    // aggregate is a date×daypart heatmap over the same 7-day window.
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(`Week scope ${test.info().testId}`);
+    await page.getByTestId("quick-mode-avail").click();
+    await page.getByTestId("quick-scope-week").click();
+    await page.getByTestId("quick-create").click();
+    await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("gpw-cell-1-evening").click();
+    await page.getByTestId("gpw-cell-2-noon").click();
+    await page.getByTestId("save-general").click();
+    await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
+    // Saved picks survive a reload (persisted, not just local state).
+    await page.reload();
+    await page.getByTestId("preview-toggle").click();
+    await expect(page.getByTestId("gpw-cell-1-evening")).toHaveClass(/on/);
+    await page.getByTestId("preview-toggle").click();
+    await expect(page.getByTestId("gr-week-heat")).toBeVisible();
+    await expect(page.getByTestId("gr-week-heat")).toContainText("1");
+
+    // Month scope via the wizard: attendee taps day chips; host sees ranked days.
+    await page.goto("/");
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(`Month scope ${test.info().testId}`);
+    await page.getByTestId("type-other").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-general").click();
+    await page.getByTestId("scope-month").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("rsvp-going").click();
+    await expect(page.getByText("Which days work this month?")).toBeVisible();
+    await page.getByTestId("gp-day-5").click();
+    await page.getByTestId("gp-day-12").click();
+    await page.getByTestId("save-general").click();
+    await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
+    await page.getByTestId("preview-toggle").click();
+    await expect(page.getByTestId("gr-month-days")).toBeVisible();
   });
 
   test("invite links unfurl: /e/{id} serves Open Graph tags", async ({ page, request }) => {

@@ -11,6 +11,7 @@ export function Quick() {
   const nav = useNavigate();
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState<"fixed" | "general">("fixed");
+  const [scope, setScope] = useState<"week" | "month" | "general">("week");
   const [when, setWhen] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -31,7 +32,7 @@ export function Quick() {
       visibility: "private",
     };
     if (mode === "fixed") body.starts_at = when ? new Date(when).toISOString() : "";
-    // general: nothing else — guests mark when they're free after they open it.
+    else body.general_scope = scope; // shapes what guests are asked (week/month/generally)
     const res = await sendJSON(api, "POST", "/api/events", body);
     setSaving(false);
     if (!res.ok) {
@@ -59,7 +60,20 @@ export function Quick() {
           <input type="datetime-local" className="input" data-testid="quick-when" value={when}
             onChange={(e) => setWhen(e.target.value)} />
         ) : (
-          <p className="muted small">Everyone marks the months, days and times that work for them — you lock it in from the results.</p>
+          <>
+            <div className="row wrap" style={{ gap: 6 }}>
+              <span className="muted small">Ask about:</span>
+              {([["week", "This week"], ["month", "This month"], ["general", "Generally"]] as const).map(([v, l]) => (
+                <button key={v} type="button" className={`chip sm ${scope === v ? "on" : ""}`}
+                  data-testid={`quick-scope-${v}`} onClick={() => setScope(v)}>{l}</button>
+              ))}
+            </div>
+            <p className="muted small">
+              {scope === "week" && "Everyone marks the days and times that work over the next 7 days — you lock it in from the results."}
+              {scope === "month" && "Everyone taps the days that work over the next 4 weeks — you lock it in from the results."}
+              {scope === "general" && "Everyone marks the months, days and times that generally work for them — you lock it in from the results."}
+            </p>
+          </>
         )}
         {err && <p className="err">{err}</p>}
         <button className="btn btn-block" data-testid="quick-create" disabled={saving || !valid}>

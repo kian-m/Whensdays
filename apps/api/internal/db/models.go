@@ -63,6 +63,7 @@ type Event struct {
 	City            string             `json:"city"`
 	CustomEmoji     string             `json:"custom_emoji"`
 	CustomLabel     string             `json:"custom_label"`
+	GeneralScope    string             `json:"general_scope"`
 }
 
 type EventAttendee struct {
