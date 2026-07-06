@@ -44,6 +44,7 @@ Enables the **Calendars** page to connect a user's Google/Apple calendar. Skip i
 
 ### 5c. Reminder emails (optional)
 1. Set `EMAIL_API_KEY`/`EMAIL_FROM` (Resend-compatible) and a random `CRON_KEY` as Cloud Run secrets.
+1. Optional: `KLIPY_API_KEY` (GIF covers/comments; get a production key from partner.klipy.com — the test key is rate-limited to 100 calls/hour). The picker hides when unset. Outbound TLS works because the api image ships the CA bundle into `scratch` — keep that Dockerfile line.
 2. Create a Cloud Scheduler job (hourly is plenty): `POST https://<api>/api/cron/reminders` with header `X-Cron-Key: <CRON_KEY>`. Idempotent — each event is reminded once.
 
 ### 6. GitHub repo secrets

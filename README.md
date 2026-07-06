@@ -25,16 +25,19 @@ Priorities, in order — growth loop over feature breadth:
 
 Measure in PostHog: activation (host invites ≥1), invite→participant conversion, participant→new-host (K-factor), events/group/month, W4 retention. **Feature breadth is not a moat — defer new event types/polish until the loop works.**
 
-**Phase 3 — "schedule anything" onboarding (current focus):** the fastest path to habitual use is making Whensdays the easiest way to schedule *anything at all*. In priority order:
-1. **Zero-signup event creation** — "Start a plan" on the landing page mints a guest identity and drops straight into the wizard; share the link before ever creating an account. (Guests can already host — surface it.)
-2. **Link unfurls (OG tags)** — invite links pasted into iMessage/WhatsApp/Discord must show the event title, time, and a card image; this is the single highest-leverage growth surface.
-3. **Quick-create** — a one-screen "title + time → link" path beside the full wizard for the "just schedule it" case.
-4. **Native share ergonomics** — Web Share API + QR on the share card.
-5. **One-field onboarding** — auto-derive the handle from the name; ask for nothing else up front.
-6. **PWA manifest** — installable, app-like on phones (the tab bar already sells it).
-7. **Bundle diet** — code-split the 550KB JS bundle; landing must load instantly on cellular.
+**Roadmap (updated 2026-07-06).** The original priority list and Phases 2–3 are **shipped**; what remains is launch and retention work:
 
-**Phase 2 — public discovery (after the private loop works):** a public events page browsable by **locality or interest/topic**, so online communities can broadcast live events (streams, Twitch shows, meetups) to non-members; **follow** people and topics to see their upcoming public events in a feed. This turns the tool into a network: public events are a zero-cost acquisition surface (every public page is indexable and shareable), and follows create the recurring visit reason that private one-off events can't. Prereqs: events need a `visibility` (private/public) flag, topic tags, follow edges, and moderation basics before launch.
+- **Now — launch:** deploy for real (Cloud Run + Cloudflare Pages + Neon per `docs/DEPLOY.md`), turn on live Clerk auth, production Klipy key (the test key is 100 calls/hr), seed the first real groups (initial audience: improv/stand-up/sketch/theater locals — the show/practice/open-mic types + Comedy & performance category exist for this).
+- **Next — retention:** guest→account merge (Clerk sign-up should adopt the guest's plans, not orphan them), smarter time suggestions (rank poll options against ALL attendees' availability + imported calendars, not just the viewer's), series editing (change one vs all occurrences), public-event moderation basics (report/hide) before pushing Discover harder.
+- **Later:** organizer premium (never paywall basics), deeper intent/affiliate links, per-user live `.ics` feed subscriptions, localization.
+
+Shipped, mapped to the original phases:
+1. ✅ **Frictionless guests** — no-account RSVP/vote/comment via the invite link; guests can host ("Start a plan"); Sign-up conversion CTA.
+2. ✅ **Notifications** — transactional email (invites, finalize, comments, reminders) + in-app badges.
+3. ✅ **Calendar** — import (Google OAuth / Apple iCal) blocks availability + flags poll conflicts; one-tap export (Apple/Google/.ics with a link back).
+4. ✅ **Recurring groups** — groups with icons/members, recurring series events, group event lists.
+5. ✅ **Growth surfaces** (was Phases 2–3) — OG unfurls with a branded card, Web Share, PWA, quick-create, code-split bundle, public Discover + ranked For-you feed with follows, event covers (photo/Klipy GIF) + backdrop themes, avatar-stack social proof on tiles.
+
 
 ---
 
