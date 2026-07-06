@@ -73,13 +73,23 @@ jobs:
           node-version: "22"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Single-origin proxy: /api/* and /e/* (the OG-unfurl shell for invite
-      # links) both go to the Cloud Run API; everything else is the SPA.
+      # Single-origin proxy via Pages Functions: /api/* and /e/* (the OG-unfurl
+      # shell) go to the Cloud Run API. NOT _redirects — Pages only proxies GET
+      # through _redirects, which 405s every POST/PUT/DELETE.
       - run: |
-          {
-            echo "/api/*  ${{ secrets.API_PUBLIC_URL }}/api/:splat  200"
-            echo "/e/*    ${{ secrets.API_PUBLIC_URL }}/e/:splat    200"
-          } > apps/web/public/_redirects
+          # wrangler bundles functions/ from the working directory (repo root).
+          mkdir -p functions/api functions/e
+          cat > functions/proxy.js <<'EOF'
+          const ORIGIN = "__API_ORIGIN__";
+          export async function proxy({ request }) {
+            const u = new URL(request.url);
+            return fetch(ORIGIN + u.pathname + u.search, request);
+          }
+          EOF
+          sed -i "s|__API_ORIGIN__|${{ secrets.API_PUBLIC_URL }}|" functions/proxy.js
+          printf 'import { proxy } from "../proxy.js";\nexport const onRequest = proxy;\n' > 'functions/api/[[path]].js'
+          printf 'import { proxy } from "../proxy.js";\nexport const onRequest = proxy;\n' > 'functions/e/[[path]].js'
+          rm -f apps/web/public/_redirects
       - run: pnpm build:web
         env:
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
@@ -94,4 +104,4 @@ jobs:
           # First run creates the Pages project (the dashboard's default flow
           # makes a Worker instead, which can't serve our _redirects proxy).
           preCommands: wrangler pages project create whensdays --production-branch=main || true
-          command: pages deploy apps/web/dist --project-name=whensdays
+          command: pages deploy apps/web/dist --project-name=whensdays # functions/ rides along from apps/web/functions
