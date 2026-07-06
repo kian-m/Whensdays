@@ -271,8 +271,11 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		Visibility      string `json:"visibility"` // optional: keep current when empty
 		Topic           string `json:"topic"`
 		City            string `json:"city"`
+		PhotoUrl        string `json:"photo_url"`
+		Theme           string `json:"theme"`
 	}
-	if !decodeJSON(w, r, &in) {
+	// Covers ride in as data URLs, so this endpoint gets a larger body cap.
+	if !decodeJSONLimit(w, r, &in, coverMaxBody) {
 		return
 	}
 	in.Title = strings.TrimSpace(in.Title)
@@ -298,10 +301,19 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	if in.Visibility != "public" {
 		in.Topic, in.City = "", ""
 	}
+	if !validEventTheme(in.Theme) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid theme"})
+		return
+	}
+	if !validCoverURL(in.PhotoUrl) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "cover must be an uploaded image or a Klipy gif"})
+		return
+	}
 	ev, err := s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
 		ID: id, Title: in.Title, Description: in.Description,
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress,
 		Visibility: in.Visibility, Topic: in.Topic, City: in.City,
+		PhotoUrl: in.PhotoUrl, Theme: in.Theme,
 	})
 	if err != nil {
 		s.internal(w, "update event", err)

@@ -32,6 +32,8 @@ services:
       POSTHOG_HOST: ${POSTHOG_HOST:-https://us.i.posthog.com}
       POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
       POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
+      # Klipy GIF search for event covers (key stays server-side; see .env)
+      KLIPY_API_KEY: ${KLIPY_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy

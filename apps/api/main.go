@@ -44,6 +44,7 @@ type server struct {
 	guests    guestSigner
 	notify    *notify.Client
 	appOrigin string
+	klipyKey  string
 }
 
 func main() {
@@ -84,6 +85,7 @@ func main() {
 		guests:    newGuestSigner(logger),
 		notify:    notify.New(os.Getenv("EMAIL_API_KEY"), os.Getenv("EMAIL_FROM"), logger),
 		appOrigin: strings.TrimRight(os.Getenv("APP_ORIGIN"), "/"),
+		klipyKey:  os.Getenv("KLIPY_API_KEY"),
 	}
 	auth := s.authMiddleware()
 
@@ -125,6 +127,7 @@ func main() {
 	mux.Handle("POST /api/events/{id}/preferences", auth(http.HandlerFunc(s.handlePreferences)))
 	mux.Handle("POST /api/events/{id}/finalize", auth(http.HandlerFunc(s.handleFinalize)))
 	mux.Handle("PUT /api/events/{id}", auth(http.HandlerFunc(s.handleUpdateEvent)))
+	mux.Handle("GET /api/gifs/search", auth(http.HandlerFunc(s.handleGifSearch)))
 	mux.Handle("DELETE /api/events/{id}", auth(http.HandlerFunc(s.handleCancelEvent)))
 	mux.Handle("DELETE /api/groups/{id}", auth(http.HandlerFunc(s.handleDeleteGroup)))
 	mux.Handle("DELETE /api/friends/{id}", auth(http.HandlerFunc(s.handleDeleteFriendship)))

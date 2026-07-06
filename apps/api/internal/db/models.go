@@ -64,6 +64,8 @@ type Event struct {
 	CustomEmoji     string             `json:"custom_emoji"`
 	CustomLabel     string             `json:"custom_label"`
 	GeneralScope    string             `json:"general_scope"`
+	PhotoUrl        string             `json:"photo_url"`
+	Theme           string             `json:"theme"`
 }
 
 type EventAttendee struct {

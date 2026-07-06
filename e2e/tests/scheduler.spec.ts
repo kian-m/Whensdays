@@ -132,6 +132,39 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("custom-jam sesh")).toHaveCount(0);
   });
 
+  test("hero edit-in-place: cover photo + backdrop theme", async ({ page }) => {
+    await ensureProfile(page);
+    const title = `Cover ${test.info().testId}`;
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-when").fill("2026-10-09T19:00");
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // The Edit affordance lives on the hero card and flips it in place.
+    await page.getByTestId("edit-event-open").click();
+    await expect(page.getByTestId("hero-edit")).toBeVisible();
+    // Upload a square cover (client-resized like avatars).
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    await page.getByTestId("cover-file").setInputFiles({
+      name: "cover.png", mimeType: "image/png", buffer: Buffer.from(png, "base64"),
+    });
+    await expect(page.getByTestId("event-cover")).toHaveAttribute("src", /^data:image\//);
+    // Pick a backdrop theme, save — both persist across a reload.
+    await page.getByTestId("theme-party").click();
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByTestId("event-cover")).toHaveAttribute("src", /^data:image\//);
+    await expect(page.locator(".event-theme.theme-party")).toBeVisible();
+    // Clean up the theme+cover so other shared-user tests see a plain hero.
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("cover-remove").click();
+    await page.getByTestId("theme-none").click();
+    await page.getByTestId("edit-save").click();
+  });
+
   test("create form visual baseline", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();

@@ -163,7 +163,13 @@ func (s *server) handleFlags(w http.ResponseWriter, r *http.Request) {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(dst); err != nil {
+	return decodeJSONLimit(w, r, dst, maxBody)
+}
+
+// decodeJSONLimit is decodeJSON with a custom body cap — for the few endpoints
+// that legitimately carry a data-URL image (event covers).
+func decodeJSONLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit)).Decode(dst); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return false
 	}

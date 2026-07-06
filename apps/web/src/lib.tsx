@@ -25,8 +25,21 @@ export type Event = {
   custom_emoji: string;
   custom_label: string;
   general_scope: "week" | "month" | "general";
+  photo_url: string;
+  theme: string;
   created_at: string;
 };
+
+// Preset event-page backdrop themes (server-validated; see eventThemes in gifs.go).
+export const EVENT_THEMES: { value: string; label: string }[] = [
+  { value: "", label: "None" },
+  { value: "party", label: "🎉 Party" },
+  { value: "beach", label: "🏖️ Beach" },
+  { value: "forest", label: "🌲 Forest" },
+  { value: "night", label: "🌙 Night" },
+  { value: "neon", label: "🪩 Neon" },
+  { value: "cozy", label: "🕯️ Cozy" },
+];
 
 // A public event as shown on Discover/Feed (only host-published fields).
 export type PublicEvent = {

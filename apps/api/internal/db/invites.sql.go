@@ -88,7 +88,7 @@ func (q *Queries) ListEventInvites(ctx context.Context, eventID pgtype.UUID) ([]
 
 const listEventsInvited = `-- name: ListEventsInvited :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme
 FROM events e
 JOIN event_invites i ON i.event_id = e.id
 WHERE i.user_id = $1 AND e.status <> 'cancelled' AND e.host_id <> $1
@@ -129,6 +129,8 @@ func (q *Queries) ListEventsInvited(ctx context.Context, userID string) ([]Event
 			&i.CustomEmoji,
 			&i.CustomLabel,
 			&i.GeneralScope,
+			&i.PhotoUrl,
+			&i.Theme,
 		); err != nil {
 			return nil, err
 		}

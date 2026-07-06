@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Attendee,
@@ -12,6 +12,7 @@ import {
   TimeOption,
   Vote,
   WEEKDAYS,
+  EVENT_THEMES,
   busyConflict,
   daysFromDate,
   fmtDate,
@@ -24,7 +25,7 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { Avatar, BackLink, DayGrid, Loading, Pill, useAsync } from "../ui";
+import { Avatar, BackLink, DayGrid, Loading, Pill, fileToAvatar, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 export function EventPage() {
@@ -39,28 +40,9 @@ export function EventPage() {
   const e = data.event;
 
   return (
-    <div className="stack">
+    <div className={`stack ${e.theme ? `event-theme theme-${e.theme}` : ""}`}>
       <BackLink />
-      <div className="card stack">
-        <div className="row" style={{ gap: "0.9rem" }}>
-          <div className="emoji" style={{ fontSize: "1.8rem", width: 56, height: 56 }}>{eventEmoji(e)}</div>
-          <div style={{ flex: 1 }}>
-            <h1 data-testid="event-title">{e.title}</h1>
-            <p className="muted">{eventLabel(e)}</p>
-          </div>
-          {e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
-            : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
-            : <Pill kind="scheduled">Confirmed</Pill>}
-        </div>
-        {e.description && <p>{e.description}</p>}
-        <div className="muted small">
-          🗓️ {e.status === "polling" ? "Time being decided" : fmtDate(e.starts_at)}
-          {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at).split(", ").pop()}` : ""}
-        </div>
-        <div className="muted small">
-          {e.location_mode === "find_venue" ? "📍 Venue to be decided" : `📍 ${e.location_address || "Address to come"}`}
-        </div>
-      </div>
+      <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} />
 
       {e.status === "cancelled" && (
         <div className="card empty" data-testid="cancelled-note">
@@ -634,18 +616,18 @@ function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
       )}
       <Guests attendees={data.attendees} />
       <AnswerSummary data={data} />
-      <EditEvent data={data} reload={reload} />
       {data.role === "host" && <HostControls data={data} reload={reload} />}
     </div>
   );
 }
 
-// Edit the event's details — available to the host and any cohost. Visibility
-// can change here too: take a private event friends-wide or public later.
-function EditEvent({ data, reload }: { data: EventDetail; reload: () => void }) {
+// The hero card: cover art + title/meta, and — for the host/cohosts — an Edit
+// button that flips the card into in-place editing (details, visibility, a
+// square cover photo or Klipy GIF, and a page backdrop theme).
+function HeroCard({ data, reload, canEdit }: { data: EventDetail; reload: () => void; canEdit: boolean }) {
   const api = useApi();
   const e = data.event;
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(e.title);
   const [desc, setDesc] = useState(e.description);
   const [locMode, setLocMode] = useState(e.location_mode);
@@ -653,7 +635,29 @@ function EditEvent({ data, reload }: { data: EventDetail; reload: () => void }) 
   const [visibility, setVisibility] = useState(e.visibility);
   const [topic, setTopic] = useState(e.topic);
   const [city, setCity] = useState(e.city || guessCity());
+  const [photo, setPhoto] = useState(e.photo_url);
+  const [theme, setTheme] = useState(e.theme);
   const [msg, setMsg] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function openEdit() {
+    // Re-seed from the freshest event so a stale card never overwrites edits.
+    setTitle(e.title); setDesc(e.description); setLocMode(e.location_mode);
+    setLocAddr(e.location_address); setVisibility(e.visibility);
+    setTopic(e.topic); setCity(e.city || guessCity());
+    setPhoto(e.photo_url); setTheme(e.theme); setMsg(null);
+    setEditing(true);
+  }
+
+  async function onPickPhoto(ev: React.ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+    try {
+      setPhoto(await fileToAvatar(file, 420)); // square cover, client-resized
+    } catch {
+      setMsg("could not read image");
+    }
+  }
 
   async function save(ev: React.FormEvent) {
     ev.preventDefault();
@@ -661,62 +665,155 @@ function EditEvent({ data, reload }: { data: EventDetail; reload: () => void }) 
     const res = await sendJSON(api, "PUT", `/api/events/${e.id}`, {
       title, description: desc, location_mode: locMode, location_address: locAddr,
       visibility, topic: visibility === "public" ? topic : "", city: visibility === "public" ? city.trim() : "",
+      photo_url: photo, theme,
     });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
       return setMsg(b.error || "could not save");
     }
-    setOpen(false);
+    setEditing(false);
     reload();
   }
 
-  return (
-    <div className="card stack">
-      <div className="row between">
-        <h3 style={{ margin: 0 }}>Edit event</h3>
-        <button className="btn ghost sm" data-testid="edit-event-open" onClick={() => setOpen((o) => !o)}>
-          {open ? "Cancel" : "Edit"}
-        </button>
-      </div>
-      {open && (
-        <form className="stack" onSubmit={save}>
-          <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
-          <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
-          <div className="row" style={{ gap: 6 }}>
-            <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
-              data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>
-            <button type="button" className={locMode === "find_venue" ? "btn sm" : "btn ghost sm"}
-              data-testid="edit-loc-venue" onClick={() => setLocMode("find_venue")}>Find a venue</button>
+  if (!editing) {
+    return (
+      <div className="card stack">
+        {e.photo_url && <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />}
+        <div className="row" style={{ gap: "0.9rem" }}>
+          <div className="emoji" style={{ fontSize: "1.8rem", width: 56, height: 56 }}>{eventEmoji(e)}</div>
+          <div style={{ flex: 1 }}>
+            <h1 data-testid="event-title">{e.title}</h1>
+            <p className="muted">{eventLabel(e)}</p>
           </div>
-          {locMode === "host_place" && (
-            <input className="input" data-testid="edit-address" value={locAddr} onChange={(ev) => setLocAddr(ev.target.value)} placeholder="Address" />
-          )}
-          <div className="row wrap" style={{ gap: 6 }}>
-            <span className="muted small">Who can find it:</span>
-            {([["private", "🔒 Invite-only"], ["friends", "🤝 Friends"], ["public", "🌎 Public"]] as const).map(([v, l]) => (
-              <button key={v} type="button" className={`chip sm ${visibility === v ? "on" : ""}`}
-                data-testid={`edit-vis-${v}`} onClick={() => setVisibility(v)}>{l}</button>
+          <span className="stack" style={{ alignItems: "flex-end", gap: 6 }}>
+            {e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
+              : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
+              : <Pill kind="scheduled">Confirmed</Pill>}
+            {canEdit && (
+              <button className="btn ghost sm" data-testid="edit-event-open" onClick={openEdit}>✎ Edit</button>
+            )}
+          </span>
+        </div>
+        {e.description && <p>{e.description}</p>}
+        <div className="muted small">
+          🗓️ {e.status === "polling" ? "Time being decided" : fmtDate(e.starts_at)}
+          {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at).split(", ").pop()}` : ""}
+        </div>
+        <div className="muted small">
+          {e.location_mode === "find_venue" ? "📍 Venue to be decided" : `📍 ${e.location_address || "Address to come"}`}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form className="card stack" data-testid="hero-edit" onSubmit={save}>
+      {photo && <img className="event-cover" data-testid="event-cover" src={photo} alt="" />}
+      <div className="row wrap" style={{ gap: 6 }}>
+        <button type="button" className="btn ghost sm" data-testid="cover-upload"
+          onClick={() => fileRef.current?.click()}>{photo ? "Change photo" : "📷 Add a photo"}</button>
+        {photo && (
+          <button type="button" className="btn ghost sm" data-testid="cover-remove" onClick={() => setPhoto("")}>Remove</button>
+        )}
+        <input ref={fileRef} type="file" accept="image/*" data-testid="cover-file"
+          style={{ display: "none" }} onChange={onPickPhoto} />
+      </div>
+      <GifPicker onPick={(url) => setPhoto(url)} />
+      <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
+      <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
+      <div className="row" style={{ gap: 6 }}>
+        <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
+          data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>
+        <button type="button" className={locMode === "find_venue" ? "btn sm" : "btn ghost sm"}
+          data-testid="edit-loc-venue" onClick={() => setLocMode("find_venue")}>Find a venue</button>
+      </div>
+      {locMode === "host_place" && (
+        <input className="input" data-testid="edit-address" value={locAddr} onChange={(ev) => setLocAddr(ev.target.value)} placeholder="Address" />
+      )}
+      <div className="row wrap" style={{ gap: 6 }}>
+        <span className="muted small">Who can find it:</span>
+        {([["private", "🔒 Invite-only"], ["friends", "🤝 Friends"], ["public", "🌎 Public"]] as const).map(([v, l]) => (
+          <button key={v} type="button" className={`chip sm ${visibility === v ? "on" : ""}`}
+            data-testid={`edit-vis-${v}`} onClick={() => setVisibility(v)}>{l}</button>
+        ))}
+      </div>
+      {visibility === "public" && (
+        <>
+          <div className="row wrap" style={{ gap: 4 }}>
+            {CATEGORIES.map((c) => (
+              <button key={c.slug} type="button" className={`chip sm ${topic === c.slug ? "on" : ""}`}
+                data-testid={`edit-cat-${c.slug}`}
+                onClick={() => setTopic(topic === c.slug ? "" : c.slug)}>{c.emoji} {c.label}</button>
             ))}
           </div>
-          {visibility === "public" && (
-            <>
-              <div className="row wrap" style={{ gap: 4 }}>
-                {CATEGORIES.map((c) => (
-                  <button key={c.slug} type="button" className={`chip sm ${topic === c.slug ? "on" : ""}`}
-                    data-testid={`edit-cat-${c.slug}`}
-                    onClick={() => setTopic(topic === c.slug ? "" : c.slug)}>{c.emoji} {c.label}</button>
-                ))}
-              </div>
-              <input className="input" data-testid="edit-city" list="edit-city-list" value={city}
-                placeholder="city (optional)" onChange={(ev) => setCity(ev.target.value)} />
-              <datalist id="edit-city-list">
-                {CITY_OPTIONS.map((c) => <option key={c} value={c} />)}
-              </datalist>
-            </>
-          )}
-          {msg && <p className="muted small">{msg}</p>}
-          <button className="btn" data-testid="edit-save" style={{ alignSelf: "flex-start" }}>Save changes</button>
-        </form>
+          <input className="input" data-testid="edit-city" list="edit-city-list" value={city}
+            placeholder="city (optional)" onChange={(ev) => setCity(ev.target.value)} />
+          <datalist id="edit-city-list">
+            {CITY_OPTIONS.map((c) => <option key={c} value={c} />)}
+          </datalist>
+        </>
+      )}
+      <div className="row wrap" style={{ gap: 6 }}>
+        <span className="muted small">Theme:</span>
+        {EVENT_THEMES.map((t) => (
+          <button key={t.value} type="button" className={`chip sm ${theme === t.value ? "on" : ""}`}
+            data-testid={`theme-${t.value || "none"}`} onClick={() => setTheme(t.value)}>{t.label}</button>
+        ))}
+      </div>
+      {msg && <p className="err small">{msg}</p>}
+      <div className="row">
+        <button className="btn" data-testid="edit-save">Save changes</button>
+        <button type="button" className="btn ghost sm" data-testid="edit-cancel" onClick={() => setEditing(false)}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+// Klipy GIF search (server-proxied — the API key never reaches the browser).
+// Hidden entirely when the server reports the integration unconfigured.
+function GifPicker({ onPick }: { onPick: (url: string) => void }) {
+  const api = useApi();
+  const [enabled, setEnabled] = useState(false);
+  const [q, setQ] = useState("");
+  const [gifs, setGifs] = useState<{ url: string; preview: string; title: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    getJSON<{ enabled: boolean }>(api, "/api/gifs/search").then((b) => setEnabled(b.enabled)).catch(() => {});
+  }, [api]);
+  if (!enabled) return null;
+
+  async function search() {
+    if (!q.trim()) return;
+    setSearching(true);
+    try {
+      const b = await getJSON<{ gifs: { url: string; preview: string; title: string }[] }>(
+        api, `/api/gifs/search?q=${encodeURIComponent(q.trim())}`);
+      setGifs(b.gifs);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="row">
+        <input className="input" data-testid="gif-q" value={q} placeholder="…or search GIFs (Klipy)"
+          onChange={(ev) => setQ(ev.target.value)}
+          onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); search(); } }} />
+        <button type="button" className="btn soft sm" data-testid="gif-go" disabled={searching} onClick={search}>
+          {searching ? "…" : "Search"}
+        </button>
+      </div>
+      {gifs.length > 0 && (
+        <div className="gif-grid" data-testid="gif-grid">
+          {gifs.map((g, i) => (
+            <button key={g.url} type="button" data-testid={`gif-${i}`} title={g.title}
+              onClick={() => { onPick(g.url); setGifs([]); }}>
+              <img src={g.preview} alt={g.title} loading="lazy" />
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
