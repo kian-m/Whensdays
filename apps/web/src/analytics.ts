@@ -38,6 +38,9 @@ export function initAnalytics() {
   }
   posthog.init(KEY, {
     api_host: HOST,
+    // When HOST is a reverse proxy (prod: PostHog managed proxy on our domain,
+    // so adblockers don't eat events), links/toolbar still need the real UI.
+    ui_host: "https://us.posthog.com",
     // Only create person profiles for identified (signed-in) users — cheaper,
     // and anonymous landing traffic still shows up in event trends.
     person_profiles: "identified_only",
