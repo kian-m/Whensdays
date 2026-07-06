@@ -158,6 +158,17 @@ test.describe("scheduler", () => {
     await page.reload();
     await expect(page.getByTestId("event-cover")).toHaveAttribute("src", /^data:image\//);
     await expect(page.locator(".event-theme.theme-party")).toBeVisible();
+    // The per-event social card (og:image) serves a composited PNG, and the
+    // unfurl page points at it.
+    // After the reload, the OG shell bounced /e/{id} to the SPA alias /ev/{id} —
+    // parse the uuid itself rather than assuming the prefix.
+    const evId = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
+    const og = await page.request.get(`/api/events/${evId}/og.png`);
+    expect(og.status()).toBe(200);
+    expect(og.headers()["content-type"]).toContain("image/png");
+    const shell = await page.request.get(`/e/${evId}`);
+    expect(await shell.text()).toContain(`/api/events/${evId}/og.png`);
+
     // The cover is now the tile's main visual on the dashboard.
     await page.goto("/");
     const covRow = page.getByTestId("event-row").filter({ hasText: title }).first();

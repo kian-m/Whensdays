@@ -7,6 +7,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/posthog/posthog-go v1.16.2
 	github.com/pressly/goose/v3 v3.24.1
+	golang.org/x/image v0.23.0
 )
 
 require (

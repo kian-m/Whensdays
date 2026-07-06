@@ -30,7 +30,8 @@ func (s *server) handleOGPage(w http.ResponseWriter, r *http.Request) {
 	}
 	target := "/ev/" + r.PathValue("id")
 	base := s.ogBaseURL(r)
-	image := base + "/og-card.png" // branded social card (apps/web/public)
+	// Per-event social card: cover/gif + host name + logo (ogimage.go).
+	image := base + "/api/events/" + r.PathValue("id") + "/og.png"
 	pageURL := base + "/e/" + r.PathValue("id")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

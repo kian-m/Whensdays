@@ -143,6 +143,9 @@ func main() {
 	// OG unfurl already serves), and a bare <a href> can't attach a bearer —
 	// this is what lets iOS open the invite directly in Calendar.
 	mux.Handle("GET /api/events/{id}/calendar.ics", http.HandlerFunc(s.handleEventICS))
+	// Unauthenticated for the same reason: og:image is fetched by link
+	// scrapers (iMessage, Slack, …) that can't send a bearer.
+	mux.Handle("GET /api/events/{id}/og.png", http.HandlerFunc(s.handleEventOGImage))
 
 	// Calendar import (see calendars_import.go). The Google OAuth callback is
 	// intentionally UNauthenticated — Google redirects the browser to it with no
