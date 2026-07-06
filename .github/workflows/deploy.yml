@@ -8,10 +8,10 @@ on:
     branches: [main]
 
 env:
-  GCP_PROJECT: your-gcp-project-id
+  GCP_PROJECT: whensdays
   GCP_REGION: us-central1
-  AR_REPO: clsandbox # Artifact Registry repo name
-  SERVICE: clsandbox-api # Cloud Run service name
+  AR_REPO: whensdays # Artifact Registry repo name
+  SERVICE: whensdays-api # Cloud Run service name
 
 jobs:
   deploy-api:
@@ -42,9 +42,10 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --min-instances 0 \
+            --max-instances 2 \
             --port 8080 \
             --set-env-vars "APP_ENV=production,POSTHOG_HOST=https://us.i.posthog.com,APP_VERSION=${GITHUB_SHA},APP_ORIGIN=${{ secrets.APP_ORIGIN }}" \
-            --set-secrets "DATABASE_URL=DATABASE_URL:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest,POSTHOG_API_KEY=POSTHOG_API_KEY:latest,POSTHOG_PERSONAL_API_KEY=POSTHOG_PERSONAL_API_KEY:latest,GUEST_TOKEN_KEY=GUEST_TOKEN_KEY:latest"
+            --set-secrets "DATABASE_URL=DATABASE_URL:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest,POSTHOG_API_KEY=POSTHOG_API_KEY:latest,POSTHOG_PERSONAL_API_KEY=POSTHOG_PERSONAL_API_KEY:latest,GUEST_TOKEN_KEY=GUEST_TOKEN_KEY:latest,KLIPY_API_KEY=KLIPY_API_KEY:latest"
           # To enable optional features, create their secrets (docs/DEPLOY.md §5b/5c)
           # and append to the --set-secrets line above, e.g.:
           #   ,GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest,GOOGLE_OAUTH_CLIENT_SECRET=GOOGLE_OAUTH_CLIENT_SECRET:latest,CALENDAR_TOKEN_KEY=CALENDAR_TOKEN_KEY:latest
@@ -88,4 +89,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/web/dist --project-name=clsandbox
+          command: pages deploy apps/web/dist --project-name=whensdays
