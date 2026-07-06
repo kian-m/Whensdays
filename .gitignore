@@ -19,3 +19,4 @@ e2e/blob-report/
 *.log
 .DS_Store
 .idea/
+package-lock.json

@@ -7,8 +7,5 @@
     "build:web": "pnpm --filter @clsandbox/web build",
     "typecheck": "pnpm --filter @clsandbox/web typecheck",
     "e2e": "pnpm --filter @clsandbox/e2e test"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.49.1"
   }
 }
