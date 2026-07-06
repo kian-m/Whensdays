@@ -18,6 +18,13 @@ Architecture in prod: browser → Cloudflare Pages (static React) → `/api/*` p
 4. Store the DB URL: `gcloud secrets create DATABASE_URL --data-file=-` (paste the Neon string). Grant the runtime service account `secretAccessor`.
 5. Set up **Workload Identity Federation** for this GitHub repo (no JSON keys). Record the provider resource name and the service account email.
 
+### 2b. Billing kill switch (recommended before first deploy)
+
+GCP has no built-in hard spend cap. `scripts/billing-killswitch/` sets one up:
+a $-budget publishes to Pub/Sub and a tiny function detaches billing from the
+project when actual cost crosses it (Cloud Run goes offline; Neon/Cloudflare
+are unaffected). Full commands + re-arm procedure in that directory's README.
+
 ### 3. Cloudflare Pages
 1. Create a Pages project named `clsandbox` (matches `--project-name`).
 2. Create an API token with Pages:Edit; note your account ID.
