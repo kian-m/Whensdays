@@ -477,7 +477,11 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
 
       {scope === "week" && (
         <div>
-          <div className="muted small" style={{ marginBottom: 6 }}>Tap the times that work (a date or column header fills the line)</div>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <span className="muted small">Tap the times that work (a date or column header fills the line)</span>
+            <button type="button" className="btn ghost sm" data-testid="gpw-clear"
+              disabled={dayCells.size === 0} onClick={() => mutate(setDayCells, (s) => s.clear())}>Clear</button>
+          </div>
           <DayGrid dates={weekDates} free={dayCells} idPrefix="gpw" testid="gp-week-grid"
             onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleDayCol} />
         </div>
@@ -485,7 +489,15 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
 
       {scope === "month" && (
         <div>
-          <div className="muted small" style={{ marginBottom: 6 }}>Tap every day that works over the next 4 weeks</div>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <span className="muted small">Tap every day that works over the next 4 weeks</span>
+            <span className="row" style={{ gap: 6 }}>
+              <button type="button" className="btn ghost sm" data-testid="gp-days-all"
+                onClick={() => mutate(setDays, (s) => monthDates.forEach((d) => s.add(d.value)))}>Select all</button>
+              <button type="button" className="btn ghost sm" data-testid="gp-days-clear"
+                disabled={days.size === 0} onClick={() => mutate(setDays, (s) => s.clear())}>Clear</button>
+            </span>
+          </div>
           <div className="row wrap" style={{ gap: 6 }} data-testid="gp-month-days">
             {monthDates.map((d, i) => (
               <button key={d.value} type="button" className={`chip sm ${days.has(d.value) ? "on" : ""}`}
