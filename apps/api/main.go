@@ -20,6 +20,7 @@ import (
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
+	clerkjwks "github.com/clerk/clerk-sdk-go/v2/jwks"
 	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for migrations
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
@@ -95,6 +96,24 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
+	// TEMP diagnostic (unauthenticated, no secrets leaked) — reports whether the
+	// running container can fetch Clerk's JWKS. Remove after debugging.
+	mux.HandleFunc("GET /api/_diag/clerk", func(w http.ResponseWriter, r *http.Request) {
+		k := os.Getenv("CLERK_SECRET_KEY")
+		prefix := ""
+		if len(k) >= 8 {
+			prefix = k[:8]
+		}
+		out := map[string]any{"key_prefix": prefix, "key_len": len(k)}
+		jwks, err := clerkjwks.Get(r.Context(), &clerkjwks.GetParams{})
+		if err != nil {
+			out["jwks_error"] = err.Error()
+		} else if jwks != nil {
+			out["jwks_ok"] = true
+			out["jwks_keys"] = len(jwks.Keys)
+		}
+		writeJSON(w, http.StatusOK, out)
+	})
 	// Unauthenticated by design: the event id is the capability (invite link).
 	mux.HandleFunc("POST /api/guest/join", s.handleGuestJoin)
 	// Full-page loads of /e/{id} are proxied here by nginx for link unfurls.
