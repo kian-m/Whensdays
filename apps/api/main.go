@@ -20,8 +20,8 @@ import (
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
-	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for migrations
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for migrations
 	"github.com/pressly/goose/v3"
 
 	"github.com/clsandbox/api/internal/analytics"
@@ -103,7 +103,7 @@ func main() {
 	writeLimit := func(h http.Handler) http.Handler { return h }
 	readLimit := func(h http.Handler) http.Handler { return h }
 	if os.Getenv("AUTH_MODE") != "dev" {
-		writeLimit = newIPLimiter(30, 15).middleware // ~30/min, burst 15
+		writeLimit = newIPLimiter(30, 15).middleware  // ~30/min, burst 15
 		readLimit = newIPLimiter(300, 100).middleware // ~300/min, burst 100
 	}
 
@@ -133,6 +133,7 @@ func main() {
 	mux.Handle("GET /api/profile", auth(http.HandlerFunc(s.handleGetProfile)))
 	mux.Handle("PUT /api/profile", auth(http.HandlerFunc(s.handleUpsertProfile)))
 	mux.Handle("PUT /api/profile/avatar", auth(http.HandlerFunc(s.handleSetAvatar)))
+	mux.Handle("PUT /api/profile/email", auth(http.HandlerFunc(s.handleSetProfileEmail)))
 	mux.Handle("GET /api/availability", auth(http.HandlerFunc(s.handleGetAvailability)))
 	mux.Handle("PUT /api/availability", auth(http.HandlerFunc(s.handlePutAvailability)))
 	mux.Handle("GET /api/availability/days", auth(http.HandlerFunc(s.handleGetAvailabilityDays)))
@@ -191,7 +192,7 @@ func main() {
 
 	port := envOr("API_PORT", "8080")
 	srv := &http.Server{
-		Addr:              ":" + port,
+		Addr: ":" + port,
 		// telemetry (innermost) captures per-request metrics to PostHog.
 		Handler:           securityHeaders(requestLogger(logger, s.telemetry(mux))),
 		ReadHeaderTimeout: 5 * time.Second,

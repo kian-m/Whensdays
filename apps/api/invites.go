@@ -46,8 +46,16 @@ func (s *server) handleInviteFriend(w http.ResponseWriter, r *http.Request) {
 	if s.notify.Enabled() {
 		if p, err := s.queries.GetProfile(r.Context(), in.FriendID); err == nil && p.Email != "" {
 			if inviter, err := s.queries.GetProfile(r.Context(), uid); err == nil {
-				s.notify.Send([]string{p.Email}, "You're invited: "+ev.Title,
-					emailBody(ev.Title, inviter.DisplayName+" invited you — open the event to RSVP.", s.eventURL(ev.ID)))
+				body := renderEmail(emailContent{
+					preheader: inviter.DisplayName + " invited you to " + ev.Title,
+					heading:   "You're invited to " + ev.Title,
+					lines:     []string{inviter.DisplayName + " invited you. Open the event to say if you can make it and add your availability."},
+					meta:      eventMeta(ev),
+					ctaLabel:  "RSVP now →",
+					ctaURL:    campaignURL(s.eventURL(ev.ID), "invite"),
+					logoURL:   s.logoURL(),
+				})
+				s.notify.Send([]string{p.Email}, "You're invited: "+ev.Title, body)
 			}
 		}
 	}

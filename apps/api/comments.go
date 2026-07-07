@@ -94,11 +94,11 @@ func (s *server) handlePostComment(w http.ResponseWriter, r *http.Request) {
 	}
 	s.analytics.Capture(uid, "comment_posted", map[string]any{"event_id": r.PathValue("id")})
 	if p, perr := s.queries.GetProfile(r.Context(), uid); perr == nil {
-				note := in.Body
+		note := in.Body
 		if note == "" {
 			note = "sent a GIF"
 		}
-		s.notifyHost(r.Context(), ev, uid, "New comment on "+ev.Title, p.DisplayName+": "+note)
+		s.notifyNewComment(r.Context(), ev, uid, p.DisplayName, note)
 	}
 	writeJSON(w, http.StatusCreated, c)
 }

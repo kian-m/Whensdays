@@ -61,8 +61,15 @@ func (s *server) handleCancelEvent(w http.ResponseWriter, r *http.Request) {
 			emails = es
 		}
 		if len(emails) > 0 {
-			s.notify.Send(emails, "Cancelled: "+ev.Title,
-				emailBody(ev.Title+" was cancelled", "The host called it off — check the event page for any follow-up.", s.eventURL(ev.ID)))
+			body := renderEmail(emailContent{
+				preheader: "This plan was called off.",
+				heading:   ev.Title + " was cancelled",
+				lines:     []string{"The host called this one off. No action needed — check the event page for any follow-up."},
+				ctaLabel:  "View the event →",
+				ctaURL:    campaignURL(s.eventURL(ev.ID), "cancelled"),
+				logoURL:   s.logoURL(),
+			})
+			s.notify.Send(emails, "Cancelled: "+ev.Title, body)
 		}
 	}
 	if wholeSeries {

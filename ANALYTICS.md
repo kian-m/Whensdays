@@ -101,6 +101,16 @@ Leave the keys empty and analytics stays disabled (the API logs
 
 Every event also carries `service` (`api`/`web`), `environment`, and `release`.
 
+**Transactional email → PostHog attribution.** Emails can't run JS, so link
+attribution is done with UTM tags, not a tracking pixel. Every link in a
+Whensdays email is built by `campaignURL` (`apps/api/emails.go`) as
+`?utm_source=whensdays&utm_medium=email&utm_campaign=email_<type>` — one
+`utm_campaign` per email type: `email_finalized`, `email_reminder`,
+`email_comment`, `email_rsvp`, `email_invite`, `email_cancelled`. PostHog
+auto-captures `utm_*` on the landing `$pageview`, so email-driven visits (and any
+downstream conversion) are attributable per campaign in the same funnels — no new
+event names to wire. Add a matching `email_<type>` when you add an email trigger.
+
 ## 6. Metrics & alerts
 
 Build these in the PostHog UI on the data above:

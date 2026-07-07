@@ -11,12 +11,17 @@ FROM profiles
 WHERE handle = $1;
 
 -- name: UpsertProfile :one
-INSERT INTO profiles (user_id, display_name, handle, email)
-VALUES ($1, $2, $3, $4)
+-- Name + handle only. Email is owned by the auth provider (Clerk) and synced
+-- separately via SetProfileEmail, so a profile edit never clobbers it.
+INSERT INTO profiles (user_id, display_name, handle)
+VALUES ($1, $2, $3)
 ON CONFLICT (user_id) DO UPDATE
     SET display_name = EXCLUDED.display_name,
-        handle       = EXCLUDED.handle,
-        email        = EXCLUDED.email
+        handle       = EXCLUDED.handle
+RETURNING user_id, display_name, handle, avatar_url, created_at, email;
+
+-- name: SetProfileEmail :one
+UPDATE profiles SET email = $2 WHERE user_id = $1
 RETURNING user_id, display_name, handle, avatar_url, created_at, email;
 
 -- name: SetAvatar :one

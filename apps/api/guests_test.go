@@ -82,11 +82,31 @@ func TestTopicValidation(t *testing.T) {
 }
 
 func TestEmailBodyEscapes(t *testing.T) {
-	b := emailBody("<script>", "a & b", "https://x/e/1")
+	b := renderEmail(emailContent{
+		heading: "<script>",
+		lines:   []string{"a & b"},
+		quote:   "x\"><img src=y>",
+		ctaURL:  "https://x/e/1", ctaLabel: "Open",
+	})
 	if !strings.Contains(b, "&lt;script&gt;") {
 		t.Fatalf("heading not escaped: %s", b)
 	}
 	if !strings.Contains(b, "a &amp; b") {
-		t.Fatalf("detail not escaped: %s", b)
+		t.Fatalf("body not escaped: %s", b)
+	}
+	if strings.Contains(b, "<img src=y>") {
+		t.Fatalf("quote not escaped: %s", b)
+	}
+}
+
+func TestCampaignURL(t *testing.T) {
+	got := campaignURL("https://w.app/e/abc", "finalized")
+	want := "https://w.app/e/abc?utm_source=whensdays&utm_medium=email&utm_campaign=email_finalized"
+	if got != want {
+		t.Fatalf("campaignURL = %s, want %s", got, want)
+	}
+	// Preserves an existing query string with & instead of ?.
+	if q := campaignURL("https://w.app/e/abc?x=1", "reminder"); !strings.Contains(q, "?x=1&utm_source=") {
+		t.Fatalf("existing query not preserved: %s", q)
 	}
 }

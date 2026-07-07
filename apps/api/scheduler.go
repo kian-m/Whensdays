@@ -207,18 +207,12 @@ func (s *server) handleUpsertProfile(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		DisplayName string `json:"display_name"`
 		Handle      string `json:"handle"`
-		Email       string `json:"email"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
 	in.DisplayName = strings.TrimSpace(in.DisplayName)
 	in.Handle = strings.ToLower(strings.TrimSpace(in.Handle))
-	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
-	if in.Email != "" && (len(in.Email) > 254 || !strings.Contains(in.Email, "@")) {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid email"})
-		return
-	}
 	if in.DisplayName == "" {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "display_name is required"})
 		return
@@ -234,7 +228,7 @@ func (s *server) handleUpsertProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := s.queries.UpsertProfile(r.Context(), db.UpsertProfileParams{
-		UserID: uid, DisplayName: in.DisplayName, Handle: in.Handle, Email: in.Email,
+		UserID: uid, DisplayName: in.DisplayName, Handle: in.Handle,
 	})
 	if isUniqueViolation(err) && autoHandle {
 		// Derived handle collided — retry with a random suffix.
@@ -242,7 +236,7 @@ func (s *server) handleUpsertProfile(w http.ResponseWriter, r *http.Request) {
 		_, _ = rand.Read(b[:])
 		in.Handle = in.Handle + "-" + fmt.Sprintf("%x", b)
 		p, err = s.queries.UpsertProfile(r.Context(), db.UpsertProfileParams{
-			UserID: uid, DisplayName: in.DisplayName, Handle: in.Handle, Email: in.Email,
+			UserID: uid, DisplayName: in.DisplayName, Handle: in.Handle,
 		})
 	}
 	if isUniqueViolation(err) {
@@ -255,6 +249,37 @@ func (s *server) handleUpsertProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	s.analytics.Identify(uid, map[string]any{"handle": p.Handle, "name": p.DisplayName})
 	s.analytics.Capture(uid, "profile_updated", map[string]any{"handle": p.Handle})
+	writeJSON(w, http.StatusOK, p)
+}
+
+// handleSetProfileEmail syncs the address from the auth provider (Clerk owns it;
+// the client mirrors the verified primary email here so transactional email has a
+// destination). Email is never user-typed in our UI — it comes from a verified
+// Clerk address — but we still validate shape defensively. Empty string clears it.
+func (s *server) handleSetProfileEmail(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	var in struct {
+		Email string `json:"email"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+	if in.Email != "" && (len(in.Email) > 254 || !strings.Contains(in.Email, "@")) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid email"})
+		return
+	}
+	p, err := s.queries.SetProfileEmail(r.Context(), db.SetProfileEmailParams{UserID: uid, Email: in.Email})
+	if err != nil {
+		// No profile row yet (email sync can race ahead of profile creation on a
+		// fresh sign-up) — not an error worth surfacing; the next sync will land.
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+			return
+		}
+		s.internal(w, "set profile email", err)
+		return
+	}
 	writeJSON(w, http.StatusOK, p)
 }
 
@@ -514,14 +539,14 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		LocationMode    string   `json:"location_mode"`
 		LocationAddress string   `json:"location_address"`
 		SchedulingMode  string   `json:"scheduling_mode"`
-		StartsAt        string   `json:"starts_at"`    // RFC3339, for fixed mode
-		TimeOptions     []string `json:"time_options"` // RFC3339[], for poll mode
-		GroupID         string   `json:"group_id"`     // optional: attach to a group
-		Repeat          string   `json:"repeat"`       // optional: weekly|biweekly|monthly (fixed mode only)
-		RepeatCount     int      `json:"repeat_count"` // total occurrences, 2-12 (default 4)
-		Visibility      string   `json:"visibility"`   // optional: private (default) | public
-		Topic           string   `json:"topic"`        // optional slug, for public discovery
-		City            string   `json:"city"`         // optional, for public discovery
+		StartsAt        string   `json:"starts_at"`     // RFC3339, for fixed mode
+		TimeOptions     []string `json:"time_options"`  // RFC3339[], for poll mode
+		GroupID         string   `json:"group_id"`      // optional: attach to a group
+		Repeat          string   `json:"repeat"`        // optional: weekly|biweekly|monthly (fixed mode only)
+		RepeatCount     int      `json:"repeat_count"`  // total occurrences, 2-12 (default 4)
+		Visibility      string   `json:"visibility"`    // optional: private (default) | public
+		Topic           string   `json:"topic"`         // optional slug, for public discovery
+		City            string   `json:"city"`          // optional, for public discovery
 		CustomEmoji     string   `json:"custom_emoji"`  // optional user-defined type (with label)
 		CustomLabel     string   `json:"custom_label"`  // ≤20 chars; forces event_type=other
 		GeneralScope    string   `json:"general_scope"` // general mode: week|month|general (default general)
@@ -823,7 +848,7 @@ func (s *server) handleRsvp(w http.ResponseWriter, r *http.Request) {
 	s.analytics.Capture(uid, "rsvp_submitted", map[string]any{"event_id": r.PathValue("id"), "rsvp": in.Rsvp})
 	if in.Rsvp == "going" && s.notify.Enabled() {
 		if p, err := s.queries.GetProfile(r.Context(), uid); err == nil {
-			s.notifyHost(r.Context(), ev, uid, "New RSVP for "+ev.Title, p.DisplayName+" is going.")
+			s.notifyNewRSVP(r.Context(), ev, uid, p.DisplayName)
 		}
 	}
 	writeJSON(w, http.StatusOK, a)

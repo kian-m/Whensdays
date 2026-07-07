@@ -37,7 +37,6 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
 
   const [displayName, setDisplayName] = useState(profile?.display_name ?? "");
   const [handle, setHandle] = useState(profile?.handle ?? "");
-  const [email, setEmail] = useState(profile?.email ?? "");
   // The profile tile is read-only until Edit is pressed; Save flips it back.
   const [editing, setEditing] = useState(false);
 
@@ -174,7 +173,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const res = await sendJSON(api, "PUT", "/api/profile", { display_name: displayName, handle, email });
+    const res = await sendJSON(api, "PUT", "/api/profile", { display_name: displayName, handle });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
       return setError(b.error || "could not save");
@@ -234,7 +233,6 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
               <span className="stack" style={{ gap: 2 }}>
                 <strong>{displayName}</strong>
                 <span className="muted small">@{handle}</span>
-                {email && <span className="muted small">{email}</span>}
               </span>
             </span>
             <button type="button" className="btn ghost sm" data-testid="profile-edit"
@@ -264,11 +262,6 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
           <label className="field" htmlFor="hd">Handle</label>
           <input id="hd" className="input" data-testid="profile-handle" value={handle}
             onChange={(e) => setHandle(e.target.value)} />
-        </div>
-        <div>
-          <label className="field" htmlFor="em">Email <span className="muted small">(optional — for reminders & updates)</span></label>
-          <input id="em" className="input" type="email" data-testid="profile-email" value={email}
-            placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} />
         </div>
         {error && <p className="err">{error}</p>}
         <div className="row">

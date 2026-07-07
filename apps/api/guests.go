@@ -111,7 +111,7 @@ func (s *server) handleGuestJoin(w http.ResponseWriter, r *http.Request) {
 	_, _ = rand.Read(suffix)
 	uid := "guest_" + hex.EncodeToString(suffix)
 	prof, err := s.queries.UpsertProfile(r.Context(), db.UpsertProfileParams{
-		UserID: uid, DisplayName: in.Name, Handle: fmt.Sprintf("guest-%x", suffix[:3]), Email: "",
+		UserID: uid, DisplayName: in.Name, Handle: fmt.Sprintf("guest-%x", suffix[:3]),
 	})
 	if err != nil {
 		s.internal(w, "guest join", err)

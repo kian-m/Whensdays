@@ -1280,6 +1280,39 @@ func (q *Queries) SetCommentsEnabled(ctx context.Context, arg SetCommentsEnabled
 	return err
 }
 
+const setProfileEmail = `-- name: SetProfileEmail :one
+UPDATE profiles SET email = $2 WHERE user_id = $1
+RETURNING user_id, display_name, handle, avatar_url, created_at, email
+`
+
+type SetProfileEmailParams struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+}
+
+type SetProfileEmailRow struct {
+	UserID      string             `json:"user_id"`
+	DisplayName string             `json:"display_name"`
+	Handle      string             `json:"handle"`
+	AvatarUrl   string             `json:"avatar_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Email       string             `json:"email"`
+}
+
+func (q *Queries) SetProfileEmail(ctx context.Context, arg SetProfileEmailParams) (SetProfileEmailRow, error) {
+	row := q.db.QueryRow(ctx, setProfileEmail, arg.UserID, arg.Email)
+	var i SetProfileEmailRow
+	err := row.Scan(
+		&i.UserID,
+		&i.DisplayName,
+		&i.Handle,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.Email,
+	)
+	return i, err
+}
+
 const updateEvent = `-- name: UpdateEvent :one
 UPDATE events
 SET title = $2, description = $3, location_mode = $4, location_address = $5,
@@ -1381,12 +1414,11 @@ func (q *Queries) UpsertPreferenceAnswer(ctx context.Context, arg UpsertPreferen
 }
 
 const upsertProfile = `-- name: UpsertProfile :one
-INSERT INTO profiles (user_id, display_name, handle, email)
-VALUES ($1, $2, $3, $4)
+INSERT INTO profiles (user_id, display_name, handle)
+VALUES ($1, $2, $3)
 ON CONFLICT (user_id) DO UPDATE
     SET display_name = EXCLUDED.display_name,
-        handle       = EXCLUDED.handle,
-        email        = EXCLUDED.email
+        handle       = EXCLUDED.handle
 RETURNING user_id, display_name, handle, avatar_url, created_at, email
 `
 
@@ -1394,7 +1426,6 @@ type UpsertProfileParams struct {
 	UserID      string `json:"user_id"`
 	DisplayName string `json:"display_name"`
 	Handle      string `json:"handle"`
-	Email       string `json:"email"`
 }
 
 type UpsertProfileRow struct {
@@ -1406,13 +1437,10 @@ type UpsertProfileRow struct {
 	Email       string             `json:"email"`
 }
 
+// Name + handle only. Email is owned by the auth provider (Clerk) and synced
+// separately via SetProfileEmail, so a profile edit never clobbers it.
 func (q *Queries) UpsertProfile(ctx context.Context, arg UpsertProfileParams) (UpsertProfileRow, error) {
-	row := q.db.QueryRow(ctx, upsertProfile,
-		arg.UserID,
-		arg.DisplayName,
-		arg.Handle,
-		arg.Email,
-	)
+	row := q.db.QueryRow(ctx, upsertProfile, arg.UserID, arg.DisplayName, arg.Handle)
 	var i UpsertProfileRow
 	err := row.Scan(
 		&i.UserID,

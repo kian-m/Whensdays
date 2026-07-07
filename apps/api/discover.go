@@ -40,14 +40,8 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 	}
 	sent := 0
 	for _, ev := range events {
-		if s.notify.Enabled() {
-			emails, err := s.queries.ListGoingAttendeeEmails(r.Context(), ev.ID)
-			if err == nil && len(emails) > 0 {
-				when := ev.StartsAt.Time.Format("Mon Jan 2, 3:04 PM MST")
-				s.notify.Send(emails, "Tomorrow: "+ev.Title,
-					emailBody(ev.Title+" is coming up", "See you at "+when+".", s.eventURL(ev.ID)))
-				sent++
-			}
+		if s.notifyReminder(r.Context(), ev) > 0 {
+			sent++
 		}
 		if err := s.queries.MarkEventReminded(r.Context(), ev.ID); err != nil {
 			s.internal(w, "mark reminded", err)

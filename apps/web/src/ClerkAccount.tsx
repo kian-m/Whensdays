@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useUser, useClerk } from "@clerk/clerk-react";
+import { useApi, sendJSON } from "./lib";
 
 // Our own account management — replaces Clerk's prebuilt <UserButton>/<UserProfile>.
 // Shows the primary email, lets the user change it (Clerk's email-code
@@ -16,6 +17,7 @@ type PendingEmail = {
 export function ClerkAccountCard() {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const api = useApi();
   const [mode, setMode] = useState<"idle" | "entering" | "verifying">("idle");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -24,8 +26,20 @@ export function ClerkAccountCard() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? "";
+
+  // Clerk owns the address; mirror the verified primary email into our profile so
+  // transactional email (reminders/updates) has a destination. Fires on load and
+  // whenever the primary changes — the server upsert is idempotent.
+  const syncEmail = useCallback(async (addr: string) => {
+    try { await sendJSON(api, "PUT", "/api/profile/email", { email: addr }); } catch { /* best-effort */ }
+  }, [api]);
+  useEffect(() => {
+    if (primaryEmail) void syncEmail(primaryEmail);
+  }, [primaryEmail, syncEmail]);
+
   if (!user) return null;
-  const primary = user.primaryEmailAddress?.emailAddress ?? "—";
+  const primary = primaryEmail || "—";
 
   function clerkErr(e: unknown, fallback: string): string {
     const m = e as { errors?: { message?: string }[] };
