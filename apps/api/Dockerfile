@@ -8,12 +8,12 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api .
 
 # --- runtime stage ---
-# scratch = nothing but our binary. Smallest possible image, no shell, no CVEs from base packages.
-FROM scratch
+# distroless/static: ~2MB, shell-less, non-root — but unlike bare `scratch` it
+# ships CA certs AND /etc/nsswitch.conf + /etc/resolv handling. Bare scratch's
+# missing nsswitch made the pure-Go DNS resolver flaky for outbound hosts
+# (api.clerk.com), so clerk-sdk-go's JWKS fetch intermittently failed and the
+# instance rejected every token (401). Distroless makes DNS/TLS deterministic.
+FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/api /api
-# CA bundle — without it every outbound TLS call (Klipy, Google Calendar,
-# Resend) fails x509 verification; scratch ships no certs of its own.
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 EXPOSE 8080
-USER 65534:65534
 ENTRYPOINT ["/api"]
