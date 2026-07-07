@@ -27,6 +27,25 @@ func TestGuestTokenRoundTrip(t *testing.T) {
 	}
 }
 
+func TestHMACEnvelope(t *testing.T) {
+	key := []byte("envelope-key")
+	tok := hmacSeal(key, "hello|world")
+	got, ok := hmacOpen(key, tok)
+	if !ok || string(got) != "hello|world" {
+		t.Fatalf("hmacOpen = %q,%v", got, ok)
+	}
+	// Tamper, wrong key, and malformed tokens all fail closed.
+	if _, ok := hmacOpen(key, tok+"x"); ok {
+		t.Fatal("tampered signature verified")
+	}
+	if _, ok := hmacOpen([]byte("other-key"), tok); ok {
+		t.Fatal("wrong key verified")
+	}
+	if _, ok := hmacOpen(key, "no-dot-here"); ok {
+		t.Fatal("malformed token verified")
+	}
+}
+
 func TestMuteTokenRoundTrip(t *testing.T) {
 	g := guestSigner{key: []byte("test-key")}
 	tok := g.signMute("user_2abc", "evt-123")

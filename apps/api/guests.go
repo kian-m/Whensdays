@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
@@ -48,23 +45,12 @@ func newGuestSigner(logger *slog.Logger) guestSigner {
 
 func (g guestSigner) sign(userID string) string {
 	payload := userID + "|" + strconv.FormatInt(time.Now().Add(guestTokenTTL).Unix(), 10)
-	mac := hmac.New(sha256.New, g.key)
-	mac.Write([]byte(payload))
-	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + hex.EncodeToString(mac.Sum(nil))
+	return hmacSeal(g.key, payload)
 }
 
 func (g guestSigner) verify(token string) (string, bool) {
-	dot := strings.LastIndex(token, ".")
-	if dot < 0 {
-		return "", false
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(token[:dot])
-	if err != nil {
-		return "", false
-	}
-	mac := hmac.New(sha256.New, g.key)
-	mac.Write(payload)
-	if !hmac.Equal([]byte(token[dot+1:]), []byte(hex.EncodeToString(mac.Sum(nil)))) {
+	payload, ok := hmacOpen(g.key, token)
+	if !ok {
 		return "", false
 	}
 	parts := strings.SplitN(string(payload), "|", 2)

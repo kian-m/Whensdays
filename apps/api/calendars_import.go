@@ -5,11 +5,8 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -155,24 +152,12 @@ func (c calendarConfig) hmacKey() []byte {
 // the user identity rides here instead.
 func (c calendarConfig) signState(userID string) string {
 	payload := userID + "|" + strconv.FormatInt(time.Now().Add(stateTTL).Unix(), 10)
-	mac := hmac.New(sha256.New, c.hmacKey())
-	mac.Write([]byte(payload))
-	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + hex.EncodeToString(mac.Sum(nil))
+	return hmacSeal(c.hmacKey(), payload)
 }
 
 func (c calendarConfig) verifyState(state string) (string, bool) {
-	dot := strings.LastIndex(state, ".")
-	if dot < 0 {
-		return "", false
-	}
-	payloadB64, sig := state[:dot], state[dot+1:]
-	payload, err := base64.RawURLEncoding.DecodeString(payloadB64)
-	if err != nil {
-		return "", false
-	}
-	mac := hmac.New(sha256.New, c.hmacKey())
-	mac.Write(payload)
-	if !hmac.Equal([]byte(sig), []byte(hex.EncodeToString(mac.Sum(nil)))) {
+	payload, ok := hmacOpen(c.hmacKey(), state)
+	if !ok {
 		return "", false
 	}
 	parts := strings.SplitN(string(payload), "|", 2)

@@ -2,10 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"html"
@@ -30,24 +26,12 @@ import (
 // low-risk. Tokens don't expire — an unsubscribe link must keep working.
 
 func (g guestSigner) signMute(userID, eventID string) string {
-	payload := "mute|" + userID + "|" + eventID
-	mac := hmac.New(sha256.New, g.key)
-	mac.Write([]byte(payload))
-	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + hex.EncodeToString(mac.Sum(nil))
+	return hmacSeal(g.key, "mute|"+userID+"|"+eventID)
 }
 
 func (g guestSigner) verifyMute(token string) (userID, eventID string, ok bool) {
-	dot := strings.LastIndex(token, ".")
-	if dot < 0 {
-		return "", "", false
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(token[:dot])
-	if err != nil {
-		return "", "", false
-	}
-	mac := hmac.New(sha256.New, g.key)
-	mac.Write(payload)
-	if !hmac.Equal([]byte(token[dot+1:]), []byte(hex.EncodeToString(mac.Sum(nil)))) {
+	payload, ok := hmacOpen(g.key, token)
+	if !ok {
 		return "", "", false
 	}
 	parts := strings.SplitN(string(payload), "|", 3)

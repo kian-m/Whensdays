@@ -47,18 +47,27 @@ func eventMeta(ev db.Event) []emailMetaRow {
 	return rows
 }
 
-// notifyFinalized emails every 'going', unmuted attendee once a time is locked in.
-func (s *server) notifyFinalized(ctx context.Context, ev db.Event) {
+// broadcastToGoing renders `build` once per going, unmuted attendee (so each
+// message carries its own one-click unsubscribe link) and sends individually.
+// build receives that recipient's unsubscribe URL. Returns the recipient count.
+func (s *server) broadcastToGoing(ctx context.Context, ev db.Event, subject string, build func(unsub string) emailContent) int {
 	if !s.notify.Enabled() {
-		return
+		return 0
 	}
 	contacts, err := s.queries.ListGoingAttendeeContacts(ctx, ev.ID)
 	if err != nil {
-		return
+		return 0
 	}
-	subject := fmt.Sprintf("It's on — %s is locked in 🎉", ev.Title)
 	for _, c := range contacts {
-		body := renderEmail(emailContent{
+		s.notify.Send([]string{c.Email}, subject, renderEmail(build(s.muteLink(c.UserID, uuidStr(ev.ID)))))
+	}
+	return len(contacts)
+}
+
+// notifyFinalized emails every 'going', unmuted attendee once a time is locked in.
+func (s *server) notifyFinalized(ctx context.Context, ev db.Event) {
+	s.broadcastToGoing(ctx, ev, fmt.Sprintf("It's on — %s is locked in 🎉", ev.Title), func(unsub string) emailContent {
+		return emailContent{
 			preheader: "A time is set — here are the details.",
 			heading:   ev.Title + " has a time 🎉",
 			lines:     []string{"Good news — the group landed on a time. Add it to your calendar so it actually happens."},
@@ -66,24 +75,16 @@ func (s *server) notifyFinalized(ctx context.Context, ev db.Event) {
 			ctaLabel:  "View the plan →",
 			ctaURL:    campaignURL(s.eventURL(ev.ID), "finalized"),
 			logoURL:   s.logoURL(),
-			unsubURL:  s.muteLink(c.UserID, uuidStr(ev.ID)),
-		})
-		s.notify.Send([]string{c.Email}, subject, body)
-	}
+			unsubURL:  unsub,
+		}
+	})
 }
 
 // notifyReminder emails every 'going', unmuted attendee ~24h out (called by the
 // cron). Returns the number of recipients (for the cron's telemetry).
 func (s *server) notifyReminder(ctx context.Context, ev db.Event) int {
-	if !s.notify.Enabled() {
-		return 0
-	}
-	contacts, err := s.queries.ListGoingAttendeeContacts(ctx, ev.ID)
-	if err != nil {
-		return 0
-	}
-	for _, c := range contacts {
-		body := renderEmail(emailContent{
+	return s.broadcastToGoing(ctx, ev, "Tomorrow: "+ev.Title, func(unsub string) emailContent {
+		return emailContent{
 			preheader: "Happening soon — don't forget.",
 			heading:   ev.Title + " is tomorrow",
 			lines:     []string{"Just a heads up — this is coming up soon. See you there!"},
@@ -91,11 +92,9 @@ func (s *server) notifyReminder(ctx context.Context, ev db.Event) int {
 			ctaLabel:  "See the details →",
 			ctaURL:    campaignURL(s.eventURL(ev.ID), "reminder"),
 			logoURL:   s.logoURL(),
-			unsubURL:  s.muteLink(c.UserID, uuidStr(ev.ID)),
-		})
-		s.notify.Send([]string{c.Email}, "Tomorrow: "+ev.Title, body)
-	}
-	return len(contacts)
+			unsubURL:  unsub,
+		}
+	})
 }
 
 // notifyNewComment tells the host someone commented (unless the host is the actor).
