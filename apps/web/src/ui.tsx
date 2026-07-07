@@ -187,51 +187,80 @@ export function EventThumb({ photo, emoji, color, size = 46 }: {
   );
 }
 
-// Klipy GIF search (server-proxied — the API key never reaches the browser).
-// Hidden entirely when the server reports the integration unconfigured.
+// Klipy GIF picker (server-proxied — the API key never reaches the browser).
+// Trending shows on open, search filters as you type, and "Load more" pages
+// through Klipy's cursor. Hidden entirely when the integration is unconfigured.
+type KlipyGif = { url: string; preview: string; title: string };
+type GifResp = { enabled: boolean; gifs: KlipyGif[]; next?: string };
+
 export function GifPicker({ onPick }: { onPick: (url: string) => void }) {
   const api = useApi();
   const [enabled, setEnabled] = useState(false);
   const [q, setQ] = useState("");
-  const [gifs, setGifs] = useState<{ url: string; preview: string; title: string }[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [gifs, setGifs] = useState<KlipyGif[]>([]);
+  const [next, setNext] = useState("");
+  const [loading, setLoading] = useState(false);
+  const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // On open: an empty query returns trending AND doubles as the capability probe.
   useEffect(() => {
-    getJSON<{ enabled: boolean }>(api, "/api/gifs/search").then((b) => setEnabled(b.enabled)).catch(() => {});
+    getJSON<GifResp>(api, "/api/gifs/search")
+      .then((b) => { setEnabled(b.enabled); if (b.enabled) { setGifs(b.gifs); setNext(b.next ?? ""); } })
+      .catch(() => {});
   }, [api]);
-  if (!enabled) return null;
 
-  async function search() {
-    if (!q.trim()) return;
-    setSearching(true);
+  const fetchGifs = useCallback(async (query: string, pos = "") => {
+    setLoading(true);
     try {
-      const b = await getJSON<{ gifs: { url: string; preview: string; title: string }[] }>(
-        api, `/api/gifs/search?q=${encodeURIComponent(q.trim())}`);
-      setGifs(b.gifs);
+      const url = `/api/gifs/search?q=${encodeURIComponent(query)}${pos ? `&pos=${encodeURIComponent(pos)}` : ""}`;
+      const b = await getJSON<GifResp>(api, url);
+      setGifs((prev) => (pos ? [...prev, ...b.gifs] : b.gifs)); // append on "load more"
+      setNext(b.next ?? "");
     } finally {
-      setSearching(false);
+      setLoading(false);
     }
+  }, [api]);
+
+  function onType(v: string) {
+    setQ(v);
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => fetchGifs(v.trim()), 350); // empty → trending
   }
+  function searchNow() {
+    if (debounce.current) clearTimeout(debounce.current);
+    fetchGifs(q.trim());
+  }
+
+  if (!enabled) return null;
 
   return (
     <div className="stack" style={{ gap: 6 }}>
       <div className="row">
-        <input className="input" data-testid="gif-q" value={q} placeholder="…or search GIFs (Klipy)"
-          onChange={(ev) => setQ(ev.target.value)}
-          onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); search(); } }} />
-        <button type="button" className="btn soft sm" data-testid="gif-go" disabled={searching} onClick={search}>
-          {searching ? "…" : "Search"}
+        <input className="input" data-testid="gif-q" value={q}
+          placeholder="Search GIFs, or scroll the trending picks"
+          onChange={(ev) => onType(ev.target.value)}
+          onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); searchNow(); } }} />
+        <button type="button" className="btn soft sm" data-testid="gif-go" disabled={loading} onClick={searchNow}>
+          {loading ? "…" : "Search"}
         </button>
       </div>
       {gifs.length > 0 && (
-        <div className="gif-grid" data-testid="gif-grid">
-          {gifs.map((g, i) => (
-            <button key={g.url} type="button" data-testid={`gif-${i}`} title={g.title}
-              onClick={() => { analytics.capture(EVENTS.gifPicked); onPick(g.url); setGifs([]); }}>
-              <img src={g.preview} alt={g.title} loading="lazy" />
+        <>
+          <div className="gif-grid" data-testid="gif-grid">
+            {gifs.map((g, i) => (
+              <button key={`${g.url}-${i}`} type="button" data-testid={`gif-${i}`} title={g.title}
+                onClick={() => { analytics.capture(EVENTS.gifPicked); onPick(g.url); setGifs([]); setNext(""); }}>
+                <img src={g.preview} alt={g.title} loading="lazy" />
+              </button>
+            ))}
+          </div>
+          {next && (
+            <button type="button" className="btn ghost sm" style={{ alignSelf: "center" }}
+              data-testid="gif-more" disabled={loading} onClick={() => fetchGifs(q.trim(), next)}>
+              {loading ? "Loading…" : "Load more"}
             </button>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );

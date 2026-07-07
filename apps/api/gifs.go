@@ -49,36 +49,43 @@ var stubGifs = []map[string]string{
 	{"url": "/gif-stub/party-2.gif", "preview": "/gif-stub/party-2.gif", "title": "Stub confetti"},
 }
 
+// handleGifSearch proxies Klipy. An empty q returns trending (so the picker is
+// never blank on open); a non-empty q searches. Paging rides on Klipy's `next`
+// cursor (passed back as `pos`), so the web can lazily load more pages.
 func (s *server) handleGifSearch(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	pos := strings.TrimSpace(r.URL.Query().Get("pos"))
+
 	if s.klipyStub {
-		q := strings.TrimSpace(r.URL.Query().Get("q"))
-		if q == "" {
-			writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "gifs": []any{}})
-			return
+		// Two fixed pages so E2E/docs can exercise search + "load more".
+		if pos == "" {
+			writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "gifs": stubGifs, "next": "p2"})
+		} else {
+			writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "gifs": stubGifs, "next": ""})
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "gifs": stubGifs})
 		return
 	}
 	if s.klipyKey == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"enabled": false, "gifs": []any{}})
 		return
 	}
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if q == "" {
-		// Capability probe: the web asks once to decide whether to show the picker.
-		writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "gifs": []any{}})
-		return
-	}
 	if len(q) > 100 {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "q too long"})
 		return
 	}
-	u := "https://api.klipy.com/v2/search?key=" + url.QueryEscape(s.klipyKey) +
-		"&q=" + url.QueryEscape(q) + "&limit=24&media_filter=gif,tinygif"
-	client := safeHTTPClient(6 * time.Second)
-	resp, err := client.Get(u)
+
+	base := "https://api.klipy.com/v2/featured?key=" + url.QueryEscape(s.klipyKey) + "&limit=24&media_filter=gif,tinygif"
+	if q != "" {
+		base = "https://api.klipy.com/v2/search?key=" + url.QueryEscape(s.klipyKey) +
+			"&q=" + url.QueryEscape(q) + "&limit=24&media_filter=gif,tinygif"
+	}
+	if pos != "" {
+		base += "&pos=" + url.QueryEscape(pos)
+	}
+
+	resp, err := safeHTTPClient(6 * time.Second).Get(base)
 	if err != nil {
-		s.internal(w, "klipy search", err)
+		s.internal(w, "klipy fetch", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -89,6 +96,7 @@ func (s *server) handleGifSearch(w http.ResponseWriter, r *http.Request) {
 				URL string `json:"url"`
 			} `json:"media_formats"`
 		} `json:"results"`
+		Next string `json:"next"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		s.internal(w, "klipy decode", err)
@@ -111,5 +119,5 @@ func (s *server) handleGifSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		gifs = append(gifs, gif{URL: full, Preview: small, Title: g.Title})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "gifs": gifs})
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "gifs": gifs, "next": body.Next})
 }

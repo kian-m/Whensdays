@@ -306,6 +306,13 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("event-title")).toHaveText(title);
     // Pick a gif (KLIPY_MODE=stub serves fixed results), post with no text.
     await page.getByTestId("comment-gif-open").click();
+    // Trending loads on open; "Load more" pages via the cursor and appends.
+    await expect(page.getByTestId("gif-grid")).toBeVisible();
+    const before = await page.getByTestId("gif-grid").getByRole("button").count();
+    await page.getByTestId("gif-more").click();
+    await expect(async () => {
+      expect(await page.getByTestId("gif-grid").getByRole("button").count()).toBeGreaterThan(before);
+    }).toPass();
     await page.getByTestId("gif-q").fill("party");
     await page.getByTestId("gif-go").click();
     await page.getByTestId("gif-0").click();
