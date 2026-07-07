@@ -309,7 +309,12 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* a gif attached to a comment */
 .comment-gif { max-width: 180px; border-radius: var(--radius-sm); display: block; }
 /* klipy gif results */
-.gif-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 2px; -webkit-overflow-scrolling: touch; }
+/* Responsive columns: cells stay a legible size and the count adapts to width
+   (≈3 across on a phone, more on desktop) instead of cramming a fixed 4 into any
+   width. The grid itself is the scroll region — a viewport-relative height keeps
+   it a real, obviously-scrollable box on mobile, and overscroll-behavior stops
+   the page from scrolling once you hit the end. */
+.gif-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; max-height: min(46vh, 340px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; -webkit-overflow-scrolling: touch; }
 .gif-grid button { border: 1px solid var(--glass-line); background: var(--glass-2); border-radius: var(--radius-sm); padding: 0; cursor: pointer; overflow: hidden; }
 .gif-grid img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; }
 
