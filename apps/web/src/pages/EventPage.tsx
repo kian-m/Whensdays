@@ -31,6 +31,31 @@ import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/q
 import { AddressInput, Avatar, BackLink, DayGrid, GifPicker, Loading, Pill, fileToAvatar, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
+// Per-theme animated background. A fixed, deterministic count of particles (no
+// Math.random, so E2E snapshots stay stable) styled + animated entirely in CSS
+// (.theme-fx.fx-<theme> in styles.css). Rendered behind the page content and
+// hidden from assistive tech; honors prefers-reduced-motion via CSS.
+const THEME_FX: Record<string, { count: number; glyph?: string }> = {
+  party: { count: 16 },            // confetti (CSS squares)
+  forest: { count: 12, glyph: "🍂" }, // drifting leaves
+  night: { count: 22 },            // twinkling stars (CSS dots)
+  cozy: { count: 14 },             // rising embers + flame glow
+  beach: { count: 12 },            // floating sun sparkles
+  neon: { count: 8 },              // drifting glow orbs
+};
+
+function ThemeFx({ theme }: { theme: string }) {
+  const fx = THEME_FX[theme];
+  if (!fx) return null;
+  return (
+    <div className={`theme-fx fx-${theme}`} aria-hidden="true">
+      {Array.from({ length: fx.count }).map((_, i) => (
+        <span className="fx-p" key={i}>{fx.glyph ?? ""}</span>
+      ))}
+    </div>
+  );
+}
+
 export function EventPage() {
   const { id } = useParams();
   const { data, loading, reload } = useAsync<EventDetail>((api) => getJSON(api, `/api/events/${id}`), [id]);
@@ -48,6 +73,7 @@ export function EventPage() {
 
   return (
     <div className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
+      {effTheme && <ThemeFx theme={effTheme} />}
       <BackLink />
       <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} />
 

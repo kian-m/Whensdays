@@ -219,6 +219,6 @@ Add a capture to `e2e/tests/screenshots.spec.ts` whenever you add a feature/page
 CI enforces both:
 
 - a `docs` check flags PRs that modify `apps/**` without touching `README.md`/`CLAUDE.md`;
-- a `screenshots` check regenerates the images and fails if the committed PNGs are stale.
+- a `screenshots` check regenerates the images and **warns** (non-blocking) if the committed PNGs differ — the captures are full-page and show relative dates, so they can't stay pixel-stable across days; the fresh set uploads as an artifact.
 
 If a change genuinely needs no doc update, include `[skip-docs]` in the PR title to bypass the `docs` check.
