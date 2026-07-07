@@ -274,8 +274,11 @@ func (s *server) handleSetAvatar(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "image too large (max ~300KB)"})
 		return
 	}
-	if in.AvatarURL != "" && !strings.HasPrefix(in.AvatarURL, "data:image/") && !strings.HasPrefix(in.AvatarURL, "https://") {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "avatar must be an image data URL or https URL"})
+	// data:image only — the web always uploads a resized data URL (fileToAvatar);
+	// allowing arbitrary https would let one user's avatar make every viewer's
+	// browser fetch an attacker URL (tracking / internal-SSRF from the client).
+	if in.AvatarURL != "" && !strings.HasPrefix(in.AvatarURL, "data:image/") {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "avatar must be an uploaded image"})
 		return
 	}
 	p, err := s.queries.SetAvatar(r.Context(), db.SetAvatarParams{UserID: uid, AvatarUrl: in.AvatarURL})

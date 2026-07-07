@@ -114,7 +114,7 @@ func (s *server) loadCover(u string) image.Image {
 		}
 		return img
 	case strings.HasPrefix(u, "https://static.klipy.com/"):
-		client := &http.Client{Timeout: 5 * time.Second}
+		client := safeHTTPClient(5 * time.Second)
 		resp, err := client.Get(u)
 		if err != nil {
 			return nil

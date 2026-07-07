@@ -37,7 +37,7 @@ func (s *server) handleGeoSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := "https://photon.komoot.io/api?limit=5&q=" + url.QueryEscape(q)
-	client := &http.Client{Timeout: 4 * time.Second}
+	client := safeHTTPClient(4 * time.Second)
 	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
 	req.Header.Set("User-Agent", "Whensdays/1.0 (event scheduler)")
 	resp, err := client.Do(req)

@@ -93,14 +93,27 @@ func main() {
 	}
 	auth := s.authMiddleware()
 
+	// Per-IP rate limiters for the unauthenticated attack surface. Writes (guest
+	// join → DB row) are strict; public reads (unfurls, image compositing) are
+	// looser but still bounded so a scraper can't exhaust CPU/DB. Authenticated
+	// routes rely on Clerk + per-user scoping and are not IP-limited here.
+	// Disabled under AUTH_MODE=dev so hermetic E2E (all from one runner IP)
+	// stays deterministic — mirrors the CALENDAR/KLIPY/GEO stub pattern.
+	writeLimit := func(h http.Handler) http.Handler { return h }
+	readLimit := func(h http.Handler) http.Handler { return h }
+	if os.Getenv("AUTH_MODE") != "dev" {
+		writeLimit = newIPLimiter(30, 15).middleware // ~30/min, burst 15
+		readLimit = newIPLimiter(300, 100).middleware // ~300/min, burst 100
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	// Unauthenticated by design: the event id is the capability (invite link).
-	mux.HandleFunc("POST /api/guest/join", s.handleGuestJoin)
+	mux.Handle("POST /api/guest/join", writeLimit(http.HandlerFunc(s.handleGuestJoin)))
 	// Full-page loads of /e/{id} are proxied here by nginx for link unfurls.
-	mux.HandleFunc("GET /e/{id}", s.handleOGPage)
+	mux.Handle("GET /e/{id}", readLimit(http.HandlerFunc(s.handleOGPage)))
 	// Public browse (read-only, publishes only host-chosen fields) + cron.
-	mux.HandleFunc("GET /api/discover", s.handleDiscover)
+	mux.Handle("GET /api/discover", readLimit(http.HandlerFunc(s.handleDiscover)))
 	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
 	// Follows + personal feed.
 	mux.Handle("GET /api/feed", auth(http.HandlerFunc(s.handleFeed)))
@@ -145,10 +158,10 @@ func main() {
 	// Public on purpose: the event id IS the invite capability (same fields the
 	// OG unfurl already serves), and a bare <a href> can't attach a bearer —
 	// this is what lets iOS open the invite directly in Calendar.
-	mux.Handle("GET /api/events/{id}/calendar.ics", http.HandlerFunc(s.handleEventICS))
+	mux.Handle("GET /api/events/{id}/calendar.ics", readLimit(http.HandlerFunc(s.handleEventICS)))
 	// Unauthenticated for the same reason: og:image is fetched by link
 	// scrapers (iMessage, Slack, …) that can't send a bearer.
-	mux.Handle("GET /api/events/{id}/og.png", http.HandlerFunc(s.handleEventOGImage))
+	mux.Handle("GET /api/events/{id}/og.png", readLimit(http.HandlerFunc(s.handleEventOGImage)))
 
 	// Calendar import (see calendars_import.go). The Google OAuth callback is
 	// intentionally UNauthenticated — Google redirects the browser to it with no
@@ -346,6 +359,9 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		// API returns JSON/images only; lock scripts to none as defense-in-depth.
+		h.Set("Content-Security-Policy", "default-src 'none'; img-src 'self' data: https://static.klipy.com; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }

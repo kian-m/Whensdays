@@ -75,7 +75,7 @@ func (s *server) handleGifSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	u := "https://api.klipy.com/v2/search?key=" + url.QueryEscape(s.klipyKey) +
 		"&q=" + url.QueryEscape(q) + "&limit=24&media_filter=gif,tinygif"
-	client := &http.Client{Timeout: 6 * time.Second}
+	client := safeHTTPClient(6 * time.Second)
 	resp, err := client.Get(u)
 	if err != nil {
 		s.internal(w, "klipy search", err)

@@ -44,7 +44,7 @@ const (
 )
 
 // calendarHTTP is a bounded client for all outbound calendar calls.
-var calendarHTTP = &http.Client{Timeout: 10 * time.Second}
+var calendarHTTP = safeHTTPClient(10 * time.Second)
 
 // --- config ---
 

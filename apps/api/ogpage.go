@@ -29,12 +29,19 @@ func (s *server) handleOGPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	target := "/ev/" + r.PathValue("id")
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery // preserve ?guest=1 etc. through the bounce
+	}
 	base := s.ogBaseURL(r)
 	// Per-event social card: cover/gif + host name + logo (ogimage.go).
 	image := base + "/api/events/" + r.PathValue("id") + "/og.png"
 	pageURL := base + "/e/" + r.PathValue("id")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	// This is the one HTML endpoint on an otherwise JSON/image API; the global
+	// default-src 'none' CSP would block an inline bounce script, so we redirect
+	// browsers with a script-free <meta refresh> (scrapers ignore it and read
+	// the OG tags above). No CSP exception needed.
 	fmt.Fprintf(w, `<!doctype html>
 <html><head>
 <meta charset="utf-8">
@@ -52,10 +59,10 @@ func (s *server) handleOGPage(w http.ResponseWriter, r *http.Request) {
 <meta name="twitter:description" content="%[2]s">
 <meta name="twitter:image" content="%[5]s">
 <meta name="description" content="%[2]s">
-<script>location.replace(%[3]q + location.search)</script>
+<meta http-equiv="refresh" content="0; url=%[3]s">
 </head><body>
 <p><a href="%[3]s">Open the invite</a></p>
-</body></html>`, html.EscapeString(title), html.EscapeString(desc), target,
+</body></html>`, html.EscapeString(title), html.EscapeString(desc), html.EscapeString(target),
 		html.EscapeString(pageURL), html.EscapeString(image))
 }
 
