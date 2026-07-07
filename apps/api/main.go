@@ -46,6 +46,7 @@ type server struct {
 	appOrigin string
 	klipyKey  string
 	klipyStub bool
+	geoStub   bool
 }
 
 func main() {
@@ -88,6 +89,7 @@ func main() {
 		appOrigin: strings.TrimRight(os.Getenv("APP_ORIGIN"), "/"),
 		klipyKey:  os.Getenv("KLIPY_API_KEY"),
 		klipyStub: os.Getenv("KLIPY_MODE") == "stub",
+		geoStub:   os.Getenv("GEO_MODE") == "stub",
 	}
 	auth := s.authMiddleware()
 
@@ -130,6 +132,7 @@ func main() {
 	mux.Handle("POST /api/events/{id}/finalize", auth(http.HandlerFunc(s.handleFinalize)))
 	mux.Handle("PUT /api/events/{id}", auth(http.HandlerFunc(s.handleUpdateEvent)))
 	mux.Handle("GET /api/gifs/search", auth(http.HandlerFunc(s.handleGifSearch)))
+	mux.Handle("GET /api/geo/search", auth(http.HandlerFunc(s.handleGeoSearch)))
 	mux.Handle("DELETE /api/events/{id}", auth(http.HandlerFunc(s.handleCancelEvent)))
 	mux.Handle("DELETE /api/groups/{id}", auth(http.HandlerFunc(s.handleDeleteGroup)))
 	mux.Handle("DELETE /api/friends/{id}", auth(http.HandlerFunc(s.handleDeleteFriendship)))

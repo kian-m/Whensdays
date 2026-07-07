@@ -24,6 +24,7 @@ services:
       AUTH_MODE: dev
       CALENDAR_MODE: stub
       KLIPY_MODE: stub # deterministic gif picker, no key/network
+      GEO_MODE: stub # deterministic address type-ahead, no network
       RUN_MIGRATIONS: "true"
     depends_on:
       db:

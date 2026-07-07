@@ -554,7 +554,7 @@ func (q *Queries) GetProfileByHandle(ctx context.Context, handle string) (GetPro
 }
 
 const listAttendees = `-- name: ListAttendees :many
-SELECT a.user_id, a.rsvp, p.display_name, p.avatar_url
+SELECT a.user_id, a.rsvp, p.display_name, p.avatar_url, p.handle
 FROM event_attendees a
 LEFT JOIN profiles p ON p.user_id = a.user_id
 WHERE a.event_id = $1
@@ -566,6 +566,7 @@ type ListAttendeesRow struct {
 	Rsvp        string      `json:"rsvp"`
 	DisplayName pgtype.Text `json:"display_name"`
 	AvatarUrl   pgtype.Text `json:"avatar_url"`
+	Handle      pgtype.Text `json:"handle"`
 }
 
 func (q *Queries) ListAttendees(ctx context.Context, eventID pgtype.UUID) ([]ListAttendeesRow, error) {
@@ -582,6 +583,7 @@ func (q *Queries) ListAttendees(ctx context.Context, eventID pgtype.UUID) ([]Lis
 			&i.Rsvp,
 			&i.DisplayName,
 			&i.AvatarUrl,
+			&i.Handle,
 		); err != nil {
 			return nil, err
 		}

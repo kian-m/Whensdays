@@ -433,3 +433,16 @@ textarea.input { resize: vertical; min-height: 64px; }
 .tally > span { display: block; height: 100%; background: var(--go); }
 .err { color: var(--no); font-size: 0.9rem; }
 .divider { height: 1px; background: var(--line); margin: 0.4rem 0; }
+
+/* address autocomplete dropdown (Photon suggestions) */
+.addr-menu {
+  position: absolute; z-index: 30; left: 0; right: 0; margin-top: 4px;
+  background: var(--surface); border: 1px solid var(--glass-line); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow); overflow: hidden; max-height: 240px; overflow-y: auto;
+}
+.addr-item {
+  display: block; width: 100%; text-align: left; padding: 0.55rem 0.75rem;
+  background: none; border: none; font: inherit; color: var(--ink); cursor: pointer;
+}
+.addr-item:hover { background: var(--accent-soft); color: var(--accent); }
+.accent { color: var(--accent); font-weight: 600; }

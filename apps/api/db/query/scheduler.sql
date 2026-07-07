@@ -264,7 +264,7 @@ ON CONFLICT (event_id, user_id) DO UPDATE
 RETURNING id, event_id, user_id, rsvp, created_at;
 
 -- name: ListAttendees :many
-SELECT a.user_id, a.rsvp, p.display_name, p.avatar_url
+SELECT a.user_id, a.rsvp, p.display_name, p.avatar_url, p.handle
 FROM event_attendees a
 LEFT JOIN profiles p ON p.user_id = a.user_id
 WHERE a.event_id = $1

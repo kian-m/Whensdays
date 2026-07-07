@@ -181,6 +181,52 @@ test.describe("scheduler", () => {
     await page.getByTestId("edit-save").click();
   });
 
+  test("address type-ahead, directions link, and add-friend from RSVPs", async ({ page, browser }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "wc1", "W C One", "wc1");
+    const title = `Party ${test.info().testId}-${Date.now()}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-party").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    // Address type-ahead: GEO_MODE=stub serves fixed suggestions; pick one.
+    await page.getByTestId("event-address").fill("123 main");
+    await expect(page.getByTestId("addr-menu")).toBeVisible();
+    await page.getByTestId("addr-opt-0").click();
+    await expect(page.getByTestId("event-address")).toHaveValue(/Brooklyn/);
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-10-15T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
+
+    // The address is a clickable "get directions" link.
+    const dir = page.getByTestId("directions-link");
+    await expect(dir).toBeVisible();
+    expect(await dir.getAttribute("href")).toContain("google.com/maps");
+
+    // A second real user RSVPs going.
+    const ctx = await browser.newContext();
+    try {
+      const wc2 = await ctx.newPage();
+      await ensureUser(wc2, "wc2", "W C Two", "wc2");
+      await wc2.goto(`/e/${id}`);
+      await wc2.getByTestId("rsvp-going").click();
+
+      // Host sees them under "Who's coming → Going" and can add them as a friend.
+      await page.goto(`/e/${id}`);
+      await expect(page.getByTestId("rsvp-group-going")).toContainText("@wc2");
+      const addBtn = page.getByTestId("add-friend-wc2");
+      if (await addBtn.isVisible().catch(() => false)) await addBtn.click();
+      await expect(page.getByTestId("rsvp-group-going")).toContainText(/Requested|Friends/);
+    } finally {
+      await ctx.close();
+    }
+  });
+
   test("create form visual baseline", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { CATEGORIES, CITY_OPTIONS, Event, EventType, Friend, getJSON, guessCity, sendJSON, useApi } from "../lib";
 // (custom types: saved per user, offered as chips next to the presets)
 import { EVENT_TYPES } from "../scheduler/questions";
-import { Avatar, useAsync } from "../ui";
+import { AddressInput, Avatar, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 // Event creation is a one-step-at-a-time wizard (à la Airtable forms): What →
@@ -241,8 +241,9 @@ export function NewEvent() {
                 data-testid="loc-venue" onClick={() => setLocationMode("find_venue")}>📍 Help me find a venue</button>
             </div>
             {locationMode === "host_place" ? (
-              <input className="input" style={{ marginTop: 8 }} value={address}
-                onChange={(e) => setAddress(e.target.value)} placeholder="Address" />
+              <div style={{ marginTop: 8 }}>
+                <AddressInput value={address} onChange={setAddress} placeholder="Start typing an address…" testid="event-address" />
+              </div>
             ) : (
               <p className="muted small" style={{ marginTop: 8 }}>We'll help pick a spot once the group is set.</p>
             )}

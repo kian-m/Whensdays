@@ -6,6 +6,7 @@ import {
   CITY_OPTIONS,
   DAYPARTS,
   EventDetail,
+  Friend,
   GeneralVote,
   PrefAnswer,
   ImportedEvent,
@@ -20,12 +21,13 @@ import {
   getJSON,
   guessCity,
   importedBusy,
+  mapsUrl,
   nextMonths,
   sendJSON,
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { Avatar, BackLink, DayGrid, GifPicker, Loading, Pill, fileToAvatar, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, DayGrid, GifPicker, Loading, Pill, fileToAvatar, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 export function EventPage() {
@@ -287,6 +289,7 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
         <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id} reload={reload} />
       )}
       <PrefFlow eventId={e.id} type={e.event_type} answers={data.preference_answers.filter((a) => a.user_id === data.viewer_id)} reload={reload} />
+      <Guests attendees={data.attendees} viewerId={data.viewer_id} />
     </div>
   );
 }
@@ -614,7 +617,7 @@ function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
       {e.scheduling_mode === "general" && e.status === "polling" && (
         <GeneralResults data={data} reload={reload} />
       )}
-      <Guests attendees={data.attendees} />
+      <Guests attendees={data.attendees} viewerId={data.viewer_id} />
       <AnswerSummary data={data} />
       {data.role === "host" && <HostControls data={data} reload={reload} />}
     </div>
@@ -700,7 +703,11 @@ function HeroCard({ data, reload, canEdit }: { data: EventDetail; reload: () => 
           {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at).split(", ").pop()}` : ""}
         </div>
         <div className="muted small">
-          {e.location_mode === "find_venue" ? "📍 Venue to be decided" : `📍 ${e.location_address || "Address to come"}`}
+          {e.location_mode === "find_venue" ? "📍 Venue to be decided"
+            : e.location_address ? (
+              <a href={mapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
+                data-testid="directions-link">📍 {e.location_address} <span className="accent">· Directions ↗</span></a>
+            ) : "📍 Address to come"}
         </div>
       </div>
     );
@@ -728,7 +735,7 @@ function HeroCard({ data, reload, canEdit }: { data: EventDetail; reload: () => 
           data-testid="edit-loc-venue" onClick={() => setLocMode("find_venue")}>Find a venue</button>
       </div>
       {locMode === "host_place" && (
-        <input className="input" data-testid="edit-address" value={locAddr} onChange={(ev) => setLocAddr(ev.target.value)} placeholder="Address" />
+        <AddressInput value={locAddr} onChange={setLocAddr} placeholder="Start typing an address…" testid="edit-address" />
       )}
       <div className="row wrap" style={{ gap: 6 }}>
         <span className="muted small">Who can find it:</span>
@@ -1112,21 +1119,80 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
   );
 }
 
-function Guests({ attendees }: { attendees: Attendee[] }) {
+// Who's coming — grouped by RSVP so it's scannable at a glance. Any real
+// (non-guest) attendee who isn't already your friend gets an "Add friend"
+// button right here, so an event is a place to grow your circle.
+function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: string }) {
+  const api = useApi();
+  const { data: fr, reload } = useAsync<{ friends: Friend[]; outgoing: { handle?: string }[] }>(
+    (a) => getJSON(a, "/api/friends"),
+  );
+  const [requested, setRequested] = useState<Set<string>>(new Set());
+
+  const friendIds = new Set((fr?.friends ?? []).map((f) => f.friend_id));
+  const pending = new Set((fr?.outgoing ?? []).map((o) => o.handle).filter(Boolean) as string[]);
+  // Guests have no account to befriend from — they still see the full list.
+  const viewerIsGuest = viewerId.startsWith("guest_");
+
+  async function addFriend(handle: string) {
+    setRequested((s) => new Set(s).add(handle));
+    const res = await sendJSON(api, "POST", "/api/friends", { handle });
+    if (!res.ok) setRequested((s) => { const n = new Set(s); n.delete(handle); return n; });
+    else reload();
+  }
+
+  const GROUPS: { key: Attendee["rsvp"]; label: string }[] = [
+    { key: "going", label: "Going" },
+    { key: "maybe", label: "Maybe" },
+    { key: "declined", label: "Can't go" },
+  ];
+
+  const total = attendees.length;
   const going = attendees.filter((a) => a.rsvp === "going").length;
+
   return (
-    <div className="card stack">
-      <div className="row between"><h3>Guests</h3><span className="muted small">{going} going</span></div>
-      {attendees.length === 0 && <p className="muted small">No responses yet.</p>}
-      {attendees.map((a) => (
-        <div key={a.user_id} className="row between">
-          <span className="row" style={{ gap: 8 }}>
-            <Avatar url={a.avatar_url} name={a.display_name} size={28} />
-            <span>{a.display_name || "Someone"}</span>
-          </span>
-          <Pill kind={a.rsvp}>{a.rsvp}</Pill>
-        </div>
-      ))}
+    <div className="card stack" data-testid="guests">
+      <div className="row between">
+        <h3 style={{ margin: 0 }}>Who's coming</h3>
+        <span className="muted small">{going} going · {total} responded</span>
+      </div>
+      {total === 0 && <p className="muted small">No responses yet — share the link to get RSVPs.</p>}
+
+      {GROUPS.map(({ key, label }) => {
+        const rows = attendees.filter((a) => a.rsvp === key);
+        if (rows.length === 0) return null;
+        return (
+          <div key={key} className="stack" style={{ gap: 6 }} data-testid={`rsvp-group-${key}`}>
+            <div className="section-h" style={{ margin: 0 }}>{label} · {rows.length}</div>
+            {rows.map((a) => {
+              const isSelf = a.user_id === viewerId;
+              const canAdd = !viewerIsGuest && !!a.handle && !isSelf && !friendIds.has(a.user_id);
+              const already = a.handle ? (pending.has(a.handle) || requested.has(a.handle)) : false;
+              return (
+                <div key={a.user_id} className="row between" data-testid="guest-row">
+                  <span className="row" style={{ gap: 8 }}>
+                    <Avatar url={a.avatar_url} name={a.display_name} size={28} />
+                    <span className="stack" style={{ gap: 0 }}>
+                      <span>{a.display_name || "Guest"}{isSelf && <span className="muted small"> (you)</span>}</span>
+                      {a.handle && <span className="muted small">@{a.handle}</span>}
+                    </span>
+                  </span>
+                  {canAdd ? (
+                    already ? (
+                      <span className="muted small" data-testid={`friend-requested-${a.handle}`}>Requested ✓</span>
+                    ) : (
+                      <button className="btn soft sm" data-testid={`add-friend-${a.handle}`}
+                        onClick={() => addFriend(a.handle!)}>+ Add friend</button>
+                    )
+                  ) : friendIds.has(a.user_id) ? (
+                    <span className="muted small">Friends ✓</span>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -168,6 +168,12 @@ export function applyTheme(t: Theme) {
   else root.removeAttribute("data-theme");
 }
 
+// Universal "get directions" URL — opens the native Maps app on iOS/Android and
+// Google Maps on desktop. No key, no SDK.
+export function mapsUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
 export function guessCity(): string {
   try {
     return TZ_CITY[Intl.DateTimeFormat().resolvedOptions().timeZone] ?? "";
@@ -204,7 +210,7 @@ export type Vote = { id: string; option_id: string; user_id: string; response: "
 // dimension 'month' -> value "YYYY-MM"; dimension 'slot' -> value "<weekday>:<daypart>".
 // dimension: month + slot (general scope), day (month scope), dayslot (week scope).
 export type GeneralVote = { user_id: string; dimension: "month" | "slot" | "day" | "dayslot"; value: string };
-export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined"; display_name: string | null; avatar_url: string | null };
+export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined"; display_name: string | null; avatar_url: string | null; handle: string | null };
 export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
 
 export type EventDetail = {

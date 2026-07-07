@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiFn, DAYPARTS, getJSON, useApi } from "./lib";
 import { EVENTS, analytics } from "./analytics";
@@ -229,6 +229,52 @@ export function GifPicker({ onPick }: { onPick: (url: string) => void }) {
             <button key={g.url} type="button" data-testid={`gif-${i}`} title={g.title}
               onClick={() => { analytics.capture(EVENTS.gifPicked); onPick(g.url); setGifs([]); }}>
               <img src={g.preview} alt={g.title} loading="lazy" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Address field with free type-ahead (proxied through /api/geo/search → Photon/
+// OpenStreetMap; no key, no billing). Debounced; picking a suggestion fills the
+// field. Falls back to a plain text box if the lookup returns nothing.
+export function AddressInput({ value, onChange, placeholder, testid }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; testid?: string;
+}) {
+  const api = useApi();
+  const [results, setResults] = useState<{ label: string }[]>([]);
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  function query(v: string) {
+    onChange(v);
+    if (timer.current) clearTimeout(timer.current);
+    if (v.trim().length < 3) { setResults([]); setOpen(false); return; }
+    timer.current = setTimeout(async () => {
+      try {
+        const b = await getJSON<{ results: { label: string }[] }>(
+          api, `/api/geo/search?q=${encodeURIComponent(v.trim())}`);
+        setResults(b.results);
+        setOpen(b.results.length > 0);
+      } catch { setResults([]); }
+    }, 250);
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input className="input" data-testid={testid} value={value} placeholder={placeholder}
+        autoComplete="off"
+        onChange={(e) => query(e.target.value)}
+        onFocus={() => results.length > 0 && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)} />
+      {open && results.length > 0 && (
+        <div className="addr-menu" data-testid="addr-menu">
+          {results.map((r, i) => (
+            <button key={i} type="button" className="addr-item" data-testid={`addr-opt-${i}`}
+              onMouseDown={(e) => { e.preventDefault(); onChange(r.label); setOpen(false); setResults([]); }}>
+              {r.label}
             </button>
           ))}
         </div>
