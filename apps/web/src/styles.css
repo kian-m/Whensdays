@@ -313,18 +313,28 @@ textarea.input { resize: vertical; min-height: 64px; }
 .gif-grid button { border: 1px solid var(--glass-line); background: var(--glass-2); border-radius: var(--radius-sm); padding: 0; cursor: pointer; overflow: hidden; }
 .gif-grid img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; }
 
-/* Event page backdrop themes: a fixed tint layered over the sky (z -1, under
-   the glass). Pure CSS, one class per preset — extend by adding a .theme-x. */
+/* Event page themes change the WHOLE page vibe, two ways at once:
+   1. a bold full-viewport backdrop wash (::before, fixed, over the sky), and
+   2. design-token overrides on the .event-theme wrapper so every button, chip,
+      selected state and accent inside the event page adopts the theme colour.
+   Pure CSS, one block per preset — extend by adding a .theme-x pair. */
 .event-theme { position: relative; }
 .event-theme::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  transition: background 0.4s ease;
 }
-.theme-party::before  { background: radial-gradient(60% 45% at 22% 12%, rgba(224, 85, 155, 0.28), transparent 70%), radial-gradient(55% 40% at 80% 70%, rgba(157, 107, 212, 0.24), transparent 70%); }
-.theme-beach::before  { background: linear-gradient(180deg, rgba(61, 157, 177, 0.22), transparent 55%), radial-gradient(70% 40% at 50% 100%, rgba(233, 191, 114, 0.25), transparent 75%); }
-.theme-forest::before { background: radial-gradient(65% 50% at 15% 85%, rgba(63, 157, 111, 0.30), transparent 72%), radial-gradient(50% 40% at 85% 10%, rgba(63, 157, 111, 0.16), transparent 70%); }
-.theme-night::before  { background: linear-gradient(180deg, rgba(10, 12, 30, 0.55), rgba(10, 12, 30, 0.2) 60%), radial-gradient(2px 2px at 20% 18%, rgba(255,255,255,0.8), transparent 100%), radial-gradient(2px 2px at 64% 9%, rgba(255,255,255,0.7), transparent 100%), radial-gradient(2px 2px at 83% 26%, rgba(255,255,255,0.6), transparent 100%), radial-gradient(1px 1px at 42% 33%, rgba(255,255,255,0.7), transparent 100%); }
-.theme-neon::before   { background: radial-gradient(55% 40% at 15% 20%, rgba(255, 0, 128, 0.22), transparent 70%), radial-gradient(55% 40% at 85% 75%, rgba(0, 229, 255, 0.20), transparent 70%); }
-.theme-cozy::before   { background: radial-gradient(70% 55% at 50% 95%, rgba(233, 161, 59, 0.26), transparent 75%), radial-gradient(45% 35% at 12% 10%, rgba(200, 98, 60, 0.18), transparent 70%); }
+.theme-party  { --accent: #e0559b; }
+.theme-party::before  { background: linear-gradient(160deg, rgba(224,85,155,0.42), rgba(157,107,212,0.34) 55%, transparent 82%), radial-gradient(60% 45% at 82% 92%, rgba(255,193,90,0.22), transparent 70%); }
+.theme-beach  { --accent: #f0993a; }
+.theme-beach::before  { background: linear-gradient(180deg, rgba(61,157,177,0.42), rgba(120,200,210,0.18) 42%, transparent 68%), radial-gradient(85% 42% at 50% 100%, rgba(233,191,114,0.42), transparent 78%); }
+.theme-forest { --accent: #3f9d6f; }
+.theme-forest::before { background: linear-gradient(170deg, rgba(28,74,50,0.44), transparent 58%), radial-gradient(72% 55% at 14% 92%, rgba(63,157,111,0.42), transparent 72%); }
+.theme-night  { --accent: #8b83ff; }
+.theme-night::before  { background: linear-gradient(180deg, rgba(8,10,26,0.74), rgba(8,10,26,0.34) 68%), radial-gradient(2px 2px at 20% 18%, #fff, transparent 100%), radial-gradient(2px 2px at 64% 9%, rgba(255,255,255,0.85), transparent 100%), radial-gradient(2px 2px at 83% 26%, rgba(255,255,255,0.7), transparent 100%), radial-gradient(1.5px 1.5px at 42% 33%, #fff, transparent 100%), radial-gradient(1px 1px at 30% 62%, rgba(255,255,255,0.6), transparent 100%); }
+.theme-neon   { --accent: #ff2d94; }
+.theme-neon::before   { background: radial-gradient(58% 44% at 12% 18%, rgba(255,0,128,0.40), transparent 66%), radial-gradient(58% 44% at 88% 80%, rgba(0,229,255,0.34), transparent 66%), linear-gradient(160deg, rgba(18,0,28,0.34), transparent 60%); }
+.theme-cozy   { --accent: #df8038; }
+.theme-cozy::before   { background: linear-gradient(170deg, rgba(120,60,30,0.32), transparent 52%), radial-gradient(78% 55% at 50% 98%, rgba(233,161,59,0.44), transparent 76%); }
 
 /* facepile: overlapping avatar stack on event tiles ("who's going") */
 .facepile { display: flex; align-items: center; margin-top: 6px; }
@@ -372,6 +382,13 @@ textarea.input { resize: vertical; min-height: 64px; }
   display: inline-grid; place-items: center; line-height: 1;
 }
 .chip.on .filter-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+/* responder dots on the general-availability results — tap to see one guest's picks */
+.resp-dot { background: none; border: none; padding: 0; cursor: pointer; border-radius: 50%; opacity: 0.8; transition: opacity 0.1s ease, transform 0.1s ease; }
+.resp-dot:hover { opacity: 1; }
+.resp-dot:active { transform: scale(0.94); }
+.resp-dot.on { opacity: 1; }
+.resp-dot.on .avatar { box-shadow: 0 0 0 2px var(--accent); }
 
 /* toast: prominent, mobile-visible save confirmation (auto-dismiss) */
 .toast {

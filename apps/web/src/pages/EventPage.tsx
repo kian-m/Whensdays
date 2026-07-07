@@ -984,6 +984,19 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
 
   const voters = new Set(data.general_votes.map((v) => v.user_id)).size;
 
+  // Per-guest view: tap a responder's dot to see exactly what THEY picked,
+  // overlaid on the aggregate. Names/photos come from the attendee list.
+  const [sel, setSel] = useState<string | null>(null);
+  const responders = [...new Set(data.general_votes.map((v) => v.user_id))].map((uid) => {
+    const a = data.attendees.find((x) => x.user_id === uid);
+    return { id: uid, name: a?.display_name || "Guest", avatar: a?.avatar_url ?? null };
+  });
+  const selVals = new Set(sel ? data.general_votes.filter((v) => v.user_id === sel).map((v) => v.value) : []);
+  const pickedStyle = (value: string): React.CSSProperties =>
+    sel && selVals.has(value)
+      ? { outline: "2px solid var(--accent)", outlineOffset: "-2px", position: "relative", zIndex: 1 }
+      : {};
+
   const countBy = (dimension: string) => {
     const m = new Map<string, number>();
     data.general_votes.filter((v) => v.dimension === dimension)
@@ -1039,9 +1052,10 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                 <Fragment key={d.value}>
                   <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
                   {DAYPARTS.map((dp) => {
-                    const n = dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0;
+                    const key = `${d.value}:${dp.value}`;
+                    const n = dayslotCounts.get(key) ?? 0;
                     return (
-                      <div key={dp.value} className="cell" style={{ ...heatStyle(n, dayslotTop), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700 }}>
+                      <div key={dp.value} className="cell" style={{ ...heatStyle(n, dayslotTop), ...pickedStyle(key), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700 }}>
                         {n > 0 ? n : ""}
                       </div>
                     );
@@ -1059,7 +1073,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
           {days.length === 0 ? <p className="muted small">No picks yet.</p> : (
             <div className="stack" style={{ gap: 4 }} data-testid="gr-month-days">
               {days.map(([value, n]) => (
-                <div key={value} className="stack" style={{ gap: 2 }}>
+                <div key={value} className="stack" style={{ gap: 2, ...pickedStyle(value), paddingLeft: sel && selVals.has(value) ? 6 : 0 }}>
                   <div className="row between"><span className="small">{dayLabel(value)}</span><span className="muted small">{n}</span></div>
                   <div className="tally"><span style={{ width: `${(n / dayTop) * 100}%` }} /></div>
                 </div>
@@ -1076,7 +1090,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
             {months.length === 0 ? <p className="muted small">No picks yet.</p> : (
               <div className="stack" style={{ gap: 4 }}>
                 {months.map(([value, n]) => (
-                  <div key={value} className="stack" style={{ gap: 2 }}>
+                  <div key={value} className="stack" style={{ gap: 2, ...pickedStyle(value), paddingLeft: sel && selVals.has(value) ? 6 : 0 }}>
                     <div className="row between"><span className="small">{monthLabel(value)}</span><span className="muted small">{n}</span></div>
                     <div className="tally"><span style={{ width: `${(n / monthTop) * 100}%` }} /></div>
                   </div>
@@ -1096,7 +1110,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                   {WEEKDAYS.map((_, wd) => {
                     const n = slotCounts.get(slotKey(wd, dp.value)) ?? 0;
                     return (
-                      <div key={wd} className="cell" style={{ ...heatStyle(n, slotTop), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700 }}>
+                      <div key={wd} className="cell" style={{ ...heatStyle(n, slotTop), ...pickedStyle(slotKey(wd, dp.value)), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700 }}>
                         {n > 0 ? n : ""}
                       </div>
                     );
@@ -1106,6 +1120,29 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
             </div>
           </div>
         </>
+      )}
+
+      {responders.length > 0 && (
+        <div className="stack" style={{ gap: 6 }} data-testid="responder-dots">
+          <div className="row between">
+            <div className="section-h" style={{ margin: 0 }}>Who responded</div>
+            {sel && <button className="btn ghost sm" data-testid="responders-all" onClick={() => setSel(null)}>Show everyone</button>}
+          </div>
+          <div className="row wrap" style={{ gap: 6 }}>
+            {responders.map((r) => (
+              <button key={r.id} type="button" title={r.name}
+                className={`resp-dot ${sel === r.id ? "on" : ""}`} data-testid={`responder-${r.id}`}
+                onClick={() => setSel(sel === r.id ? null : r.id)}>
+                <Avatar url={r.avatar} name={r.name} size={30} />
+              </button>
+            ))}
+          </div>
+          <p className="muted small">
+            {sel
+              ? `Highlighting ${responders.find((r) => r.id === sel)?.name}'s picks — tap again for everyone.`
+              : "Tap someone to see exactly what they picked."}
+          </p>
+        </div>
       )}
 
       <div className="divider" />

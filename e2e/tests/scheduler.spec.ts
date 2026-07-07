@@ -104,6 +104,14 @@ test.describe("scheduler", () => {
     await page.getByTestId("preview-toggle").click();
     await expect(page.getByText("Group availability")).toBeVisible();
     await expect(page.getByText("Evening")).toBeVisible();
+
+    // Per-guest view: a responder dot appears; selecting it highlights that
+    // person's picks, and "show everyone" clears the selection.
+    await expect(page.getByTestId("responder-dots")).toBeVisible();
+    await page.getByTestId("responder-dots").getByRole("button").first().click();
+    await expect(page.getByTestId("responder-dots")).toContainText("Highlighting");
+    await page.getByTestId("responders-all").click();
+    await expect(page.getByTestId("responder-dots")).toContainText("Tap someone");
   });
 
   test("performance preset types + deletable custom types", async ({ page }) => {
