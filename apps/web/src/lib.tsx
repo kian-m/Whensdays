@@ -172,8 +172,16 @@ export function applyTheme(t: Theme) {
 
 // Universal "get directions" URL — opens the native Maps app on iOS/Android and
 // Google Maps on desktop. No key, no SDK.
+// mapsUrl / appleMapsUrl — there's no single link that opens each person's
+// *default* map app across platforms, so the event page offers both. Google's
+// is a universal web link that opens the Google Maps app on mobile when
+// installed; Apple's opens Maps on iOS/macOS and falls back to a web map elsewhere.
 export function mapsUrl(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
+export function appleMapsUrl(address: string): string {
+  return `https://maps.apple.com/?q=${encodeURIComponent(address)}`;
 }
 
 export function guessCity(): string {

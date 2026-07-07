@@ -23,6 +23,7 @@ import {
   guessCity,
   importedBusy,
   mapsUrl,
+  appleMapsUrl,
   nextMonths,
   sendJSON,
   useApi,
@@ -770,8 +771,15 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         <div className="muted small">
           {e.location_mode === "find_venue" ? "📍 Venue to be decided"
             : e.location_address ? (
-              <a href={mapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
-                data-testid="directions-link">📍 {e.location_address} <span className="accent">· Directions ↗</span></a>
+              <span className="stack" style={{ gap: 2 }}>
+                <span>📍 {e.location_address}</span>
+                <span className="row" style={{ gap: 12 }}>
+                  <a href={mapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
+                    className="accent" data-testid="directions-link">Google Maps ↗</a>
+                  <a href={appleMapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
+                    className="accent" data-testid="directions-apple">Apple Maps ↗</a>
+                </span>
+              </span>
             ) : "📍 Address to come"}
         </div>
       </div>

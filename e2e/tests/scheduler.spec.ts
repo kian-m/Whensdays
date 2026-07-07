@@ -249,10 +249,13 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
 
-    // The address is a clickable "get directions" link.
+    // The address offers both map apps (no universal "default map app" link exists).
     const dir = page.getByTestId("directions-link");
     await expect(dir).toBeVisible();
     expect(await dir.getAttribute("href")).toContain("google.com/maps");
+    const apple = page.getByTestId("directions-apple");
+    await expect(apple).toBeVisible();
+    expect(await apple.getAttribute("href")).toContain("maps.apple.com");
 
     // A second real user RSVPs going.
     const ctx = await browser.newContext();

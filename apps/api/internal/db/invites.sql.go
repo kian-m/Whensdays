@@ -42,9 +42,18 @@ func (q *Queries) CountPendingIncoming(ctx context.Context, addresseeID string) 
 }
 
 const countUnseenInvites = `-- name: CountUnseenInvites :one
-SELECT count(*)::int FROM event_invites WHERE user_id = $1 AND NOT seen
+SELECT count(*)::int FROM event_invites ei
+WHERE ei.user_id = $1 AND NOT ei.seen
+  AND EXISTS (SELECT 1 FROM events e WHERE e.id = ei.event_id AND e.status <> 'cancelled' AND e.host_id <> $1)
+  AND NOT EXISTS (SELECT 1 FROM event_attendees a WHERE a.event_id = ei.event_id AND a.user_id = $1)
+  AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = ei.event_id AND ch.user_id = $1)
 `
 
+// Only count invites that still have a clickable tile the user can open to clear
+// them — the same set ListEventsInvited surfaces (active event, not your own, not
+// one you've already responded to or cohost). Otherwise a cancelled event, a
+// self-invite, or an already-RSVP'd invite leaves a badge with no way to dismiss
+// it. Responding (RSVP) or opening the event both clear it.
 func (q *Queries) CountUnseenInvites(ctx context.Context, userID string) (int32, error) {
 	row := q.db.QueryRow(ctx, countUnseenInvites, userID)
 	var column_1 int32
@@ -144,9 +153,14 @@ func (q *Queries) ListEventsInvited(ctx context.Context, userID string) ([]Event
 }
 
 const listUnseenInviteEventIDs = `-- name: ListUnseenInviteEventIDs :many
-SELECT event_id FROM event_invites WHERE user_id = $1 AND NOT seen
+SELECT ei.event_id FROM event_invites ei
+WHERE ei.user_id = $1 AND NOT ei.seen
+  AND EXISTS (SELECT 1 FROM events e WHERE e.id = ei.event_id AND e.status <> 'cancelled' AND e.host_id <> $1)
+  AND NOT EXISTS (SELECT 1 FROM event_attendees a WHERE a.event_id = ei.event_id AND a.user_id = $1)
+  AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = ei.event_id AND ch.user_id = $1)
 `
 
+// Same filter as CountUnseenInvites so the per-event "new" dots match the badge.
 func (q *Queries) ListUnseenInviteEventIDs(ctx context.Context, userID string) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, listUnseenInviteEventIDs, userID)
 	if err != nil {

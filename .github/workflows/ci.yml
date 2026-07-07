@@ -47,8 +47,13 @@ jobs:
           echo "docs check passed"
 
   screenshots:
-    # Regenerate README feature screenshots from the live app and fail if the
-    # committed PNGs are stale. Keeps docs/screenshots in lockstep with the UI.
+    # Regenerate the README feature screenshots as a docs ARTIFACT — not a
+    # correctness gate. continue-on-error so it never reds the build: the shots
+    # are full-page (they render relative dates, so they drift daily) AND the
+    # step rebuilds Docker images, which can flake on transient network errors
+    # (e.g. `go mod download` hitting proxy.golang.org). The real gates are the
+    # api/web/e2e jobs. The fresh PNGs still upload for review.
+    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
