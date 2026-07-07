@@ -38,6 +38,7 @@ const userIDKey ctxKey = "userID"
 
 type server struct {
 	queries   *db.Queries
+	pool      *pgxpool.Pool
 	logger    *slog.Logger
 	analytics *analytics.Client
 	calendar  calendarConfig
@@ -82,7 +83,7 @@ func main() {
 	defer an.Close()
 
 	s := &server{
-		queries: db.New(pool), logger: logger, analytics: an,
+		queries: db.New(pool), pool: pool, logger: logger, analytics: an,
 		calendar:  loadCalendarConfig(logger),
 		guests:    newGuestSigner(logger),
 		notify:    notify.New(os.Getenv("EMAIL_API_KEY"), os.Getenv("EMAIL_FROM"), logger),
@@ -110,6 +111,7 @@ func main() {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	// Unauthenticated by design: the event id is the capability (invite link).
 	mux.Handle("POST /api/guest/join", writeLimit(http.HandlerFunc(s.handleGuestJoin)))
+	mux.Handle("POST /api/guest/merge", auth(http.HandlerFunc(s.handleGuestMerge)))
 	// Full-page loads of /e/{id} are proxied here by nginx for link unfurls.
 	mux.Handle("GET /e/{id}", readLimit(http.HandlerFunc(s.handleOGPage)))
 	// Public browse (read-only, publishes only host-chosen fields) + cron.

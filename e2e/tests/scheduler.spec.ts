@@ -1104,6 +1104,55 @@ test.describe("scheduler", () => {
     expect(href).toContain("opentable.com");
   });
 
+  test("guest → account merge: plans follow you when you sign up", async ({ browser }) => {
+    test.skip(!DEV_AUTH, "guest flow via the dev ?guest=1 hook");
+    const target = `merged${test.info().testId}${Date.now()}`.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 30);
+    const ctx = await browser.newContext();
+    try {
+      const g = await ctx.newPage();
+      // Start as a no-account guest; ?as targets a fresh dev user for the merge.
+      await g.goto(`/start?guest=1&as=${target}`);
+      await g.getByTestId("guest-name").fill("Merge Me");
+      await g.getByTestId("guest-join").click();
+      await expect(g.getByTestId("guest-banner")).toBeVisible();
+
+      // The guest hosts an event (from Home — /start is the Quick page).
+      await g.goto("/");
+      const title = `Merge plan ${test.info().testId}-${Date.now()}`;
+      await g.getByTestId("new-event").click();
+      await g.getByTestId("event-title").fill(title);
+      await g.getByTestId("type-dinner").click();
+      await g.getByTestId("wiz-next").click();
+      await g.getByTestId("loc-host").click();
+      await g.getByTestId("wiz-next").click();
+      await g.getByTestId("sched-fixed").click();
+      await g.getByTestId("fixed-time").fill("2026-08-20T19:00");
+      await g.getByTestId("wiz-next").click();
+      await g.getByTestId("create-event").click();
+      await expect(g.getByTestId("event-title")).toHaveText(title);
+
+      // Sign up → the guest identity merges into the new account.
+      await g.goto("/");
+      await g.getByTestId("guest-signup").click();
+      // Hard reload → authed as `target` → the guest's content merges in. The
+      // account then lands on either first-run setup (fresh) or the dashboard;
+      // complete setup if shown. The guarantee under test is that the plan
+      // followed them, whichever screen appears.
+      await Promise.race([
+        g.getByTestId("setup-name").waitFor({ timeout: 20000 }),
+        g.getByTestId("event-row").first().waitFor({ timeout: 20000 }),
+      ]).catch(() => {});
+      if (await g.getByTestId("setup-name").isVisible().catch(() => false)) {
+        await g.getByTestId("setup-name").fill("Merge Me");
+        await g.getByTestId("setup-handle").fill(target);
+        await g.getByTestId("setup-save").click();
+      }
+      await expect(g.getByTestId("event-row").filter({ hasText: title })).toBeVisible({ timeout: 20000 });
+    } finally {
+      await ctx.close();
+    }
+  });
+
   test("guest joins from an invite link with just a name", async ({ page, browser }) => {
     test.skip(!DEV_AUTH, "guest flow is exercised via the dev ?guest=1 hook");
     await ensureProfile(page);

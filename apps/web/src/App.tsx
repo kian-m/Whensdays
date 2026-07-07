@@ -4,7 +4,6 @@ import {
   SignedIn,
   SignedOut,
   SignInButton,
-  UserButton,
   useAuth,
 } from "@clerk/clerk-react";
 import "./styles.css";
@@ -63,7 +62,7 @@ export function App() {
           <GuestFlow />
         ) : (
           <ApiContext.Provider value={devApi}>
-            <ProfileGate />
+            <ProfileGate canMerge />
           </ApiContext.Provider>
         )
       ) : (
@@ -73,7 +72,7 @@ export function App() {
           </SignedOut>
           <SignedIn>
             <ClerkApiProvider>
-              <ProfileGate />
+              <ProfileGate canMerge />
             </ClerkApiProvider>
           </SignedIn>
         </>
@@ -268,14 +267,29 @@ function Landing() {
 
 // Ensures the signed-in user has a minimal profile (name + handle) before using
 // the app. A 404 from /api/profile means "not set up yet".
-function ProfileGate() {
+function ProfileGate({ canMerge }: { canMerge?: boolean }) {
   const api = useApi();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [state, setState] = useState<"loading" | "needs-setup" | "ready">("loading");
+  const [prefillName, setPrefillName] = useState<string>("");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Guest → account merge: if a guest token lingers from before sign-up,
+      // reassign that guest's plans/RSVPs to this account, then forget it.
+      const g = canMerge ? storedGuest() : null;
+      if (g) {
+        try {
+          const m = await api("/api/guest/merge", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ guest_token: g.token }),
+          });
+          if (m.ok) { const b = await m.json(); if (b.name && !cancelled) setPrefillName(b.name); }
+        } catch { /* best-effort */ }
+        localStorage.removeItem(GUEST_KEY);
+      }
       const res = await api("/api/profile");
       if (cancelled) return;
       if (res.status === 404) return setState("needs-setup");
@@ -286,7 +300,7 @@ function ProfileGate() {
     return () => {
       cancelled = true;
     };
-  }, [api]);
+  }, [api, canMerge]);
 
   // Tie analytics to the app user id (same id the API uses) once known.
   useEffect(() => {
@@ -298,6 +312,7 @@ function ProfileGate() {
     return (
       <Shell hideNav>
         <ProfileSetup
+          prefillName={prefillName}
           onDone={(p) => {
             setProfile(p);
             setState("ready");
@@ -360,12 +375,11 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
               <NavLink to="/profile">Profile</NavLink>
             </div>
             {DEV_AUTH && DEV_USER !== "demo-user" && <span className="pill polling" title="dev user (?as=…)">dev: {DEV_USER}</span>}
-            {DEV_AUTH && profile && (
-              <NavLink to="/profile" title={profile.display_name}>
+            {profile && (
+              <NavLink to="/profile" title={profile.display_name} data-testid="nav-profile">
                 <Avatar url={profile.avatar_url} name={profile.display_name} size={30} />
               </NavLink>
             )}
-            {!DEV_AUTH && <UserButton />}
           </div>
         )}
       </nav>
@@ -380,7 +394,7 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
             {DEV_AUTH ? (
               /* Dev has no Clerk modal — simulate the conversion (guest → signed-in dev user). */
               <button className="btn sm" data-testid="guest-signup"
-                onClick={() => { localStorage.removeItem(GUEST_KEY); location.href = "/"; }}>Sign up</button>
+                onClick={() => { sessionStorage.removeItem("clsandbox.devGuest"); location.href = "/"; }}>Sign up</button>
             ) : (
               <SignInButton mode="modal">
                 <button className="btn sm" data-testid="guest-signup">Sign up</button>

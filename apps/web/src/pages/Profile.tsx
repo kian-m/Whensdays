@@ -19,6 +19,8 @@ import {
 } from "../lib";
 import { useSearchParams } from "react-router-dom";
 import { AvailLegend, Avatar, DayGrid, Loading, Toast, fileToAvatar, useAsync } from "../ui";
+import { DEV_AUTH } from "../App";
+import { ClerkAccountCard } from "../ClerkAccount";
 import { CalendarConnections } from "./Calendars";
 
 const PAGE = 14; // days of explicit availability shown per page
@@ -222,6 +224,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   return (
     <div className="stack">
       <h1>Profile</h1>
+      {!DEV_AUTH && <ClerkAccountCard />}
 
       {!editing ? (
         <div className="card stack" data-testid="profile-view">

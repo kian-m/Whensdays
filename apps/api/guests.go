@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -120,4 +121,131 @@ func (s *server) handleGuestJoin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"token": s.guests.sign(uid), "user_id": prof.UserID, "display_name": prof.DisplayName,
 	})
+}
+
+// --- guest → account merge ---
+//
+// When a guest (guest_<id>) signs up, their content must follow them. This
+// reassigns every guest-owned row to the new authenticated user in one
+// transaction, then drops the guest profile so the real account keeps a clean
+// handle (the web prefills the guest's name into profile setup). A fresh
+// account has no prior rows, so reassignment can't collide; the unique-keyed
+// tables still delete any dup first so the merge is idempotent/safe if re-run.
+//
+// Table + column names below are compile-time constants (never user input);
+// the ids are always parameterized — no injection surface. This bulk cross-
+// table migration is the one place sqlc's one-statement-per-query model fits
+// poorly, so it lives here as a single audited function.
+
+// uniqueOwned: tables with a UNIQUE/PK over (user_id, <key>) — delete guest
+// dups that the target already has, then reassign the rest.
+var uniqueOwned = []struct{ table, key string }{
+	{"event_attendees", "event_id"},
+	{"event_time_votes", "option_id"},
+	{"event_preference_answers", "event_id, question_key"},
+	{"event_general_votes", "event_id, dimension, value"},
+	{"event_cohosts", "event_id"},
+	{"group_members", "group_id"},
+	{"follows", "kind, value"},
+	{"custom_event_types", "label"},
+	{"calendar_connections", "provider"},
+	{"availability_slots", "weekday, part_of_day"},
+	{"availability_days", "day, daypart"},
+}
+
+// plainOwned: tables whose owning column is user-scoped with no per-user unique
+// constraint that a fresh account could collide on.
+var plainOwned = []struct{ table, col string }{
+	{"events", "host_id"},
+	{"groups", "owner_id"},
+	{"event_comments", "user_id"},
+	{"event_invites", "user_id"},
+	{"notes", "user_id"},
+}
+
+func (s *server) mergeGuestInto(ctx context.Context, oldID, newID string) (string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	var guestName string
+	_ = tx.QueryRow(ctx, "SELECT display_name FROM profiles WHERE user_id=$1", oldID).Scan(&guestName)
+
+	for _, t := range uniqueOwned {
+		if _, err := tx.Exec(ctx, fmt.Sprintf(
+			"DELETE FROM %s WHERE user_id=$1 AND (%s) IN (SELECT %s FROM %s WHERE user_id=$2)",
+			t.table, t.key, t.key, t.table), oldID, newID); err != nil {
+			return "", err
+		}
+		if _, err := tx.Exec(ctx, fmt.Sprintf("UPDATE %s SET user_id=$2 WHERE user_id=$1", t.table), oldID, newID); err != nil {
+			return "", err
+		}
+	}
+	for _, t := range plainOwned {
+		if _, err := tx.Exec(ctx, fmt.Sprintf("UPDATE %s SET %s=$2 WHERE %s=$1", t.table, t.col, t.col), oldID, newID); err != nil {
+			return "", err
+		}
+	}
+	// friendships: two directional columns, each with a UNIQUE(requester,addressee).
+	for _, col := range []string{"requester_id", "addressee_id"} {
+		other := "addressee_id"
+		if col == "addressee_id" {
+			other = "requester_id"
+		}
+		if _, err := tx.Exec(ctx, fmt.Sprintf(
+			"DELETE FROM friendships WHERE %s=$1 AND %s IN (SELECT %s FROM friendships WHERE %s=$2)",
+			col, other, other, col), oldID, newID); err != nil {
+			return "", err
+		}
+		if _, err := tx.Exec(ctx, fmt.Sprintf("UPDATE friendships SET %s=$2 WHERE %s=$1", col, col), oldID, newID); err != nil {
+			return "", err
+		}
+	}
+	// Drop any now-self friendships the reassignment could create.
+	if _, err := tx.Exec(ctx, "DELETE FROM friendships WHERE requester_id = addressee_id"); err != nil {
+		return "", err
+	}
+	// The guest profile is discarded — the real account makes its own (name prefilled).
+	if _, err := tx.Exec(ctx, "DELETE FROM profiles WHERE user_id=$1", oldID); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return guestName, nil
+}
+
+// handleGuestMerge reassigns a guest's content to the current authenticated
+// user. Requires BOTH proofs: the Clerk/dev session (target account) AND a
+// valid guest token in the body (proves ownership of the guest identity).
+func (s *server) handleGuestMerge(w http.ResponseWriter, r *http.Request) {
+	newID, _ := userIDFrom(r.Context())
+	if strings.HasPrefix(newID, "guest_") {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "sign in first"})
+		return
+	}
+	var in struct {
+		GuestToken string `json:"guest_token"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	oldID, ok := s.guests.verify(in.GuestToken)
+	if !ok {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid guest token"})
+		return
+	}
+	if oldID == newID {
+		writeJSON(w, http.StatusOK, map[string]any{"merged": false})
+		return
+	}
+	name, err := s.mergeGuestInto(r.Context(), oldID, newID)
+	if err != nil {
+		s.internal(w, "guest merge", err)
+		return
+	}
+	s.analytics.Capture(newID, "guest_merged", map[string]any{"from": oldID})
+	writeJSON(w, http.StatusOK, map[string]any{"merged": true, "name": name})
 }

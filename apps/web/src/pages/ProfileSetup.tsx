@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Profile, sendJSON, useApi } from "../lib";
 
 // First-run gate: one field — a name. The handle is optional (we derive one
 // server-side when left blank).
-export function ProfileSetup({ onDone }: { onDone: (p: Profile) => void }) {
+export function ProfileSetup({ onDone, prefillName }: { onDone: (p: Profile) => void; prefillName?: string }) {
   const api = useApi();
-  const [displayName, setDisplayName] = useState("");
+  const [displayName, setDisplayName] = useState(prefillName ?? "");
+  // The prefill (a merged guest's name) can arrive after mount — sync it in.
+  useEffect(() => { if (prefillName) setDisplayName(prefillName); }, [prefillName]);
   const [handle, setHandle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
