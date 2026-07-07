@@ -29,6 +29,7 @@ export const EVENTS = {
   intentLinkClicked: "intent_link_clicked",
   followed: "followed",
   gifPicked: "gif_picked",
+  guestSignupClicked: "guest_signup_clicked",
 } as const;
 
 export function initAnalytics() {

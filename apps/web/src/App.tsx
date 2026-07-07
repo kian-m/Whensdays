@@ -9,7 +9,7 @@ import {
 import "./styles.css";
 import { ApiContext, ApiFn, Badges, Profile, ProfileContext, useApi, useProfile } from "./lib";
 import { Avatar } from "./ui";
-import { analytics } from "./analytics";
+import { analytics, EVENTS } from "./analytics";
 import { Home } from "./pages/Home";
 import { ProfileSetup } from "./pages/ProfileSetup";
 import { Loading } from "./ui";
@@ -394,10 +394,11 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
             {DEV_AUTH ? (
               /* Dev has no Clerk modal — simulate the conversion (guest → signed-in dev user). */
               <button className="btn sm" data-testid="guest-signup"
-                onClick={() => { sessionStorage.removeItem("clsandbox.devGuest"); location.href = "/"; }}>Sign up</button>
+                onClick={() => { analytics.capture(EVENTS.guestSignupClicked, { mode: "dev" }); sessionStorage.removeItem("clsandbox.devGuest"); location.href = "/"; }}>Sign up</button>
             ) : (
               <SignInButton mode="modal">
-                <button className="btn sm" data-testid="guest-signup">Sign up</button>
+                <button className="btn sm" data-testid="guest-signup"
+                  onClick={() => analytics.capture(EVENTS.guestSignupClicked, { mode: "clerk" })}>Sign up</button>
               </SignInButton>
             )}
           </span>

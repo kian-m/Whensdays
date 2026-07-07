@@ -82,7 +82,9 @@ Leave the keys empty and analytics stays disabled (the API logs
 - **Session replay** — on by default, **all text + inputs masked** (no PII).
 - **Exceptions** — uncaught JS errors (`capture_exceptions`).
 - **Intent events** the server can't see: `create_event_opened`,
-  `preview_as_guest_toggled`, `share_link_copied`, `friend_availability_viewed`.
+  `preview_as_guest_toggled`, `share_link_copied`, `friend_availability_viewed`,
+  `invite_opened` (guest lands on an invite), `guest_signup_clicked` (conversion intent),
+  `gif_picked`, `intent_link_clicked`, `followed`, `add_to_calendar_clicked`.
 - **Identify** — on profile load: distinct id = app user id, with `handle`.
 
 **Backend** (`apps/api/internal/analytics`)
@@ -93,7 +95,8 @@ Leave the keys empty and analytics stays disabled (the API logs
 - **Authoritative business events** (reliable, ad-blocker-proof): `event_created`,
   `event_viewed`, `rsvp_submitted`, `poll_voted`, `general_voted`,
   `preferences_submitted`, `event_finalized`, `friend_requested`,
-  `friend_accepted`, `profile_updated`, `avatar_updated`, `availability_updated`.
+  `friend_accepted`, `profile_updated`, `avatar_updated`, `availability_updated`,
+  `guest_joined` (no-account join), `guest_merged` (guest → account on sign-up).
 - **Identify** — person properties (`handle`, `name`) on profile update.
 
 Every event also carries `service` (`api`/`web`), `environment`, and `release`.
@@ -107,6 +110,8 @@ Build these in the PostHog UI on the data above:
 - **Latency** — `api_request` with a P95 of `duration_ms` by `route`; alert on
   spikes.
 - **Funnel** — `create_event_opened → event_created → rsvp_submitted` to spot drop-off.
+- **K-factor (guest→member)** — `invite_opened → guest_joined → guest_signup_clicked → guest_merged`;
+  this is the core growth loop — measure where invited guests drop before converting to accounts.
 - **Activation** — daily `profile_updated` / `event_created`; alert on a sudden drop.
 - **Frontend errors** — Error tracking dashboard; alert on new/spiking exceptions.
 
