@@ -1,11 +1,17 @@
 -- ==================== reminders (cron) ============================
 
 -- name: ListEventsNeedingReminder :many
+-- Events happening the NEXT calendar day in Pacific time — the "day before"
+-- heads-up, sent by a once-daily 2pm-Pacific cron. Pacific (America/Los_Angeles)
+-- is fixed and DST-safe: Postgres does the tz conversion, so `starts_at`'s
+-- Pacific calendar date is compared to tomorrow's Pacific date. reminder_sent
+-- keeps it idempotent if the job runs more than once in a day.
 SELECT id, host_id, title, event_type, description,
        location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme
 FROM events
 WHERE status = 'scheduled' AND reminder_sent = false
-  AND starts_at > now() AND starts_at <= now() + interval '24 hours';
+  AND (starts_at AT TIME ZONE 'America/Los_Angeles')::date
+      = ((now() AT TIME ZONE 'America/Los_Angeles')::date + 1);
 
 -- name: MarkEventReminded :exec
 UPDATE events SET reminder_sent = true WHERE id = $1;

@@ -17,8 +17,8 @@ import (
 // Public events are browsable by ANYONE (GET /api/discover is unauthenticated
 // and read-only: it exposes only what the host chose to publish — title, type,
 // time, topic, city, host name). Follows (host or topic) build a personal feed.
-// Reminders: a scheduler hits the key-gated cron endpoint; each scheduled
-// event is reminded once, 24h out.
+// Reminders: a once-daily 2pm-Pacific scheduler hits the key-gated cron
+// endpoint; each event happening the next Pacific calendar day is reminded once.
 
 // topicRe: topics are lowercase slugs, e.g. "twitch", "board-games".
 var topicRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
