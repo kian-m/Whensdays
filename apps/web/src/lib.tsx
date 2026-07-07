@@ -58,6 +58,7 @@ export type PublicEvent = {
   custom_emoji: string;
   custom_label: string;
   photo_url: string;
+  theme: string;
 };
 
 // Friendly per-type accent for event tiles (left edge + emoji tint).
@@ -218,6 +219,7 @@ export type EventDetail = {
   role: "host" | "cohost" | "guest";
   can_manage: boolean;
   viewer_id: string;
+  muted: boolean;
   time_options: TimeOption[];
   votes: Vote[];
   general_votes: GeneralVote[];

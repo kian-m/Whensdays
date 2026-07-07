@@ -158,6 +158,10 @@ func main() {
 	mux.Handle("PUT /api/events/{id}/comments-enabled", auth(http.HandlerFunc(s.handleSetCommentsEnabled)))
 	mux.Handle("POST /api/events/{id}/cohosts", auth(http.HandlerFunc(s.handleAddCohost)))
 	mux.Handle("DELETE /api/events/{id}/cohosts/{userId}", auth(http.HandlerFunc(s.handleRemoveCohost)))
+	// Notification mute: signed-in toggle + the one-click email link (the latter
+	// is UNauthenticated — identity rides in a signed token; see mute.go).
+	mux.Handle("POST /api/events/{id}/mute", auth(http.HandlerFunc(s.handleMuteToggle)))
+	mux.Handle("GET /api/events/{id}/unsubscribe", readLimit(http.HandlerFunc(s.handleUnsubscribe)))
 	// Public on purpose: the event id IS the invite capability (same fields the
 	// OG unfurl already serves), and a bare <a href> can't attach a bearer —
 	// this is what lets iOS open the invite directly in Calendar.

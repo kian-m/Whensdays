@@ -235,7 +235,7 @@ export function GroupPage() {
 function GroupEventRow({ event, onClick }: { event: Event; onClick: () => void }) {
   return (
     <div
-      className="card ev tile"
+      className={`card ev tile ${event.theme ? `theme-tile theme-${event.theme}` : ""}`}
       data-testid="group-event"
       style={{ cursor: "pointer", borderLeftColor: TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other }}
       onClick={onClick}

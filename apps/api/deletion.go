@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/clsandbox/api/internal/db"
 )
@@ -39,28 +40,32 @@ func (s *server) handleCancelEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wholeSeries := r.URL.Query().Get("series") == "all" && ev.SeriesID.Valid
-	// Email going attendees before flipping status. For a whole-series cancel,
-	// each occurrence has its OWN attendee list — union them (deduped).
+	// Email going, unmuted attendees before flipping status. For a whole-series
+	// cancel, each occurrence has its OWN attendee list — union them (deduped by
+	// user). Sent per-recipient so each carries its own one-click mute link.
 	if s.notify.Enabled() {
 		seen := map[string]bool{}
-		var emails []string
-		if wholeSeries {
-			if occs, err := s.queries.ListSeriesEvents(r.Context(), ev.SeriesID); err == nil {
-				for _, o := range occs {
-					if es, err := s.queries.ListGoingAttendeeEmails(r.Context(), o.ID); err == nil {
-						for _, e := range es {
-							if !seen[e] {
-								seen[e] = true
-								emails = append(emails, e)
-							}
-						}
+		var contacts []db.ListGoingAttendeeContactsRow
+		collect := func(id pgtype.UUID) {
+			if cs, err := s.queries.ListGoingAttendeeContacts(r.Context(), id); err == nil {
+				for _, c := range cs {
+					if !seen[c.UserID] {
+						seen[c.UserID] = true
+						contacts = append(contacts, c)
 					}
 				}
 			}
-		} else if es, err := s.queries.ListGoingAttendeeEmails(r.Context(), ev.ID); err == nil {
-			emails = es
 		}
-		if len(emails) > 0 {
+		if wholeSeries {
+			if occs, err := s.queries.ListSeriesEvents(r.Context(), ev.SeriesID); err == nil {
+				for _, o := range occs {
+					collect(o.ID)
+				}
+			}
+		} else {
+			collect(ev.ID)
+		}
+		for _, c := range contacts {
 			body := renderEmail(emailContent{
 				preheader: "This plan was called off.",
 				heading:   ev.Title + " was cancelled",
@@ -68,8 +73,9 @@ func (s *server) handleCancelEvent(w http.ResponseWriter, r *http.Request) {
 				ctaLabel:  "View the event →",
 				ctaURL:    campaignURL(s.eventURL(ev.ID), "cancelled"),
 				logoURL:   s.logoURL(),
+				unsubURL:  s.muteLink(c.UserID, uuidStr(ev.ID)),
 			})
-			s.notify.Send(emails, "Cancelled: "+ev.Title, body)
+			s.notify.Send([]string{c.Email}, "Cancelled: "+ev.Title, body)
 		}
 	}
 	if wholeSeries {

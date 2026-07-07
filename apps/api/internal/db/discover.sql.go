@@ -294,7 +294,7 @@ func (q *Queries) ListFriendIDs(ctx context.Context, requesterID string) ([]stri
 
 const listFriendsEvents = `-- name: ListFriendsEvents :many
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
-       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $1::text AND f.addressee_id = a.user_id)
@@ -330,6 +330,7 @@ type ListFriendsEventsRow struct {
 	CustomEmoji  string             `json:"custom_emoji"`
 	CustomLabel  string             `json:"custom_label"`
 	PhotoUrl     string             `json:"photo_url"`
+	Theme        string             `json:"theme"`
 	FriendsGoing int32              `json:"friends_going"`
 	ViewerRsvp   string             `json:"viewer_rsvp"`
 	FromFriend   bool               `json:"from_friend"`
@@ -357,6 +358,7 @@ func (q *Queries) ListFriendsEvents(ctx context.Context, dollar_1 string) ([]Lis
 			&i.CustomEmoji,
 			&i.CustomLabel,
 			&i.PhotoUrl,
+			&i.Theme,
 			&i.FriendsGoing,
 			&i.ViewerRsvp,
 			&i.FromFriend,
@@ -444,7 +446,7 @@ func (q *Queries) ListPeopleYouMayKnow(ctx context.Context, userID string) ([]Li
 const listPublicEvents = `-- name: ListPublicEvents :many
 
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
-       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $3::text AND f.addressee_id = a.user_id)
@@ -488,6 +490,7 @@ type ListPublicEventsRow struct {
 	CustomEmoji  string             `json:"custom_emoji"`
 	CustomLabel  string             `json:"custom_label"`
 	PhotoUrl     string             `json:"photo_url"`
+	Theme        string             `json:"theme"`
 	FriendsGoing int32              `json:"friends_going"`
 	ViewerRsvp   string             `json:"viewer_rsvp"`
 	FromFriend   bool               `json:"from_friend"`
@@ -516,6 +519,7 @@ func (q *Queries) ListPublicEvents(ctx context.Context, arg ListPublicEventsPara
 			&i.CustomEmoji,
 			&i.CustomLabel,
 			&i.PhotoUrl,
+			&i.Theme,
 			&i.FriendsGoing,
 			&i.ViewerRsvp,
 			&i.FromFriend,

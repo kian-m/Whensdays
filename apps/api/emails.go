@@ -55,6 +55,7 @@ type emailContent struct {
 	ctaLabel  string         // button text
 	ctaURL    string         // button href (already UTM-tagged by the caller)
 	logoURL   string         // hosted PNG logo (APP_ORIGIN/apple-touch-icon.png)
+	unsubURL  string         // optional one-click mute link for THIS recipient
 }
 
 func esc(s string) string { return html.EscapeString(s) }
@@ -116,9 +117,14 @@ func renderEmail(c emailContent) string {
 
 	b.WriteString(`</td></tr></table>`)
 
-	// Footer.
-	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0"><tr><td style="padding:18px 24px;text-align:center;font-size:12px;line-height:1.5;color:%s">You're receiving this because you're part of this plan on Whensdays.<br>Whensdays — scheduling that actually happens.</td></tr></table>`,
-		emailMuted)
+	// Footer — includes the one-click mute link when the caller supplied a
+	// per-recipient token.
+	unsub := ""
+	if c.unsubURL != "" {
+		unsub = fmt.Sprintf(`<br><a href="%s" style="color:%s;text-decoration:underline">Mute notifications for this event</a>`, esc(c.unsubURL), emailMuted)
+	}
+	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0"><tr><td style="padding:18px 24px;text-align:center;font-size:12px;line-height:1.5;color:%s">You're receiving this because you're part of this plan on Whensdays.<br>Whensdays — scheduling that actually happens.%s</td></tr></table>`,
+		emailMuted, unsub)
 
 	b.WriteString(`</td></tr></table></div>`)
 	return b.String()

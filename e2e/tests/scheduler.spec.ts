@@ -159,8 +159,9 @@ test.describe("scheduler", () => {
       name: "cover.png", mimeType: "image/png", buffer: Buffer.from(png, "base64"),
     });
     await expect(page.getByTestId("event-cover")).toHaveAttribute("src", /^data:image\//);
-    // Pick a backdrop theme, save — both persist across a reload.
+    // Pick a backdrop theme — the WHOLE page reflects it live, before saving.
     await page.getByTestId("theme-party").click();
+    await expect(page.locator(".event-theme.theme-party")).toBeVisible();
     await page.getByTestId("edit-save").click();
     await expect(page.getByTestId("hero-edit")).toHaveCount(0);
     await page.reload();
@@ -177,16 +178,47 @@ test.describe("scheduler", () => {
     const shell = await page.request.get(`/e/${evId}`);
     expect(await shell.text()).toContain(`/api/events/${evId}/og.png`);
 
-    // The cover is now the tile's main visual on the dashboard.
+    // The cover is now the tile's main visual on the dashboard, and the theme
+    // dramatically restyles the whole tile (accent wash + glow border).
     await page.goto("/");
     const covRow = page.getByTestId("event-row").filter({ hasText: title }).first();
     await expect(covRow.getByTestId("event-thumb")).toHaveAttribute("src", /^data:image\//);
+    await expect(covRow).toHaveClass(/theme-tile/);
+    await expect(covRow).toHaveClass(/theme-party/);
     await covRow.click();
     // Clean up the theme+cover so other shared-user tests see a plain hero.
     await page.getByTestId("edit-event-open").click();
     await page.getByTestId("cover-remove").click();
     await page.getByTestId("theme-none").click();
     await page.getByTestId("edit-save").click();
+  });
+
+  test("mute event notifications toggles and persists", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "mute1", "Mute One", "mute1");
+    const title = `Mute ${test.info().testId}-${Date.now()}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-party").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-11-20T18:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Default: subscribed. Mute, then confirm it sticks across a reload.
+    const mute = page.getByTestId("mute-toggle");
+    await expect(mute).toContainText("Mute notifications");
+    await mute.click();
+    await expect(mute).toContainText("muted");
+    await page.reload();
+    await expect(page.getByTestId("mute-toggle")).toContainText("muted");
+    // Un-mute again (leave a clean state for shared-DB idempotency).
+    await page.getByTestId("mute-toggle").click();
+    await expect(page.getByTestId("mute-toggle")).toContainText("Mute notifications");
   });
 
   test("address type-ahead, directions link, and add-friend from RSVPs", async ({ page, browser }) => {

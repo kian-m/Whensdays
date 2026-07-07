@@ -795,6 +795,8 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	muted, _ := s.queries.IsEventMuted(r.Context(), db.IsEventMutedParams{EventID: id, UserID: uid})
+
 	// Opening the event clears its "new" invite marker (per-event, persistent).
 	_ = s.queries.MarkOneInviteSeen(r.Context(), db.MarkOneInviteSeenParams{EventID: id, UserID: uid})
 	s.analytics.Capture(uid, "event_viewed", map[string]any{
@@ -807,6 +809,7 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		"role":               role,
 		"can_manage":         canManage,
 		"viewer_id":          uid,
+		"muted":              muted,
 		"time_options":       options,
 		"votes":              votes,
 		"general_votes":      generalVotes,

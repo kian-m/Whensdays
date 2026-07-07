@@ -14,7 +14,7 @@ UPDATE events SET reminder_sent = true WHERE id = $1;
 
 -- name: ListPublicEvents :many
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
-       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $3::text AND f.addressee_id = a.user_id)
@@ -95,7 +95,7 @@ GROUP BY a.event_id;
 
 -- name: ListFriendsEvents :many
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
-       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $1::text AND f.addressee_id = a.user_id)

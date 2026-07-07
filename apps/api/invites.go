@@ -54,6 +54,7 @@ func (s *server) handleInviteFriend(w http.ResponseWriter, r *http.Request) {
 					ctaLabel:  "RSVP now →",
 					ctaURL:    campaignURL(s.eventURL(ev.ID), "invite"),
 					logoURL:   s.logoURL(),
+					unsubURL:  s.muteLink(in.FriendID, uuidStr(ev.ID)),
 				})
 				s.notify.Send([]string{p.Email}, "You're invited: "+ev.Title, body)
 			}

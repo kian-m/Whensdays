@@ -123,7 +123,7 @@ function EventRow({ e, pile, onClick, isNew, soon }: {
   const faces = (pile?.faces ?? []).slice(0, 5);
   const extra = (pile?.going ?? 0) - faces.length;
   return (
-    <div className="card ev tile" data-testid="event-row" onClick={onClick} style={{ borderLeftColor: color }}>
+    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : ""}`} data-testid="event-row" onClick={onClick} style={{ borderLeftColor: color }}>
       <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={color} size={e.photo_url ? 72 : 46} />
       <div style={{ flex: 1 }}>
         <div className="row between">

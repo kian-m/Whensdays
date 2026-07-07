@@ -34,17 +34,21 @@ export function EventPage() {
   const { id } = useParams();
   const { data, loading, reload } = useAsync<EventDetail>((api) => getJSON(api, `/api/events/${id}`), [id]);
   const [preview, setPreview] = useState(false);
+  // Live theme preview while editing the hero card — reflects the whole page
+  // before the edit is saved. null = show the saved theme.
+  const [themePreview, setThemePreview] = useState<string | null>(null);
 
   if (loading && !data) return <Loading />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Event not found.</p></div>;
 
   const showManage = data.can_manage && !preview;
   const e = data.event;
+  const effTheme = themePreview ?? e.theme;
 
   return (
-    <div className={`stack ${e.theme ? `event-theme theme-${e.theme}` : ""}`}>
+    <div className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
       <BackLink />
-      <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} />
+      <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} />
 
       {e.status === "cancelled" && (
         <div className="card empty" data-testid="cancelled-note">
@@ -63,6 +67,8 @@ export function EventPage() {
 
       <EventComments data={data} reload={reload} />
 
+      {!preview && e.status !== "cancelled" && <MuteToggle data={data} />}
+
       {data.role === "host" && (
         <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="preview-toggle"
           onClick={() => setPreview((p) => { analytics.capture(EVENTS.previewToggled, { to: !p ? "guest" : "host" }); return !p; })}>
@@ -70,6 +76,32 @@ export function EventPage() {
         </button>
       )}
     </div>
+  );
+}
+
+// Per-event notification mute — available to anyone on the event (host or
+// attendee). Hosts use it to stop the RSVP/comment stream; attendees to stop
+// finalize/reminder mail. Also toggleable one-click from any email.
+function MuteToggle({ data }: { data: EventDetail }) {
+  const api = useApi();
+  const [muted, setMuted] = useState(data.muted);
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    setBusy(true);
+    const next = !muted;
+    const res = await sendJSON(api, "POST", `/api/events/${data.event.id}/mute`, { muted: next });
+    setBusy(false);
+    if (res.ok) {
+      setMuted(next);
+      analytics.capture(EVENTS.notificationsMuted, { muted: next });
+    }
+  }
+  return (
+    <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="mute-toggle"
+      disabled={busy} onClick={toggle}
+      title={muted ? "You won't get emails about this event" : "Stop emails about this event"}>
+      {muted ? "🔕 Notifications muted — turn back on" : "🔔 Mute notifications"}
+    </button>
   );
 }
 
@@ -627,7 +659,7 @@ function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
 // The hero card: cover art + title/meta, and — for the host/cohosts — an Edit
 // button that flips the card into in-place editing (details, visibility, a
 // square cover photo or Klipy GIF, and a page backdrop theme).
-function HeroCard({ data, reload, canEdit }: { data: EventDetail; reload: () => void; canEdit: boolean }) {
+function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail; reload: () => void; canEdit: boolean; onPreviewTheme: (t: string | null) => void }) {
   const api = useApi();
   const e = data.event;
   const [editing, setEditing] = useState(false);
@@ -675,6 +707,7 @@ function HeroCard({ data, reload, canEdit }: { data: EventDetail; reload: () => 
       return setMsg(b.error || "could not save");
     }
     setEditing(false);
+    onPreviewTheme(null);
     reload();
   }
 
@@ -764,13 +797,14 @@ function HeroCard({ data, reload, canEdit }: { data: EventDetail; reload: () => 
         <span className="muted small">Theme:</span>
         {EVENT_THEMES.map((t) => (
           <button key={t.value} type="button" className={`chip sm ${theme === t.value ? "on" : ""}`}
-            data-testid={`theme-${t.value || "none"}`} onClick={() => setTheme(t.value)}>{t.label}</button>
+            data-testid={`theme-${t.value || "none"}`}
+            onClick={() => { setTheme(t.value); onPreviewTheme(t.value || null); }}>{t.label}</button>
         ))}
       </div>
       {msg && <p className="err small">{msg}</p>}
       <div className="row">
         <button className="btn" data-testid="edit-save">Save changes</button>
-        <button type="button" className="btn ghost sm" data-testid="edit-cancel" onClick={() => setEditing(false)}>Cancel</button>
+        <button type="button" className="btn ghost sm" data-testid="edit-cancel" onClick={() => { setEditing(false); onPreviewTheme(null); }}>Cancel</button>
       </div>
     </form>
   );

@@ -27,6 +27,25 @@ func TestGuestTokenRoundTrip(t *testing.T) {
 	}
 }
 
+func TestMuteTokenRoundTrip(t *testing.T) {
+	g := guestSigner{key: []byte("test-key")}
+	tok := g.signMute("user_2abc", "evt-123")
+	uid, evt, ok := g.verifyMute(tok)
+	if !ok || uid != "user_2abc" || evt != "evt-123" {
+		t.Fatalf("verifyMute = %q,%q,%v", uid, evt, ok)
+	}
+	if _, _, ok := g.verifyMute(tok + "x"); ok {
+		t.Fatal("tampered mute token verified")
+	}
+	if _, _, ok := (guestSigner{key: []byte("other")}).verifyMute(tok); ok {
+		t.Fatal("wrong-key mute token verified")
+	}
+	// A guest bearer token must NOT validate as a mute token (namespace isolation).
+	if _, _, ok := g.verifyMute(g.sign("guest_abc")); ok {
+		t.Fatal("guest token accepted as mute token")
+	}
+}
+
 func TestNotifyPayload(t *testing.T) {
 	p := notify.Payload("a@x.com", []string{"b@y.com"}, "Sub", "<b>hi</b>")
 	if p["from"] != "a@x.com" || p["subject"] != "Sub" {

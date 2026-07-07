@@ -336,6 +336,27 @@ textarea.input { resize: vertical; min-height: 64px; }
 .theme-cozy   { --accent: #df8038; }
 .theme-cozy::before   { background: linear-gradient(170deg, rgba(120,60,30,0.32), transparent 52%), radial-gradient(78% 55% at 50% 98%, rgba(233,161,59,0.44), transparent 76%); }
 
+/* Themed event TILES (Home/Discover/Groups): the same palette as the event-page
+   themes, scoped to the card so the WHOLE tile is unmistakably themed — a bold
+   diagonal wash over the glass, an accent-glow border, and the theme accent on
+   every child (the theme-x class also sets --accent above). Tiles carry
+   .theme-tile (never .event-theme), so the full-page ::before backdrop above
+   never applies here. */
+.theme-tile {
+  border: 1px solid var(--accent);
+  border-left-width: 5px !important;
+  box-shadow: 0 8px 26px -6px var(--accent);
+  position: relative;
+  overflow: hidden;
+}
+.theme-tile .title { color: var(--ink); font-weight: 700; }
+.theme-tile.theme-party  { background: linear-gradient(135deg, rgba(224,85,155,0.34), rgba(157,107,212,0.16) 62%), var(--glass); }
+.theme-tile.theme-beach  { background: linear-gradient(135deg, rgba(240,153,58,0.34), rgba(120,200,210,0.18) 62%), var(--glass); }
+.theme-tile.theme-forest { background: linear-gradient(135deg, rgba(63,157,111,0.36), rgba(28,74,50,0.20) 62%), var(--glass); }
+.theme-tile.theme-night  { background: linear-gradient(135deg, rgba(139,131,255,0.34), rgba(8,10,26,0.34) 62%), var(--glass); }
+.theme-tile.theme-neon   { background: linear-gradient(135deg, rgba(255,45,148,0.36), rgba(0,229,255,0.20) 62%), var(--glass); box-shadow: 0 0 22px -4px #ff2d94; }
+.theme-tile.theme-cozy   { background: linear-gradient(135deg, rgba(223,128,56,0.34), rgba(120,60,30,0.18) 62%), var(--glass); }
+
 /* facepile: overlapping avatar stack on event tiles ("who's going") */
 .facepile { display: flex; align-items: center; margin-top: 6px; }
 .facepile .face { display: inline-flex; margin-left: -7px; border-radius: 50%; }

@@ -146,7 +146,7 @@ function PublicEventRow({ e, onOpen, canFollow, following, toggleFollow, viewerI
   const typeColor = TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other;
 
   return (
-    <div className={`card stack tile ${tier}`} data-testid={testid}
+    <div className={`card stack tile ${tier} ${e.theme ? `theme-tile theme-${e.theme}` : ""}`} data-testid={testid}
       style={{ gap: 6, borderLeftColor: typeColor }}>
       <div className="row between">
         <span className="row" style={{ gap: 10, cursor: "pointer" }} onClick={onOpen}>

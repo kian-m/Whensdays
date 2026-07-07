@@ -22,6 +22,7 @@ let enabled = false;
 export const EVENTS = {
   createEventOpened: "create_event_opened",
   previewToggled: "preview_as_guest_toggled",
+  notificationsMuted: "event_notifications_muted",
   shareLinkCopied: "share_link_copied",
   friendAvailabilityViewed: "friend_availability_viewed",
   addToCalendarClicked: "add_to_calendar_clicked",

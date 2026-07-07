@@ -47,49 +47,55 @@ func eventMeta(ev db.Event) []emailMetaRow {
 	return rows
 }
 
-// notifyFinalized emails every 'going' attendee once a time is locked in.
+// notifyFinalized emails every 'going', unmuted attendee once a time is locked in.
 func (s *server) notifyFinalized(ctx context.Context, ev db.Event) {
 	if !s.notify.Enabled() {
 		return
 	}
-	emails, err := s.queries.ListGoingAttendeeEmails(ctx, ev.ID)
-	if err != nil || len(emails) == 0 {
+	contacts, err := s.queries.ListGoingAttendeeContacts(ctx, ev.ID)
+	if err != nil {
 		return
 	}
 	subject := fmt.Sprintf("It's on — %s is locked in 🎉", ev.Title)
-	body := renderEmail(emailContent{
-		preheader: "A time is set — here are the details.",
-		heading:   ev.Title + " has a time 🎉",
-		lines:     []string{"Good news — the group landed on a time. Add it to your calendar so it actually happens."},
-		meta:      eventMeta(ev),
-		ctaLabel:  "View the plan →",
-		ctaURL:    campaignURL(s.eventURL(ev.ID), "finalized"),
-		logoURL:   s.logoURL(),
-	})
-	s.notify.Send(emails, subject, body)
+	for _, c := range contacts {
+		body := renderEmail(emailContent{
+			preheader: "A time is set — here are the details.",
+			heading:   ev.Title + " has a time 🎉",
+			lines:     []string{"Good news — the group landed on a time. Add it to your calendar so it actually happens."},
+			meta:      eventMeta(ev),
+			ctaLabel:  "View the plan →",
+			ctaURL:    campaignURL(s.eventURL(ev.ID), "finalized"),
+			logoURL:   s.logoURL(),
+			unsubURL:  s.muteLink(c.UserID, uuidStr(ev.ID)),
+		})
+		s.notify.Send([]string{c.Email}, subject, body)
+	}
 }
 
-// notifyReminder emails every 'going' attendee ~24h out (called by the cron).
-// Returns the number of recipients (for the cron's telemetry).
+// notifyReminder emails every 'going', unmuted attendee ~24h out (called by the
+// cron). Returns the number of recipients (for the cron's telemetry).
 func (s *server) notifyReminder(ctx context.Context, ev db.Event) int {
 	if !s.notify.Enabled() {
 		return 0
 	}
-	emails, err := s.queries.ListGoingAttendeeEmails(ctx, ev.ID)
-	if err != nil || len(emails) == 0 {
+	contacts, err := s.queries.ListGoingAttendeeContacts(ctx, ev.ID)
+	if err != nil {
 		return 0
 	}
-	body := renderEmail(emailContent{
-		preheader: "Happening soon — don't forget.",
-		heading:   ev.Title + " is tomorrow",
-		lines:     []string{"Just a heads up — this is coming up soon. See you there!"},
-		meta:      eventMeta(ev),
-		ctaLabel:  "See the details →",
-		ctaURL:    campaignURL(s.eventURL(ev.ID), "reminder"),
-		logoURL:   s.logoURL(),
-	})
-	s.notify.Send(emails, "Tomorrow: "+ev.Title, body)
-	return len(emails)
+	for _, c := range contacts {
+		body := renderEmail(emailContent{
+			preheader: "Happening soon — don't forget.",
+			heading:   ev.Title + " is tomorrow",
+			lines:     []string{"Just a heads up — this is coming up soon. See you there!"},
+			meta:      eventMeta(ev),
+			ctaLabel:  "See the details →",
+			ctaURL:    campaignURL(s.eventURL(ev.ID), "reminder"),
+			logoURL:   s.logoURL(),
+			unsubURL:  s.muteLink(c.UserID, uuidStr(ev.ID)),
+		})
+		s.notify.Send([]string{c.Email}, "Tomorrow: "+ev.Title, body)
+	}
+	return len(contacts)
 }
 
 // notifyNewComment tells the host someone commented (unless the host is the actor).
@@ -117,6 +123,10 @@ func (s *server) notifyHostActivity(ctx context.Context, ev db.Event, actorID, c
 	if !s.notify.Enabled() || actorID == ev.HostID {
 		return
 	}
+	// Honour a host who muted this event's activity stream.
+	if muted, _ := s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: ev.ID, UserID: ev.HostID}); muted {
+		return
+	}
 	host, err := s.queries.GetProfile(ctx, ev.HostID)
 	if err != nil || host.Email == "" {
 		return
@@ -129,6 +139,7 @@ func (s *server) notifyHostActivity(ctx context.Context, ev db.Event, actorID, c
 		ctaLabel:  "Open your event →",
 		ctaURL:    campaignURL(s.eventURL(ev.ID), campaign),
 		logoURL:   s.logoURL(),
+		unsubURL:  s.muteLink(ev.HostID, uuidStr(ev.ID)),
 	})
 	s.notify.Send([]string{host.Email}, subject, body)
 }
