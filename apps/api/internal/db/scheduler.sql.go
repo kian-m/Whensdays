@@ -150,7 +150,7 @@ const cancelEvent = `-- name: CancelEvent :one
 UPDATE events SET status = 'cancelled'
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone
 `
 
 func (q *Queries) CancelEvent(ctx context.Context, id pgtype.UUID) (Event, error) {
@@ -181,6 +181,7 @@ func (q *Queries) CancelEvent(ctx context.Context, id pgtype.UUID) (Event, error
 		&i.GeneralScope,
 		&i.PhotoUrl,
 		&i.Theme,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -236,11 +237,11 @@ const createEvent = `-- name: CreateEvent :one
 INSERT INTO events (
     host_id, title, event_type, description,
     location_mode, location_address, scheduling_mode, starts_at, status, group_id, series_id, recurrence,
-    visibility, topic, city, custom_emoji, custom_label, general_scope
+    visibility, topic, city, custom_emoji, custom_label, general_scope, timezone
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone
 `
 
 type CreateEventParams struct {
@@ -262,6 +263,7 @@ type CreateEventParams struct {
 	CustomEmoji     string             `json:"custom_emoji"`
 	CustomLabel     string             `json:"custom_label"`
 	GeneralScope    string             `json:"general_scope"`
+	Timezone        string             `json:"timezone"`
 }
 
 // =========================== events ===============================
@@ -285,6 +287,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event
 		arg.CustomEmoji,
 		arg.CustomLabel,
 		arg.GeneralScope,
+		arg.Timezone,
 	)
 	var i Event
 	err := row.Scan(
@@ -312,6 +315,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event
 		&i.GeneralScope,
 		&i.PhotoUrl,
 		&i.Theme,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -371,7 +375,7 @@ UPDATE events
 SET starts_at = $2, status = 'scheduled'
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone
 `
 
 type FinalizeEventParams struct {
@@ -407,6 +411,7 @@ func (q *Queries) FinalizeEvent(ctx context.Context, arg FinalizeEventParams) (E
 		&i.GeneralScope,
 		&i.PhotoUrl,
 		&i.Theme,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -437,7 +442,7 @@ func (q *Queries) GetAttendee(ctx context.Context, arg GetAttendeeParams) (Event
 
 const getEvent = `-- name: GetEvent :one
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone
 FROM events
 WHERE id = $1
 `
@@ -470,6 +475,7 @@ func (q *Queries) GetEvent(ctx context.Context, id pgtype.UUID) (Event, error) {
 		&i.GeneralScope,
 		&i.PhotoUrl,
 		&i.Theme,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -671,7 +677,7 @@ func (q *Queries) ListAvailabilityDays(ctx context.Context, userID string) ([]Li
 
 const listEventsAttending = `-- name: ListEventsAttending :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone
 FROM events e
 JOIN event_attendees a ON a.event_id = e.id
 WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled'
@@ -713,6 +719,7 @@ func (q *Queries) ListEventsAttending(ctx context.Context, userID string) ([]Eve
 			&i.GeneralScope,
 			&i.PhotoUrl,
 			&i.Theme,
+			&i.Timezone,
 		); err != nil {
 			return nil, err
 		}
@@ -726,7 +733,7 @@ func (q *Queries) ListEventsAttending(ctx context.Context, userID string) ([]Eve
 
 const listEventsCohosting = `-- name: ListEventsCohosting :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone
 FROM events e
 JOIN event_cohosts ch ON ch.event_id = e.id
 WHERE ch.user_id = $1 AND e.status <> 'cancelled'
@@ -767,6 +774,7 @@ func (q *Queries) ListEventsCohosting(ctx context.Context, userID string) ([]Eve
 			&i.GeneralScope,
 			&i.PhotoUrl,
 			&i.Theme,
+			&i.Timezone,
 		); err != nil {
 			return nil, err
 		}
@@ -780,7 +788,7 @@ func (q *Queries) ListEventsCohosting(ctx context.Context, userID string) ([]Eve
 
 const listEventsHosting = `-- name: ListEventsHosting :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone
 FROM events
 WHERE host_id = $1 AND status <> 'cancelled'
 ORDER BY created_at DESC
@@ -820,6 +828,7 @@ func (q *Queries) ListEventsHosting(ctx context.Context, hostID string) ([]Event
 			&i.GeneralScope,
 			&i.PhotoUrl,
 			&i.Theme,
+			&i.Timezone,
 		); err != nil {
 			return nil, err
 		}
@@ -1316,25 +1325,31 @@ func (q *Queries) SetProfileEmail(ctx context.Context, arg SetProfileEmailParams
 const updateEvent = `-- name: UpdateEvent :one
 UPDATE events
 SET title = $2, description = $3, location_mode = $4, location_address = $5,
-    visibility = $6, topic = $7, city = $8, photo_url = $9, theme = $10
+    visibility = $6, topic = $7, city = $8, photo_url = $9, theme = $10,
+    starts_at = $11, reminder_sent = $12
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone
 `
 
 type UpdateEventParams struct {
-	ID              pgtype.UUID `json:"id"`
-	Title           string      `json:"title"`
-	Description     string      `json:"description"`
-	LocationMode    string      `json:"location_mode"`
-	LocationAddress string      `json:"location_address"`
-	Visibility      string      `json:"visibility"`
-	Topic           string      `json:"topic"`
-	City            string      `json:"city"`
-	PhotoUrl        string      `json:"photo_url"`
-	Theme           string      `json:"theme"`
+	ID              pgtype.UUID        `json:"id"`
+	Title           string             `json:"title"`
+	Description     string             `json:"description"`
+	LocationMode    string             `json:"location_mode"`
+	LocationAddress string             `json:"location_address"`
+	Visibility      string             `json:"visibility"`
+	Topic           string             `json:"topic"`
+	City            string             `json:"city"`
+	PhotoUrl        string             `json:"photo_url"`
+	Theme           string             `json:"theme"`
+	StartsAt        pgtype.Timestamptz `json:"starts_at"`
+	ReminderSent    bool               `json:"reminder_sent"`
 }
 
+// starts_at + reminder_sent are set by the handler: the time stays editable
+// after finalize, and rescheduling resets reminder_sent so the day-before
+// reminder re-fires for the new date.
 func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Event, error) {
 	row := q.db.QueryRow(ctx, updateEvent,
 		arg.ID,
@@ -1347,6 +1362,8 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Event
 		arg.City,
 		arg.PhotoUrl,
 		arg.Theme,
+		arg.StartsAt,
+		arg.ReminderSent,
 	)
 	var i Event
 	err := row.Scan(
@@ -1374,6 +1391,7 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Event
 		&i.GeneralScope,
 		&i.PhotoUrl,
 		&i.Theme,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -1459,6 +1477,7 @@ INSERT INTO event_attendees (event_id, user_id, rsvp)
 VALUES ($1, $2, $3)
 ON CONFLICT (event_id, user_id) DO UPDATE
     SET rsvp = EXCLUDED.rsvp
+    WHERE event_attendees.rsvp IS DISTINCT FROM EXCLUDED.rsvp
 RETURNING id, event_id, user_id, rsvp, created_at
 `
 
@@ -1469,6 +1488,12 @@ type UpsertRsvpParams struct {
 }
 
 // ========================= attendees ==============================
+// Returns a row ONLY when the rsvp actually changed (a fresh INSERT, or an
+// UPDATE to a different value). A no-op re-submit of the same rsvp updates
+// nothing and returns no row, so the handler (treating pgx.ErrNoRows as
+// "unchanged") won't re-notify the host. Race-safe: concurrent conflicting
+// upserts serialize on the (event_id,user_id) unique index, so a second
+// identical "going" sees the just-committed row and its WHERE is false.
 func (q *Queries) UpsertRsvp(ctx context.Context, arg UpsertRsvpParams) (EventAttendee, error) {
 	row := q.db.QueryRow(ctx, upsertRsvp, arg.EventID, arg.UserID, arg.Rsvp)
 	var i EventAttendee

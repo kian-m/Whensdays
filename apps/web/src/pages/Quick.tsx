@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, sendJSON, useApi } from "../lib";
+import { Event, hostTimezone, sendJSON, useApi } from "../lib";
 
 // Quick plan: the 10-second path. Either set a time, or open it up so everyone
 // marks when they're free (a general-availability poll) — you lock it in from
@@ -30,6 +30,7 @@ export function Quick() {
       location_address: "",
       scheduling_mode: mode,
       visibility: "private",
+      timezone: hostTimezone(),
     };
     if (mode === "fixed") body.starts_at = when ? new Date(when).toISOString() : "";
     else body.general_scope = scope; // shapes what guests are asked (week/month/generally)

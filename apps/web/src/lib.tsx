@@ -27,6 +27,7 @@ export type Event = {
   general_scope: "week" | "month" | "general";
   photo_url: string;
   theme: string;
+  timezone: string;
   created_at: string;
 };
 
@@ -385,14 +386,49 @@ export function busyConflict(intervals: { start: Date; end: Date; title: string 
   return hit ? hit.title : null;
 }
 
-export function fmtDateTime(iso: string | null): string {
-  if (!iso) return "TBD";
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-  });
+// toDatetimeLocal formats an instant as a <input type="datetime-local"> value
+// ("YYYY-MM-DDTHH:mm") in the viewer's local zone — for editing a start time.
+export function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export function fmtDate(iso: string | null): string {
+// hostTimezone is the browser's IANA timezone (e.g. "America/Los_Angeles"),
+// captured at event creation so all times render in the host's zone.
+export function hostTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
+// fmtDateTime/fmtDate render an instant. Pass the event's `tz` to show it in the
+// event's (host's) timezone with the zone label; omit it to use the viewer's
+// local zone. An unknown tz string falls back to local rather than throwing.
+export function fmtDateTime(iso: string | null, tz?: string): string {
+  if (!iso) return "TBD";
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  };
+  if (tz) { opts.timeZone = tz; opts.timeZoneName = "short"; }
+  try {
+    return new Date(iso).toLocaleString(undefined, opts);
+  } catch {
+    delete opts.timeZone; delete opts.timeZoneName;
+    return new Date(iso).toLocaleString(undefined, opts);
+  }
+}
+
+export function fmtDate(iso: string | null, tz?: string): string {
   if (!iso) return "Date TBD";
-  return new Date(iso).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  const opts: Intl.DateTimeFormatOptions = { weekday: "long", month: "long", day: "numeric" };
+  if (tz) opts.timeZone = tz;
+  try {
+    return new Date(iso).toLocaleDateString(undefined, opts);
+  } catch {
+    delete opts.timeZone;
+    return new Date(iso).toLocaleDateString(undefined, opts);
+  }
 }

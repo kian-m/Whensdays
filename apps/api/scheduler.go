@@ -550,6 +550,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		CustomEmoji     string   `json:"custom_emoji"`  // optional user-defined type (with label)
 		CustomLabel     string   `json:"custom_label"`  // ≤20 chars; forces event_type=other
 		GeneralScope    string   `json:"general_scope"` // general mode: week|month|general (default general)
+		Timezone        string   `json:"timezone"`      // host's IANA tz (e.g. America/Los_Angeles); for server-rendered times
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -608,11 +609,20 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	if in.Visibility == "" {
 		in.Visibility = "private"
 	}
+	// Timezone: accept only a valid IANA name (parseable by the tz database);
+	// anything else is dropped to "" so email formatting falls back to the app tz.
+	tz := strings.TrimSpace(in.Timezone)
+	if tz != "" {
+		if _, err := time.LoadLocation(tz); err != nil {
+			tz = ""
+		}
+	}
 	params := db.CreateEventParams{
 		HostID: uid, Title: in.Title, EventType: in.EventType, Description: in.Description,
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress, SchedulingMode: in.SchedulingMode,
 		Visibility: in.Visibility, Topic: in.Topic, City: in.City,
 		CustomEmoji: in.CustomEmoji, CustomLabel: in.CustomLabel, GeneralScope: in.GeneralScope,
+		Timezone: tz,
 	}
 	if in.GroupID != "" {
 		gid, ok := parseUUID(in.GroupID)
@@ -843,13 +853,21 @@ func (s *server) handleRsvp(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// UpsertRsvp returns no row when the rsvp is unchanged (a re-submit) — treat
+	// that as "nothing happened": don't re-notify the host. Only a genuine change
+	// TO "going" emails the host, so double-clicks/reconfirms can't duplicate it.
 	a, err := s.queries.UpsertRsvp(r.Context(), db.UpsertRsvpParams{EventID: id, UserID: uid, Rsvp: in.Rsvp})
+	changed := true
+	if errors.Is(err, pgx.ErrNoRows) {
+		changed = false
+		a, err = s.queries.GetAttendee(r.Context(), db.GetAttendeeParams{EventID: id, UserID: uid})
+	}
 	if err != nil {
 		s.internal(w, "rsvp", err)
 		return
 	}
 	s.analytics.Capture(uid, "rsvp_submitted", map[string]any{"event_id": r.PathValue("id"), "rsvp": in.Rsvp})
-	if in.Rsvp == "going" && s.notify.Enabled() {
+	if in.Rsvp == "going" && changed && s.notify.Enabled() {
 		if p, err := s.queries.GetProfile(r.Context(), uid); err == nil {
 			s.notifyNewRSVP(r.Context(), ev, uid, p.DisplayName)
 		}

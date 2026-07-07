@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -27,12 +28,33 @@ func (s *server) logoURL() string {
 	return s.appOrigin + "/apple-touch-icon.png"
 }
 
-// eventWhen renders the locked time, or "" if the event has no time yet.
+// defaultTimeZone is the fallback for events with no stored tz (created before
+// the timezone column, or with an unrecognized name) — the app's home tz.
+const defaultTimeZone = "America/Los_Angeles"
+
+// eventLocation resolves the event's IANA timezone (the host's, captured at
+// creation), falling back to the app tz then UTC. The tz database is embedded in
+// the binary (time/tzdata import in main.go) so this works on the distroless
+// image, which ships no OS tzdata.
+func eventLocation(ev db.Event) *time.Location {
+	if ev.Timezone != "" {
+		if loc, err := time.LoadLocation(ev.Timezone); err == nil {
+			return loc
+		}
+	}
+	if loc, err := time.LoadLocation(defaultTimeZone); err == nil {
+		return loc
+	}
+	return time.UTC
+}
+
+// eventWhen renders the locked time in the event's local timezone (with the tz
+// abbreviation), or "" if the event has no time yet.
 func eventWhen(ev db.Event) string {
 	if !ev.StartsAt.Valid {
 		return ""
 	}
-	return ev.StartsAt.Time.Format("Mon Jan 2 · 3:04 PM MST")
+	return ev.StartsAt.Time.In(eventLocation(ev)).Format("Mon Jan 2 · 3:04 PM MST")
 }
 
 // eventMeta builds the When/Where fact rows shown in time-bearing emails.

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CATEGORIES, CITY_OPTIONS, Event, EventType, Friend, getJSON, guessCity, sendJSON, useApi } from "../lib";
+import { CATEGORIES, CITY_OPTIONS, Event, EventType, Friend, getJSON, guessCity, hostTimezone, sendJSON, useApi } from "../lib";
 // (custom types: saved per user, offered as chips next to the presets)
 import { EVENT_TYPES } from "../scheduler/questions";
 import { AddressInput, Avatar, useAsync } from "../ui";
@@ -93,6 +93,7 @@ export function NewEvent() {
       location_mode: locationMode,
       location_address: locationMode === "host_place" ? address : "",
       scheduling_mode: schedulingMode,
+      timezone: hostTimezone(),
     };
     if (groupId) body.group_id = groupId;
     if (custom) {

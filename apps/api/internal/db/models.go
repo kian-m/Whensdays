@@ -66,6 +66,7 @@ type Event struct {
 	GeneralScope    string             `json:"general_scope"`
 	PhotoUrl        string             `json:"photo_url"`
 	Theme           string             `json:"theme"`
+	Timezone        string             `json:"timezone"`
 }
 
 type EventAttendee struct {

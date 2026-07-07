@@ -186,11 +186,17 @@ test.describe("scheduler", () => {
     await expect(covRow).toHaveClass(/theme-tile/);
     await expect(covRow).toHaveClass(/theme-party/);
     await covRow.click();
-    // Clean up the theme+cover so other shared-user tests see a plain hero.
+    // Clean up the theme+cover so other shared-user tests see a plain hero, and
+    // reschedule — the start time stays editable after the event has a time.
     await page.getByTestId("edit-event-open").click();
     await page.getByTestId("cover-remove").click();
     await page.getByTestId("theme-none").click();
+    await expect(page.getByTestId("edit-time")).toBeVisible();
+    await page.getByTestId("edit-time").fill("2026-10-11T20:30");
     await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
+    // The new date shows in the event's timezone (E2E pins tz=UTC).
+    await expect(page.getByText(/October 11/)).toBeVisible();
   });
 
   test("mute event notifications toggles and persists", async ({ page }) => {

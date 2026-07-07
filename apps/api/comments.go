@@ -282,6 +282,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		City            string `json:"city"`
 		PhotoUrl        string `json:"photo_url"`
 		Theme           string `json:"theme"`
+		StartsAt        string `json:"starts_at"` // optional: reschedule a fixed/finalized time
 	}
 	// Covers ride in as data URLs, so this endpoint gets a larger body cap.
 	if !decodeJSONLimit(w, r, &in, coverMaxBody) {
@@ -318,11 +319,29 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "cover must be an uploaded image or a Klipy gif"})
 		return
 	}
+	// The time stays editable after finalize — but only for events that already
+	// have a concrete time (fixed or finalized). A poll still in progress decides
+	// its time through voting/finalize, not this field. Rescheduling resets
+	// reminder_sent so the day-before reminder re-fires for the new date.
+	startsAt := current.StartsAt
+	reminderSent := current.ReminderSent
+	if in.StartsAt != "" && current.StartsAt.Valid {
+		ts, valid := parseTS(in.StartsAt)
+		if !valid {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "valid starts_at required"})
+			return
+		}
+		if !ts.Time.Equal(current.StartsAt.Time) {
+			startsAt = ts
+			reminderSent = false
+		}
+	}
 	ev, err := s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
 		ID: id, Title: in.Title, Description: in.Description,
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress,
 		Visibility: in.Visibility, Topic: in.Topic, City: in.City,
 		PhotoUrl: in.PhotoUrl, Theme: in.Theme,
+		StartsAt: startsAt, ReminderSent: reminderSent,
 	})
 	if err != nil {
 		s.internal(w, "update event", err)

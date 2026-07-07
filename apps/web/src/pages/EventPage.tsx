@@ -18,6 +18,7 @@ import {
   daysFromDate,
   fmtDate,
   fmtDateTime,
+  toDatetimeLocal,
   getJSON,
   guessCity,
   importedBusy,
@@ -672,6 +673,9 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   const [city, setCity] = useState(e.city || guessCity());
   const [photo, setPhoto] = useState(e.photo_url);
   const [theme, setTheme] = useState(e.theme);
+  // Editable start time — only meaningful once the event has a concrete time
+  // (fixed or finalized); a poll still decides its time by voting.
+  const [startsAt, setStartsAt] = useState(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
   const [msg, setMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -681,6 +685,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
     setLocAddr(e.location_address); setVisibility(e.visibility);
     setTopic(e.topic); setCity(e.city || guessCity());
     setPhoto(e.photo_url); setTheme(e.theme); setMsg(null);
+    setStartsAt(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
     setEditing(true);
   }
 
@@ -701,6 +706,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       title, description: desc, location_mode: locMode, location_address: locAddr,
       visibility, topic: visibility === "public" ? topic : "", city: visibility === "public" ? city.trim() : "",
       photo_url: photo, theme,
+      starts_at: startsAt ? new Date(startsAt).toISOString() : "",
     });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
@@ -732,8 +738,8 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         </div>
         {e.description && <p>{e.description}</p>}
         <div className="muted small">
-          🗓️ {e.status === "polling" ? "Time being decided" : fmtDate(e.starts_at)}
-          {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at).split(", ").pop()}` : ""}
+          🗓️ {e.status === "polling" ? "Time being decided" : fmtDate(e.starts_at, e.timezone)}
+          {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
         </div>
         <div className="muted small">
           {e.location_mode === "find_venue" ? "📍 Venue to be decided"
@@ -761,6 +767,12 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       <GifPicker onPick={(url) => setPhoto(url)} />
       <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
       <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
+      {e.status === "scheduled" && (
+        <label className="field">When
+          <input type="datetime-local" className="input" data-testid="edit-time"
+            value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
+        </label>
+      )}
       <div className="row" style={{ gap: 6 }}>
         <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
           data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>
