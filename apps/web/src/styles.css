@@ -314,9 +314,14 @@ textarea.input { resize: vertical; min-height: 64px; }
    width. The grid itself is the scroll region — a viewport-relative height keeps
    it a real, obviously-scrollable box on mobile, and overscroll-behavior stops
    the page from scrolling once you hit the end. */
-.gif-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; max-height: min(46vh, 340px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; -webkit-overflow-scrolling: touch; }
+/* A compact, always-scrollable GIF grid: FIXED row height so every cell reserves
+   its space on first paint (the images lazy-load into a stable box — no reflow
+   that used to leave the grid unbounded until a "Load more" tap), and a FIXED
+   ~2-row pixel max-height (no `vh`, which is unreliable on mobile) so it scrolls
+   from the very first render instead of stretching to many rows. */
+.gif-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); grid-auto-rows: 96px; gap: 6px; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; -webkit-overflow-scrolling: touch; }
 .gif-grid button { border: 1px solid var(--glass-line); background: var(--glass-2); border-radius: var(--radius-sm); padding: 0; cursor: pointer; overflow: hidden; }
-.gif-grid img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; }
+.gif-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* Event page themes change the WHOLE page vibe, two ways at once:
    1. a bold full-viewport backdrop wash (::before, fixed, over the sky), and
@@ -347,7 +352,11 @@ textarea.input { resize: vertical; min-height: 64px; }
    delays spread the particles across their cycle so even a frozen frame looks
    populated. The layer sits behind content (z-index:-1, like the theme wash) and
    ignores pointer events. */
-.theme-fx { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+/* z-index above the page content (but below the fixed tabbar at 50) so the
+   particles are visible OVER the central column — on mobile the content is
+   full-width, so a behind-content layer would be completely hidden. Non-
+   interactive, so it never blocks taps. */
+.theme-fx { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
 .theme-fx .fx-p { position: absolute; top: -8vh; will-change: transform, opacity; }
 /* 8 horizontal lanes, cycled across every particle */
 .theme-fx .fx-p:nth-child(8n+1) { left: 5%; }

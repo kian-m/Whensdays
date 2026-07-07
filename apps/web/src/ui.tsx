@@ -201,6 +201,7 @@ export function GifPicker({ onPick }: { onPick: (url: string) => void }) {
   const [next, setNext] = useState("");
   const [loading, setLoading] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   // On open: an empty query returns trending AND doubles as the capability probe.
   useEffect(() => {
@@ -214,7 +215,12 @@ export function GifPicker({ onPick }: { onPick: (url: string) => void }) {
     try {
       const url = `/api/gifs/search?q=${encodeURIComponent(query)}${pos ? `&pos=${encodeURIComponent(pos)}` : ""}`;
       const b = await getJSON<GifResp>(api, url);
-      setGifs((prev) => (pos ? [...prev, ...b.gifs] : b.gifs)); // append on "load more"
+      if (pos) {
+        setGifs((prev) => [...prev, ...b.gifs]); // append on "load more"
+      } else {
+        setGifs(b.gifs); // a fresh search replaces the list — scroll back to the top
+        gridRef.current?.scrollTo({ top: 0 });
+      }
       setNext(b.next ?? "");
     } finally {
       setLoading(false);
@@ -246,7 +252,7 @@ export function GifPicker({ onPick }: { onPick: (url: string) => void }) {
       </div>
       {gifs.length > 0 && (
         <>
-          <div className="gif-grid" data-testid="gif-grid">
+          <div className="gif-grid" data-testid="gif-grid" ref={gridRef}>
             {gifs.map((g, i) => (
               <button key={`${g.url}-${i}`} type="button" data-testid={`gif-${i}`} title={g.title}
                 onClick={() => { analytics.capture(EVENTS.gifPicked); onPick(g.url); setGifs([]); setNext(""); }}>
