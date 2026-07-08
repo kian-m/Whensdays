@@ -64,7 +64,7 @@ Shipped, mapped to the original phases:
 2. ✅ **Notifications** — branded transactional email (invite, finalize, comments, day-before reminder, cancel) rendered in the host's timezone, per-event mute with one-click unsubscribe, in-app badges.
 3. ✅ **Calendar** — import (Google OAuth / Apple iCal) blocks availability + flags poll conflicts; one-tap export (Apple/Google/.ics with a link back).
 4. ✅ **Recurring groups** — groups with icons/members, recurring series events, group event lists.
-5. ✅ **Growth surfaces** — OG unfurls with a branded per-event card, Web Share, PWA, quick-create, code-split bundle, public Discover + ranked For-you feed with follows, event covers (photo/Klipy GIF) + animated backdrop themes, avatar-stack social proof on tiles.
+5. ✅ **Growth surfaces** — OG unfurls with a branded per-event card, Web Share, PWA, quick-create, code-split bundle, public Discover + ranked For-you feed with follows, event covers (photo/Klipy GIF) + backdrop themes (flowing gradient washes), avatar-stack social proof on tiles.
 
 
 ---

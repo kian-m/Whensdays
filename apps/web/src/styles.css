@@ -383,18 +383,23 @@ textarea.input { resize: vertical; min-height: 64px; }
 .theme-night  { --accent: #8b83ff; }
 .theme-night::before  { background: linear-gradient(180deg, rgba(8,10,26,0.74), rgba(8,10,26,0.34) 68%), radial-gradient(2px 2px at 20% 18%, #fff, transparent 100%), radial-gradient(2px 2px at 64% 9%, rgba(255,255,255,0.85), transparent 100%), radial-gradient(2px 2px at 83% 26%, rgba(255,255,255,0.7), transparent 100%), radial-gradient(1.5px 1.5px at 42% 33%, #fff, transparent 100%), radial-gradient(1px 1px at 30% 62%, rgba(255,255,255,0.6), transparent 100%); }
 .theme-neon   { --accent: #ff2d94; }
-.theme-neon::before   { background: radial-gradient(58% 44% at 12% 18%, rgba(255,0,128,0.40), transparent 66%), radial-gradient(58% 44% at 88% 80%, rgba(0,229,255,0.34), transparent 66%), linear-gradient(160deg, rgba(18,0,28,0.34), transparent 60%); }
+.theme-neon::before   {
+  background: linear-gradient(130deg, rgba(255,0,128,0.42), rgba(18,0,28,0.3) 34%, rgba(0,229,255,0.36) 64%, rgba(155,92,255,0.42));
+  background-size: 220% 220%;
+  animation: theme-flow 13s ease-in-out infinite alternate;
+}
 .theme-cozy   { --accent: #df8038; }
-.theme-cozy::before   { background: linear-gradient(170deg, rgba(120,60,30,0.32), transparent 52%), radial-gradient(78% 55% at 50% 98%, rgba(233,161,59,0.44), transparent 76%); }
+.theme-cozy::before   {
+  background: linear-gradient(160deg, rgba(120,60,30,0.5), rgba(233,161,59,0.32) 38%, rgba(140,60,25,0.4) 66%, rgba(233,120,40,0.5));
+  background-size: 220% 220%;
+  animation: theme-flow 16s ease-in-out infinite alternate;
+}
 
-/* ===== Theme entrance moment (ThemeFx overlay on the event page) =====
-   Particles are created + animated in JS via the Web Animations API (see
-   playThemeFx in EventPage.tsx) — a finite, one-shot moment that removes its
-   own layer when done. No CSS keyframe loops here on purpose: iOS Low Power
-   Mode pauses those mid-frame, which read as frozen/buggy particles. This file
-   only provides the fixed layer (above content, below the tabbar at z 50,
-   never interactive) and the static supporting pieces. */
-.theme-fx { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+@keyframes theme-flow { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+
+/* Theme washes are static or slow-flowing gradients only — NO particle layers
+   or JS-driven moments: they proved unreliable on iOS (Low Power Mode pauses
+   or degrades animation), and a paused gradient is still just a gradient. */
 
 /* COZY keeps a static hearth glow at the foot of the page (no flicker loop —
    a paused flicker is just a glow, but why leave a loop around to pause). */

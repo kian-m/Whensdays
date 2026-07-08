@@ -92,9 +92,10 @@ export function Home() {
           <div style={{ fontSize: "2.4rem" }}>🗓️</div>
           <h3>No plans yet</h3>
           <p className="muted">Host a dinner, movie night or camping trip — or wait for an invite.</p>
+          {/* No Discover link here — the public surface is out of the product
+              until group density exists (see the TABS comment in App.tsx). */}
           <div className="row wrap" style={{ justifyContent: "center" }}>
             <Link to="/new" className="btn soft">Create your first event</Link>
-            <Link to="/discover" className="btn ghost">Browse public events</Link>
           </div>
         </div>
       ) : shown.length === 0 ? (
