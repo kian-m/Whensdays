@@ -772,6 +772,9 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   // Editable start time — only meaningful once the event has a concrete time
   // (fixed or finalized); a poll still decides its time by voting.
   const [startsAt, setStartsAt] = useState(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
+  // Series editing: apply content edits (title/details/cover/theme…) to every
+  // occurrence — each keeps its own date.
+  const [applySeries, setApplySeries] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -803,6 +806,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       visibility, topic: visibility === "public" ? topic : "", city: visibility === "public" ? city.trim() : "",
       photo_url: photo, theme,
       starts_at: startsAt ? new Date(startsAt).toISOString() : "",
+      apply_series: applySeries,
     });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
@@ -916,6 +920,13 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
             onClick={() => { setTheme(t.value); onPreviewTheme(t.value || null); }}>{t.label}</button>
         ))}
       </div>
+      {(data.series?.length ?? 0) > 1 && (
+        <label className="row small" style={{ gap: 6, cursor: "pointer" }}>
+          <input type="checkbox" data-testid="edit-apply-series" checked={applySeries}
+            onChange={(ev2) => setApplySeries(ev2.target.checked)} />
+          Apply to all {data.series!.length} dates in this series (each keeps its own time)
+        </label>
+      )}
       {msg && <p className="err small">{msg}</p>}
       <div className="row">
         <button className="btn" data-testid="edit-save">Save changes</button>
@@ -1090,8 +1101,12 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
   const api = useApi();
   const voters = new Set(data.votes.map((v) => v.user_id)).size || 1;
   const yesFor = (o: TimeOption) => data.votes.filter((v) => v.option_id === o.id && v.response === "yes").length;
-  // Rank options best-first so the host sees the winner immediately.
-  const ranked = [...data.time_options].sort((a, b) => yesFor(b) - yesFor(a));
+  // Rank best-first: explicit yes-votes, then how the slot fits EVERYONE's
+  // saved availability (server-computed across all attendees, not just the
+  // viewer) — the "it just knows" ranking.
+  const fitOf = (o: TimeOption) => data.option_fit?.[o.id] ?? { free: 0, busy: 0 };
+  const ranked = [...data.time_options].sort((a, b) =>
+    (yesFor(b) - yesFor(a)) || (fitOf(b).free - fitOf(a).free) || (fitOf(a).busy - fitOf(b).busy));
   async function finalize(o: TimeOption) {
     await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, { starts_at: o.starts_at });
     reload();
@@ -1106,7 +1121,14 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
             <div className="row between">
               <span className="small">
                 {fmtDateTime(o.starts_at)}
-                {i === 0 && yes > 0 && <span className="pill scheduled" style={{ marginLeft: 6 }}>Best</span>}
+                {i === 0 && (yes > 0 || fitOf(o).free > 0) && <span className="pill scheduled" style={{ marginLeft: 6 }}>Best</span>}
+                {(fitOf(o).free > 0 || fitOf(o).busy > 0) && (
+                  <span className="muted small" style={{ marginLeft: 6 }} data-testid={`fit-${i}`}>
+                    {fitOf(o).free > 0 && <>🟢 {fitOf(o).free} free</>}
+                    {fitOf(o).free > 0 && fitOf(o).busy > 0 && " · "}
+                    {fitOf(o).busy > 0 && <>🔴 {fitOf(o).busy} busy</>}
+                  </span>
+                )}
               </span>
               <div className="row">
                 <span className="muted small">{yes} available</span>

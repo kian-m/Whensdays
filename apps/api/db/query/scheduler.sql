@@ -332,3 +332,10 @@ UPDATE events SET status = 'cancelled' WHERE series_id = $1;
 
 -- name: DeleteGroup :exec
 DELETE FROM groups WHERE id = $1 AND owner_id = $2;
+
+-- name: ListAttendeeAvailabilityForEvent :many
+-- Every attendee's date-based availability — the input for ranking a poll's
+-- candidate times against the WHOLE group, not just the viewer.
+SELECT ad.user_id, ad.day, ad.daypart, ad.status
+FROM availability_days ad
+WHERE ad.user_id IN (SELECT user_id FROM event_attendees WHERE event_id = $1);

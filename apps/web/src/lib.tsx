@@ -229,6 +229,9 @@ export type EventDetail = {
   can_manage: boolean;
   viewer_id: string;
   muted: boolean;
+  // Per-poll-option availability across ALL attendees (from their saved
+  // availability days): option_id -> {free, busy} counts.
+  option_fit: Record<string, { free: number; busy: number }>;
   time_options: TimeOption[];
   votes: Vote[];
   general_votes: GeneralVote[];

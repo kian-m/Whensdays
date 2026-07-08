@@ -1,6 +1,22 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Event, Group, GroupDetail, TYPE_COLORS, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
+
+// Consecutive months (ending now, with a one-month grace) in which the group
+// had at least one scheduled event — the ritual streak. Loss aversion is the
+// retention mechanic: breaking it should feel like a loss.
+function groupStreak(events: Event[]): number {
+  const months = new Set(
+    events.filter((e) => e.starts_at && e.status === "scheduled")
+      .map((e) => { const d = new Date(e.starts_at!); return d.getFullYear() * 12 + d.getMonth(); }),
+  );
+  const now = new Date();
+  let m = now.getFullYear() * 12 + now.getMonth();
+  if (!months.has(m)) m -= 1; // grace: alive if last month had one
+  let n = 0;
+  while (months.has(m)) { n++; m--; }
+  return n;
+}
 import { Avatar, BackLink, GifPicker, Loading, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { eventEmoji } from "../scheduler/questions";
 
@@ -140,7 +156,14 @@ export function GroupPage() {
         <div className="row between">
           <span className="row" style={{ gap: 10 }}>
             <GroupIcon group={group} size={64} />
-            <h1 data-testid="group-title">{group.name}</h1>
+            <span className="stack" style={{ gap: 4 }}>
+              <h1 data-testid="group-title">{group.name}</h1>
+              {groupStreak(events) >= 2 && (
+                <span className="pill polling" data-testid="group-streak" style={{ alignSelf: "flex-start" }}>
+                  🔥 {groupStreak(events)}-month streak
+                </span>
+              )}
+            </span>
           </span>
           <button
             className="btn sm"

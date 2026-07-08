@@ -250,13 +250,101 @@ test.describe("scheduler", () => {
     // Both dates form one series ("1 of 2", picked-dates recurrence).
     await expect(page.getByTestId("series")).toContainText("1 of 2");
     await expect(page.getByTestId("series")).toContainText("on picked dates");
+    // Series-wide editing: retitle with "apply to all dates" → the sibling
+    // occurrence picks up the new title (its own date untouched).
+    const newTitle = `${title} v2`;
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-title").fill(newTitle);
+    await page.getByTestId("edit-apply-series").check();
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("event-title")).toHaveText(newTitle);
+    await page.getByTestId("series-occ-1").click();
+    await expect(page.getByTestId("event-title")).toHaveText(newTitle);
+    await expect(page.getByTestId("series")).toContainText("2 of 2");
+
     // The last date is within 3 weeks → the host sees the re-poll entry, which
     // opens a prefilled poll that will re-invite everyone.
     await page.getByTestId("series-repoll").click();
-    await expect(page.getByTestId("event-title")).toHaveValue(title);
+    await expect(page.getByTestId("event-title")).toHaveValue(newTitle);
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("wiz-next").click();
     await expect(page.getByTestId("sched-poll")).toHaveClass(/on/);
+  });
+
+  test("poll options rank against ALL attendees' availability", async ({ page, browser }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "fit1", "Fit Host", "fit1");
+    const title = `Fit ${test.info().testId}-${Date.now()}`;
+    const dt = (days: number, time: string) => {
+      const d = new Date(Date.now() + days * 24 * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${time}`;
+    };
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-party").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-poll").click();
+    await page.getByTestId("poll-option-0").fill(dt(1, "19:00")); // tomorrow evening
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
+
+    // A second user marks tomorrow evening FREE in their availability, then
+    // joins the event (RSVP makes them an attendee).
+    const ctx = await browser.newContext();
+    try {
+      const g = await ctx.newPage();
+      await ensureUser(g, "fit2", "Fit Guest", "fit2");
+      await g.goto("/profile");
+      await g.getByTestId("avail-edit").click();
+      await g.getByTestId("avail-cell-1-evening").click();
+      await g.getByTestId("save-availability").click();
+      await expect(g.getByText("Availability saved ✓")).toBeVisible();
+      await g.goto(`/e/${id}`);
+      const rsvpDone = g.waitForResponse((r) => r.url().includes("/rsvp") && r.ok());
+      await g.getByTestId("rsvp-going").click();
+      await rsvpDone;
+    } finally {
+      await ctx.close();
+    }
+
+    // The host's ranking now shows the group fit for that slot.
+    await page.reload();
+    await expect(page.getByTestId("fit-0")).toContainText("1 free");
+  });
+
+  test("group streak shows consecutive months of events", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "streak1", "Streak One", "streak1");
+    const uniq = `${Date.now()}`;
+    await page.goto("/groups");
+    await page.getByTestId("group-name").fill(`Streak Crew ${uniq}`);
+    await page.getByTestId("group-create").click();
+    await page.getByTestId("group-row").filter({ hasText: uniq }).click();
+    await expect(page.getByTestId("group-title")).toContainText("Streak Crew");
+    const gid = page.url().split("/g/")[1];
+    const monthDate = (offsetMonths: number) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() + offsetMonths, 15); // mid-month avoids rollover
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T19:00`;
+    };
+    for (const [i, when] of [monthDate(-1), monthDate(0)].entries()) {
+      await page.goto(`/new?group=${gid}`);
+      await page.getByTestId("event-title").fill(`Streak ev${i} ${uniq}`);
+      await page.getByTestId("wiz-next").click();
+      await page.getByTestId("wiz-next").click();
+      await page.getByTestId("sched-fixed").click();
+      await page.getByTestId("fixed-time").fill(when);
+      await page.getByTestId("wiz-next").click();
+      await page.getByTestId("create-event").click();
+      await page.getByTestId("event-title").waitFor();
+    }
+    await page.goto(`/g/${gid}`);
+    await expect(page.getByTestId("group-streak")).toContainText("2-month streak");
   });
 
   test("mute event notifications toggles and persists", async ({ page }) => {

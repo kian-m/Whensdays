@@ -559,6 +559,39 @@ func (q *Queries) GetProfileByHandle(ctx context.Context, handle string) (GetPro
 	return i, err
 }
 
+const listAttendeeAvailabilityForEvent = `-- name: ListAttendeeAvailabilityForEvent :many
+SELECT ad.user_id, ad.day, ad.daypart, ad.status
+FROM availability_days ad
+WHERE ad.user_id IN (SELECT user_id FROM event_attendees WHERE event_id = $1)
+`
+
+// Every attendee's date-based availability — the input for ranking a poll's
+// candidate times against the WHOLE group, not just the viewer.
+func (q *Queries) ListAttendeeAvailabilityForEvent(ctx context.Context, eventID pgtype.UUID) ([]AvailabilityDay, error) {
+	rows, err := q.db.Query(ctx, listAttendeeAvailabilityForEvent, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AvailabilityDay{}
+	for rows.Next() {
+		var i AvailabilityDay
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Day,
+			&i.Daypart,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAttendees = `-- name: ListAttendees :many
 SELECT a.user_id, a.rsvp, p.display_name, p.avatar_url, p.handle
 FROM event_attendees a

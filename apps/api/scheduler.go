@@ -91,6 +91,25 @@ func orFree(s string) string {
 // dayparts are the coarse time-of-day buckets used by general-availability polls.
 var dayparts = []string{"early_morning", "morning", "noon", "afternoon", "evening", "night"}
 
+// hourToDaypart buckets an hour like the web's helper of the same name — keep
+// the two in sync (lib.tsx).
+func hourToDaypart(h int) string {
+	switch {
+	case h < 8:
+		return "early_morning"
+	case h < 11:
+		return "morning"
+	case h < 14:
+		return "noon"
+	case h < 17:
+		return "afternoon"
+	case h < 21:
+		return "evening"
+	default:
+		return "night"
+	}
+}
+
 // availabilityHorizonDays is how far ahead explicit date-based availability can be
 // set (the web paginates this window two weeks at a time).
 const availabilityHorizonDays = 84
@@ -893,6 +912,37 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 
 	muted, _ := s.queries.IsEventMuted(r.Context(), db.IsEventMutedParams{EventID: id, UserID: uid})
 
+	// Best-time ranking input: for specific-time polls, score every option
+	// against ALL attendees' saved availability (free/busy for that option's
+	// day+daypart in the event's timezone) — not just the viewer's calendar.
+	optionFit := map[string]map[string]int{}
+	if ev.SchedulingMode == "poll" && len(options) > 0 {
+		if rows, ferr := s.queries.ListAttendeeAvailabilityForEvent(r.Context(), id); ferr == nil && len(rows) > 0 {
+			byCell := map[string]map[string]bool{} // "day:part" -> user -> isFree
+			for _, row := range rows {
+				k := row.Day.Time.Format("2006-01-02") + ":" + row.Daypart
+				if byCell[k] == nil {
+					byCell[k] = map[string]bool{}
+				}
+				byCell[k][row.UserID] = row.Status != "busy"
+			}
+			loc := eventLocation(ev)
+			for _, o := range options {
+				local := o.StartsAt.Time.In(loc)
+				k := local.Format("2006-01-02") + ":" + hourToDaypart(local.Hour())
+				fit := map[string]int{"free": 0, "busy": 0}
+				for _, isFree := range byCell[k] {
+					if isFree {
+						fit["free"]++
+					} else {
+						fit["busy"]++
+					}
+				}
+				optionFit[uuidStr(o.ID)] = fit
+			}
+		}
+	}
+
 	// Opening the event clears its "new" invite marker (per-event, persistent).
 	_ = s.queries.MarkOneInviteSeen(r.Context(), db.MarkOneInviteSeenParams{EventID: id, UserID: uid})
 	s.analytics.Capture(uid, "event_viewed", map[string]any{
@@ -906,6 +956,7 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		"can_manage":         canManage,
 		"viewer_id":          uid,
 		"muted":              muted,
+		"option_fit":         optionFit,
 		"time_options":       options,
 		"votes":              votes,
 		"general_votes":      generalVotes,

@@ -282,7 +282,8 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		City            string `json:"city"`
 		PhotoUrl        string `json:"photo_url"`
 		Theme           string `json:"theme"`
-		StartsAt        string `json:"starts_at"` // optional: reschedule a fixed/finalized time
+		StartsAt        string `json:"starts_at"`    // optional: reschedule a fixed/finalized time
+		ApplySeries     bool   `json:"apply_series"` // optional: copy content edits to every occurrence
 	}
 	// Covers ride in as data URLs, so this endpoint gets a larger body cap.
 	if !decodeJSONLimit(w, r, &in, coverMaxBody) {
@@ -347,6 +348,29 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "update event", err)
 		return
 	}
-	s.analytics.Capture(uid, "event_edited", map[string]any{"event_id": r.PathValue("id"), "role": role})
+	// Series editing (edit one vs ALL): with apply_series, copy the CONTENT
+	// fields to every sibling occurrence. Each keeps its own starts_at and
+	// reminder state — only this event's time was (possibly) rescheduled above.
+	if in.ApplySeries && current.SeriesID.Valid {
+		if sibs, serr := s.queries.ListSeriesEvents(r.Context(), current.SeriesID); serr == nil {
+			for _, sib := range sibs {
+				if sib.ID == id {
+					continue
+				}
+				full, gerr := s.queries.GetEvent(r.Context(), sib.ID)
+				if gerr != nil {
+					continue
+				}
+				_, _ = s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
+					ID: sib.ID, Title: in.Title, Description: in.Description,
+					LocationMode: in.LocationMode, LocationAddress: in.LocationAddress,
+					Visibility: in.Visibility, Topic: in.Topic, City: in.City,
+					PhotoUrl: in.PhotoUrl, Theme: in.Theme,
+					StartsAt: full.StartsAt, ReminderSent: full.ReminderSent,
+				})
+			}
+		}
+	}
+	s.analytics.Capture(uid, "event_edited", map[string]any{"event_id": r.PathValue("id"), "role": role, "series": in.ApplySeries})
 	writeJSON(w, http.StatusOK, ev)
 }
