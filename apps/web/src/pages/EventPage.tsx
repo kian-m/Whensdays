@@ -32,51 +32,148 @@ import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/q
 import { AddressInput, Avatar, BackLink, DayGrid, GifPicker, Loading, Pill, fileToAvatar, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
-// Per-theme animated background. A fixed, deterministic count of particles (no
-// Math.random, so E2E snapshots stay stable) styled + animated entirely in CSS
-// (.theme-fx.fx-<theme> in styles.css). Rendered behind the page content and
-// hidden from assistive tech; honors prefers-reduced-motion via CSS.
-const THEME_FX: Record<string, { count: number; glyph?: string }> = {
-  party: { count: 16 },            // confetti (CSS squares)
-  forest: { count: 12, glyph: "🍂" }, // drifting leaves
-  night: { count: 22 },            // twinkling stars (CSS dots)
-  cozy: { count: 14 },             // rising embers + flame glow
-  beach: { count: 12 },            // floating sun sparkles
-  neon: { count: 11 },             // drifting glow orbs + 3 sweeping laser beams
-};
+// ---------------- theme entrance moment ----------------
+//
+// A ONE-SHOT particle moment when the event page opens (or the theme changes),
+// driven by the Web Animations API — not CSS keyframe loops. Why: iOS Low Power
+// Mode pauses/throttles CSS animations mid-frame, leaving "frozen confetti"
+// that reads as a bug. WAAPI animations are scheduled by the engine's animation
+// clock and keep advancing (worst case at a lower frame rate) — and because the
+// moment is finite, the whole layer removes itself when done, so there is never
+// a lingering element that can look stuck. prefers-reduced-motion skips it.
+//
+// Determinism: no Math.random — positions/timings derive from the particle
+// index (multiplicative hashing), and Playwright's animations:"disabled"
+// fast-forwards WAAPI to the end state (opacity 0), so E2E stays stable.
+
+const FX_COLORS = ["#ee6c4d", "#e0a13b", "#3d9db1", "#e0559b", "#7a8cff", "#3f9d6f"];
+const px = (n: number) => `${Math.round(n)}px`;
+const h1 = (i: number, m: number) => (i * 61 + 13) % m; // deterministic pseudo-scatter
+const h2 = (i: number, m: number) => (i * 37 + 29) % m;
+
+// playThemeFx appends particles to `layer`, animates them once, and resolves
+// done() when every animation finishes. Returns a cancel function.
+function playThemeFx(layer: HTMLDivElement, theme: string, done: () => void): () => void {
+  const W = window.innerWidth, H = window.innerHeight;
+  const anims: Animation[] = [];
+  const spawn = (style: Partial<CSSStyleDeclaration>, text = "") => {
+    const s = document.createElement("span");
+    s.textContent = text;
+    Object.assign(s.style, { position: "absolute", willChange: "transform, opacity", opacity: "0" }, style);
+    layer.appendChild(s);
+    return s;
+  };
+  const fall = (i: number, el: HTMLElement, dur: number, sway: number) =>
+    el.animate([
+      { transform: "translate(0, -60px) rotate(0deg)", opacity: 0 },
+      { opacity: 1, offset: 0.06 },
+      { transform: `translate(${sway}px, ${H * 0.55}px) rotate(${200 + h2(i, 160)}deg)`, offset: 0.55 },
+      { opacity: 1, offset: 0.9 },
+      { transform: `translate(${-sway / 2}px, ${H + 80}px) rotate(${420 + h1(i, 200)}deg)`, opacity: 0 },
+    ], { duration: dur, delay: h2(i, 900), easing: "linear", fill: "forwards" });
+  const rise = (i: number, el: HTMLElement, dur: number) =>
+    el.animate([
+      { transform: "translate(0, 0)", opacity: 0 },
+      { opacity: 1, offset: 0.12 },
+      { transform: `translate(${h2(i, 40) - 20}px, ${-H * 0.5}px)`, opacity: 0.9, offset: 0.6 },
+      { transform: `translate(${h1(i, 30) - 15}px, ${-H - 60}px)`, opacity: 0 },
+    ], { duration: dur, delay: h1(i, 1100), easing: "ease-out", fill: "forwards" });
+
+  if (theme === "party") {
+    for (let i = 0; i < 26; i++) {
+      const big = i % 3 === 0;
+      const el = spawn({
+        left: `${h1(i, 94) + 3}%`, top: "0",
+        width: px(big ? 11 : i % 7 === 2 ? 6 : 8), height: px(big ? 18 : i % 7 === 2 ? 6 : 13),
+        borderRadius: i % 7 === 2 ? "50%" : "2px", background: FX_COLORS[i % 6],
+      });
+      anims.push(fall(i, el, 2400 + (i % 5) * 320, i % 2 ? 34 : -28));
+    }
+  } else if (theme === "forest") {
+    for (let i = 0; i < 14; i++) {
+      const el = spawn({ left: `${h1(i, 92) + 4}%`, top: "0", fontSize: px(15 + (i % 3) * 5), lineHeight: "1" }, "🍂");
+      anims.push(fall(i, el, 3200 + (i % 4) * 450, i % 2 ? 46 : -40));
+    }
+  } else if (theme === "night") {
+    for (let i = 0; i < 20; i++) {
+      const el = spawn({
+        left: `${h1(i, 94) + 3}%`, top: `${h2(i, 70) + 4}%`, width: px(i % 3 ? 3 : 4), height: px(i % 3 ? 3 : 4),
+        borderRadius: "50%", background: "#fff", boxShadow: "0 0 6px 1px rgba(255,255,255,0.9)",
+      });
+      anims.push(el.animate(
+        [{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0.25, offset: 0.5 }, { opacity: 1, offset: 0.75 }, { opacity: 0 }],
+        { duration: 2600 + (i % 5) * 300, delay: h1(i, 800), fill: "forwards" }));
+    }
+    for (let i = 0; i < 2; i++) { // shooting stars
+      const el = spawn({
+        left: "8%", top: i ? "26%" : "9%", width: "60px", height: "2px", borderRadius: "2px",
+        background: "linear-gradient(90deg, rgba(255,255,255,0.95), transparent)",
+      });
+      anims.push(el.animate(
+        [{ transform: "translate(0,0)", opacity: 0 }, { opacity: 1, offset: 0.15 }, { transform: `translate(${W * 0.55}px, ${H * 0.22}px)`, opacity: 0 }],
+        { duration: 900, delay: 500 + i * 1300, easing: "ease-in", fill: "forwards" }));
+    }
+  } else if (theme === "cozy" || theme === "beach") {
+    const ember = theme === "cozy";
+    for (let i = 0; i < 16; i++) {
+      const size = ember ? 3 + (i % 3) * 2 : 5 + (i % 3) * 2;
+      const el = spawn({
+        left: `${h1(i, 92) + 4}%`, bottom: "-20px", width: px(size), height: px(size), borderRadius: "50%",
+        background: ember ? "radial-gradient(circle, #ffd07a, #e0662f 70%)" : "radial-gradient(circle, rgba(255,240,200,0.95), rgba(240,180,90,0.15) 70%)",
+        boxShadow: ember ? "0 0 8px 2px rgba(224,102,47,0.7)" : "0 0 8px 1px rgba(255,225,150,0.6)",
+      });
+      anims.push(rise(i, el, (ember ? 2600 : 3200) + (i % 4) * 380));
+    }
+  } else if (theme === "neon") {
+    for (let i = 0; i < 3; i++) { // laser sweeps from the page edges
+      const fromRight = i === 1;
+      const el = spawn({
+        [fromRight ? "right" : "left"]: "-8vw", top: i === 2 ? "38%" : i ? "auto" : "-2vh",
+        bottom: i === 1 ? "-2vh" : "auto", width: "160vmax", height: "2px", borderRadius: "2px",
+        background: `linear-gradient(${fromRight ? 270 : 90}deg, ${["rgba(255,45,148,0.95)", "rgba(0,229,255,0.95)", "rgba(155,92,255,0.9)"][i]}, transparent)`,
+        boxShadow: `0 0 14px 2px ${["rgba(255,45,148,0.5)", "rgba(0,229,255,0.5)", "rgba(155,92,255,0.5)"][i]}`,
+        transformOrigin: fromRight ? "100% 50%" : "0 50%",
+      } as Partial<CSSStyleDeclaration>);
+      const a1 = (fromRight ? -1 : 1) * 12, a2 = (fromRight ? -1 : 1) * 55;
+      anims.push(el.animate(
+        [{ transform: `rotate(${a1}deg)`, opacity: 0 }, { opacity: 0.9, offset: 0.15 },
+         { transform: `rotate(${a2}deg)`, offset: 0.5 }, { transform: `rotate(${a1}deg)`, opacity: 0.7, offset: 0.85 },
+         { transform: `rotate(${(a1 + a2) / 2}deg)`, opacity: 0 }],
+        { duration: 3800, delay: i * 350, easing: "ease-in-out", fill: "forwards" }));
+    }
+    for (let i = 0; i < 5; i++) { // breathing glow orbs
+      const el = spawn({
+        left: `${h1(i, 80) + 8}%`, top: `${h2(i, 60) + 15}%`, width: px(70 + (i % 3) * 16), height: px(70 + (i % 3) * 16),
+        borderRadius: "50%", filter: "blur(16px)",
+        background: `radial-gradient(circle, ${["rgba(255,45,148,0.55)", "rgba(0,229,255,0.5)", "rgba(155,92,255,0.5)"][i % 3]}, transparent 70%)`,
+      });
+      anims.push(el.animate(
+        [{ opacity: 0, transform: "scale(0.7)" }, { opacity: 1, transform: "scale(1.15)", offset: 0.4 }, { opacity: 0, transform: "scale(0.9)" }],
+        { duration: 3400, delay: h1(i, 700), easing: "ease-in-out", fill: "forwards" }));
+    }
+  }
+
+  if (anims.length === 0) { done(); return () => {}; }
+  void Promise.all(anims.map((a) => a.finished.catch(() => {}))).then(done);
+  return () => { anims.forEach((a) => a.cancel()); layer.replaceChildren(); };
+}
 
 function ThemeFx({ theme }: { theme: string }) {
-  const fx = THEME_FX[theme];
-  // Static mode when motion can't/shouldn't play. Two triggers:
-  //  1. prefers-reduced-motion (accessibility setting), known up front;
-  //  2. iOS Low Power Mode, which PAUSES CSS animations mid-frame — frozen
-  //     mid-fall confetti reads as a bug. No API exposes it, so probe: sample a
-  //     particle's animated transform twice; if it hasn't moved, animations are
-  //     stalled → switch to the designed static scatter (.fx-static).
-  const [staticFx, setStaticFx] = useState(() =>
-    typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const [gone, setGone] = useState(false);
   const layerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (staticFx) return;
-    const el = layerRef.current?.querySelector<HTMLElement>(".fx-p");
-    if (!el) return;
-    const first = getComputedStyle(el).transform;
-    const t = setTimeout(() => {
-      if (document.visibilityState !== "visible") return;
-      const again = layerRef.current?.querySelector<HTMLElement>(".fx-p");
-      if (again && getComputedStyle(again).transform === first) setStaticFx(true);
-    }, 400);
-    return () => clearTimeout(t);
+    setGone(false);
+    if (typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setGone(true); // respect the setting: no moment, and nothing left behind
+      return;
+    }
+    const layer = layerRef.current;
+    if (!layer) return;
+    return playThemeFx(layer, theme, () => setGone(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
-  if (!fx) return null;
-  return (
-    <div className={`theme-fx fx-${theme} ${staticFx ? "fx-static" : ""}`} aria-hidden="true" ref={layerRef}>
-      {Array.from({ length: fx.count }).map((_, i) => (
-        <span className="fx-p" key={i}>{fx.glyph ?? ""}</span>
-      ))}
-    </div>
-  );
+  if (gone) return null;
+  return <div className="theme-fx" aria-hidden="true" ref={layerRef} />;
 }
 
 export function EventPage() {
@@ -114,9 +211,7 @@ export function EventPage() {
       {effTheme && <ThemeFx theme={effTheme} />}
       {celebrate && (
         <>
-          <div className="theme-fx fx-party fx-burst" aria-hidden="true">
-            {Array.from({ length: 26 }).map((_, i) => <span className="fx-p" key={i} />)}
-          </div>
+          <ThemeFx theme="party" />
           <div className="fx-locked" data-testid="locked-banner">It&rsquo;s locked in 🎉</div>
         </>
       )}

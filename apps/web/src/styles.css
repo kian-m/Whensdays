@@ -387,160 +387,22 @@ textarea.input { resize: vertical; min-height: 64px; }
 .theme-cozy   { --accent: #df8038; }
 .theme-cozy::before   { background: linear-gradient(170deg, rgba(120,60,30,0.32), transparent 52%), radial-gradient(78% 55% at 50% 98%, rgba(233,161,59,0.44), transparent 76%); }
 
-/* ===== Animated per-theme background (ThemeFx overlay on the event page) =====
-   A fixed set of particles, positioned by :nth-child (deterministic — no random,
-   so E2E snapshots are stable) and animated in pure CSS. Negative animation
-   delays spread the particles across their cycle so even a frozen frame looks
-   populated. The layer sits behind content (z-index:-1, like the theme wash) and
-   ignores pointer events. */
-/* z-index above the page content (but below the fixed tabbar at 50) so the
-   particles are visible OVER the central column — on mobile the content is
-   full-width, so a behind-content layer would be completely hidden. Non-
-   interactive, so it never blocks taps. */
+/* ===== Theme entrance moment (ThemeFx overlay on the event page) =====
+   Particles are created + animated in JS via the Web Animations API (see
+   playThemeFx in EventPage.tsx) — a finite, one-shot moment that removes its
+   own layer when done. No CSS keyframe loops here on purpose: iOS Low Power
+   Mode pauses those mid-frame, which read as frozen/buggy particles. This file
+   only provides the fixed layer (above content, below the tabbar at z 50,
+   never interactive) and the static supporting pieces. */
 .theme-fx { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
-.theme-fx .fx-p { position: absolute; top: -8vh; will-change: transform, opacity; }
-/* 8 horizontal lanes, cycled across every particle */
-.theme-fx .fx-p:nth-child(8n+1) { left: 5%; }
-.theme-fx .fx-p:nth-child(8n+2) { left: 17%; }
-.theme-fx .fx-p:nth-child(8n+3) { left: 29%; }
-.theme-fx .fx-p:nth-child(8n+4) { left: 42%; }
-.theme-fx .fx-p:nth-child(8n+5) { left: 56%; }
-.theme-fx .fx-p:nth-child(8n+6) { left: 68%; }
-.theme-fx .fx-p:nth-child(8n+7) { left: 81%; }
-.theme-fx .fx-p:nth-child(8n+8) { left: 93%; }
-/* staggered negative delays so particles are distributed at t=0 */
-.theme-fx .fx-p:nth-child(5n+1) { animation-delay: -0.6s; }
-.theme-fx .fx-p:nth-child(5n+2) { animation-delay: -2.4s; }
-.theme-fx .fx-p:nth-child(5n+3) { animation-delay: -4.1s; }
-.theme-fx .fx-p:nth-child(5n+4) { animation-delay: -1.5s; }
-.theme-fx .fx-p:nth-child(5n+5) { animation-delay: -5.3s; }
 
-/* PARTY — confetti in three shapes (rects, ribbons, dots) and mixed speeds,
-   tumbling with a pendulum sway so the fall reads physical, not linear */
-.fx-party .fx-p { width: 8px; height: 13px; border-radius: 2px; animation: fx-fall 6s linear infinite; }
-.fx-party .fx-p:nth-child(6n+1) { background: #ee6c4d; }
-.fx-party .fx-p:nth-child(6n+2) { background: #e0a13b; }
-.fx-party .fx-p:nth-child(6n+3) { background: #3d9db1; }
-.fx-party .fx-p:nth-child(6n+4) { background: #e0559b; }
-.fx-party .fx-p:nth-child(6n+5) { background: #7a8cff; }
-.fx-party .fx-p:nth-child(6n+6) { background: #3f9d6f; }
-.fx-party .fx-p:nth-child(2n)   { animation-name: fx-fall-sway; animation-duration: 7.4s; }
-.fx-party .fx-p:nth-child(3n)   { width: 11px; height: 18px; }             /* big ribbons */
-.fx-party .fx-p:nth-child(7n+2) { width: 6px; height: 6px; border-radius: 50%; animation-duration: 4.8s; } /* fast dots */
-
-/* FOREST — leaves in two sizes swaying down like real leaf-fall */
-.fx-forest .fx-p { font-size: 20px; line-height: 1; animation: fx-fall-sway 11s linear infinite; }
-.fx-forest .fx-p:nth-child(2n) { font-size: 15px; animation-duration: 14s; }
-.fx-forest .fx-p:nth-child(5n) { font-size: 24px; animation-duration: 9s; }
-
-/* NIGHT — twinkling stars: fixed dots scattered across the sky, no falling */
-.fx-night .fx-p { top: auto; width: 3px; height: 3px; border-radius: 50%; background: #fff;
-  box-shadow: 0 0 6px 1px rgba(255,255,255,0.9); animation: fx-twinkle 3.4s ease-in-out infinite; }
-.fx-night .fx-p:nth-child(4n+1) { top: 10%; }
-.fx-night .fx-p:nth-child(4n+2) { top: 26%; }
-.fx-night .fx-p:nth-child(4n+3) { top: 44%; }
-.fx-night .fx-p:nth-child(4n+4) { top: 63%; }
-.fx-night .fx-p:nth-child(3n)   { width: 2px; height: 2px; animation-duration: 2.1s; }
-.fx-night .fx-p:nth-child(7n+3) { width: 4px; height: 4px; animation-duration: 4.6s; }
-/* two shooting stars streaking across on long cycles */
-.fx-night .fx-p:nth-child(9),
-.fx-night .fx-p:nth-child(18) {
-  top: 8%; width: 60px; height: 2px; border-radius: 2px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.95), transparent);
-  box-shadow: none; animation: fx-shoot 7s ease-in infinite;
-}
-.fx-night .fx-p:nth-child(18) { top: 30%; animation-delay: -3.5s; animation-duration: 9s; }
-
-/* COZY — embers in mixed sizes rising with a flame-like sway, over a hearth
-   glow that flickers like real firelight (::after) */
-.fx-cozy .fx-p { top: auto; bottom: -4vh; width: 5px; height: 5px; border-radius: 50%;
-  background: radial-gradient(circle, #ffd07a, #e0662f 70%); box-shadow: 0 0 8px 2px rgba(224,102,47,0.7);
-  animation: fx-rise 7s ease-in infinite; }
-.fx-cozy .fx-p:nth-child(2n)   { width: 3px; height: 3px; animation-duration: 5.2s; }
-.fx-cozy .fx-p:nth-child(5n+1) { width: 7px; height: 7px; animation-duration: 9s; }
-.fx-cozy .fx-p:nth-child(3n)   { animation-name: fx-rise-sway; }
+/* COZY keeps a static hearth glow at the foot of the page (no flicker loop —
+   a paused flicker is just a glow, but why leave a loop around to pause). */
 .event-theme.theme-cozy::after {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(90% 55% at 50% 112%, rgba(233,120,40,0.55), transparent 70%);
-  animation: fx-flicker 4.5s ease-in-out infinite;
 }
 
-/* BEACH — warm sun-sparkles bobbing up like light on water, mixed speeds */
-.fx-beach .fx-p { top: auto; bottom: -4vh; width: 7px; height: 7px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,240,200,0.95), rgba(240,180,90,0.15) 70%);
-  box-shadow: 0 0 8px 1px rgba(255,225,150,0.6); animation: fx-rise-sway 11s linear infinite; }
-.fx-beach .fx-p:nth-child(2n) { width: 5px; height: 5px; animation-duration: 14s; }
-.fx-beach .fx-p:nth-child(5n) { width: 9px; height: 9px; animation-duration: 8s; }
-
-/* NEON — glow orbs in three hues drifting and breathing, cut by club lasers */
-.fx-neon .fx-p { top: 20%; width: 70px; height: 70px; border-radius: 50%; filter: blur(16px);
-  background: radial-gradient(circle, rgba(255,45,148,0.55), transparent 70%);
-  animation: fx-drift 13s ease-in-out infinite, fx-pulse 5s ease-in-out infinite; }
-.fx-neon .fx-p:nth-child(2n) { background: radial-gradient(circle, rgba(0,229,255,0.5), transparent 70%); top: 60%; animation-duration: 16s, 6.4s; }
-.fx-neon .fx-p:nth-child(3n) { background: radial-gradient(circle, rgba(155,92,255,0.5), transparent 70%); top: 40%; width: 96px; height: 96px; }
-/* three laser beams — long thin glowing lines pivoting from the page edges,
-   sweeping back and forth (alternate) like club lights. Declared after the orb
-   rules so these fully override them for the chosen indexes. */
-.fx-neon .fx-p:nth-child(1), .fx-neon .fx-p:nth-child(7), .fx-neon .fx-p:nth-child(11) {
-  top: -2vh; left: -8vw; width: 160vmax; height: 2px; border-radius: 2px; filter: none;
-  background: linear-gradient(90deg, rgba(255,45,148,0.95), rgba(255,45,148,0.45) 60%, transparent);
-  box-shadow: 0 0 14px 2px rgba(255,45,148,0.5);
-  transform-origin: 0 50%;
-  animation: fx-laser 7s ease-in-out infinite alternate;
-}
-.fx-neon .fx-p:nth-child(7) {
-  top: auto; bottom: -2vh; left: auto; right: -8vw; transform-origin: 100% 50%;
-  background: linear-gradient(270deg, rgba(0,229,255,0.95), rgba(0,229,255,0.45) 60%, transparent);
-  box-shadow: 0 0 14px 2px rgba(0,229,255,0.5);
-  animation: fx-laser-rev 9s ease-in-out infinite alternate;
-}
-.fx-neon .fx-p:nth-child(11) {
-  top: 38vh; background: linear-gradient(90deg, rgba(155,92,255,0.9), rgba(155,92,255,0.4) 60%, transparent);
-  box-shadow: 0 0 14px 2px rgba(155,92,255,0.5);
-  animation-duration: 11s;
-}
-
-@keyframes fx-fall {
-  0%   { transform: translateY(-10vh) translateX(0) rotate(0deg); opacity: 0; }
-  8%   { opacity: 1; }
-  50%  { transform: translateY(52vh) translateX(26px) rotate(220deg); }
-  92%  { opacity: 1; }
-  100% { transform: translateY(116vh) translateX(-14px) rotate(520deg); opacity: 0; }
-}
-/* fall with a pendulum sway — reads like paper/leaves, not raindrops */
-@keyframes fx-fall-sway {
-  0%   { transform: translateY(-10vh) translateX(0) rotate(0deg); opacity: 0; }
-  8%   { opacity: 1; }
-  25%  { transform: translateY(24vh) translateX(-34px) rotate(140deg); }
-  50%  { transform: translateY(52vh) translateX(30px) rotate(300deg); }
-  75%  { transform: translateY(84vh) translateX(-26px) rotate(460deg); }
-  92%  { opacity: 1; }
-  100% { transform: translateY(116vh) translateX(18px) rotate(600deg); opacity: 0; }
-}
-@keyframes fx-twinkle {
-  0%, 100% { opacity: 0.2; transform: scale(0.6); }
-  50%      { opacity: 1; transform: scale(1.3); }
-}
-/* a shooting star: long idle, then a fast diagonal streak */
-@keyframes fx-shoot {
-  0%, 62%  { transform: translate(0, 0); opacity: 0; }
-  64%      { opacity: 1; }
-  74%      { transform: translate(46vw, 24vh); opacity: 0; }
-  100%     { transform: translate(46vw, 24vh); opacity: 0; }
-}
-/* rise with a flame-like side-to-side wobble */
-@keyframes fx-rise-sway {
-  0%   { transform: translateY(0) translateX(0); opacity: 0; }
-  15%  { opacity: 1; }
-  35%  { transform: translateY(-38vh) translateX(-16px); }
-  65%  { transform: translateY(-76vh) translateX(14px); }
-  85%  { opacity: 0.85; }
-  100% { transform: translateY(-120vh) translateX(-8px); opacity: 0; }
-}
-@keyframes fx-pulse {
-  0%, 100% { opacity: 0.75; scale: 1; }
-  50%      { opacity: 1; scale: 1.18; }
-}
 /* who's-in social-pressure bar (invite page): committed vs invited */
 .whosin-bar { height: 8px; border-radius: 999px; background: var(--glass-2); border: 1px solid var(--glass-line); overflow: hidden; }
 .whosin-bar span { display: block; height: 100%; border-radius: 999px; min-width: 4px;
@@ -548,68 +410,21 @@ textarea.input { resize: vertical; min-height: 64px; }
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
   transition: width 0.5s cubic-bezier(0.2, 0.9, 0.3, 1); }
 
-/* the lock moment: a one-shot confetti burst + banner when a time is finalized */
-.theme-fx.fx-burst .fx-p { animation-iteration-count: 1; animation-fill-mode: forwards; animation-duration: 2.9s !important; animation-delay: 0s !important; }
+/* the lock-moment banner. Fully visible with NO entrance animation on purpose
+   (a paused CSS animation with fill:both would leave it invisible); the
+   celebration timeout unmounts it. */
 .fx-locked {
-  position: fixed; top: 28%; left: 50%; z-index: 4; pointer-events: none;
+  position: fixed; top: 28%; left: 50%; transform: translateX(-50%); z-index: 4; pointer-events: none;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
   color: #fff; font-weight: 800; font-size: 1.15rem; letter-spacing: -0.01em;
   padding: 0.85rem 1.7rem; border-radius: var(--radius-sm);
   box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 55%, transparent);
-  animation: fx-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both, fx-fadeout 0.6s ease 2.6s both;
 }
-@keyframes fx-pop { from { transform: translateX(-50%) scale(0.4); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
-@keyframes fx-fadeout { to { opacity: 0; } }
 
-/* club lasers: pivot sweep with a brightness swell mid-arc */
-@keyframes fx-laser {
-  0%   { transform: rotate(14deg); opacity: 0.25; }
-  45%  { opacity: 0.85; }
-  100% { transform: rotate(58deg); opacity: 0.35; }
-}
-@keyframes fx-laser-rev {
-  0%   { transform: rotate(-12deg); opacity: 0.3; }
-  45%  { opacity: 0.85; }
-  100% { transform: rotate(-56deg); opacity: 0.3; }
-}
-@keyframes fx-rise {
-  0%   { transform: translateY(0) translateX(0); opacity: 0; }
-  15%  { opacity: 1; }
-  85%  { opacity: 0.85; }
-  100% { transform: translateY(-120vh) translateX(20px); opacity: 0; }
-}
-@keyframes fx-drift {
-  0%, 100% { transform: translate(0, 0); }
-  33%      { transform: translate(7vw, 9vh); }
-  66%      { transform: translate(-6vw, 4vh); }
-}
-@keyframes fx-flicker {
-  0%, 100% { opacity: 0.7; }
-  25% { opacity: 0.98; }
-  50% { opacity: 0.55; }
-  75% { opacity: 0.9; }
-}
-/* Static particle mode (.fx-static, set by ThemeFx in JS) — used when motion
-   can't or shouldn't play: prefers-reduced-motion, AND iOS Low Power Mode,
-   which PAUSES CSS animations mid-frame (frozen mid-fall confetti reads as a
-   bug). Instead of freezing or hiding, particles become a DESIGNED scatter:
-   parked in height bands with varied rotation + opacity, like decoration.
-   !important overrides the per-theme top/bottom variants. */
-.theme-fx.fx-static .fx-p { animation: none !important; opacity: 0.55; top: 10% !important; bottom: auto !important; }
-.theme-fx.fx-static .fx-p:nth-child(5n+2) { top: 31% !important; }
-.theme-fx.fx-static .fx-p:nth-child(5n+3) { top: 52% !important; }
-.theme-fx.fx-static .fx-p:nth-child(5n+4) { top: 71% !important; }
-.theme-fx.fx-static .fx-p:nth-child(5n+5) { top: 87% !important; }
-.theme-fx.fx-static .fx-p:nth-child(3n)   { opacity: 0.38; }
-.theme-fx.fx-static .fx-p:nth-child(4n+1) { opacity: 0.7; }
-/* confetti + leaves get sprinkle rotations so they read as intentional */
-.fx-static.fx-party .fx-p:nth-child(2n)   { transform: rotate(38deg); }
-.fx-static.fx-party .fx-p:nth-child(3n)   { transform: rotate(-24deg); }
-.fx-static.fx-party .fx-p:nth-child(7n+2) { transform: rotate(80deg); }
-.fx-static.fx-forest .fx-p:nth-child(2n)   { transform: rotate(28deg); }
-.fx-static.fx-forest .fx-p:nth-child(3n+1) { transform: rotate(-38deg); }
-@media (prefers-reduced-motion: reduce) {
-  .event-theme.theme-cozy::after { animation: none; }
+/* used by .pill.polling's live dot */
+@keyframes fx-twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.6); }
+  50%      { opacity: 1; transform: scale(1.3); }
 }
 
 /* Themed event TILES (Home/Discover/Groups): the same palette as the event-page
