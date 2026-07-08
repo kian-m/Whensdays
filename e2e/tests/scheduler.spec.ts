@@ -347,6 +347,35 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("group-streak")).toContainText("2-month streak");
   });
 
+  test("past events leave All and live under the Past filter", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "past1", "Past One", "past1");
+    const uniq = `${test.info().testId}-${Date.now()}`;
+    const dt = (days: number) => {
+      const d = new Date(Date.now() + days * 24 * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T19:00`;
+    };
+    const mk = async (title: string, when: string) => {
+      await page.goto("/quick");
+      await page.getByTestId("quick-title").fill(title);
+      await page.getByTestId("quick-when").fill(when);
+      await page.getByTestId("quick-create").click();
+      await page.getByTestId("event-title").waitFor();
+    };
+    await mk(`Old ${uniq}`, dt(-3));   // three days ago -> past
+    await mk(`Soon ${uniq}`, dt(3));   // in three days -> active
+
+    await page.goto("/");
+    // All shows the upcoming one but NOT the past one.
+    await expect(page.getByTestId("event-row").filter({ hasText: `Soon ${uniq}` })).toBeVisible();
+    await expect(page.getByTestId("event-row").filter({ hasText: `Old ${uniq}` })).toHaveCount(0);
+    // The Past filter shows it.
+    await page.getByTestId("filter-past").click();
+    await expect(page.getByTestId("event-row").filter({ hasText: `Old ${uniq}` })).toBeVisible();
+    await expect(page.getByTestId("event-row").filter({ hasText: `Soon ${uniq}` })).toHaveCount(0);
+  });
+
   test("mute event notifications toggles and persists", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
     await ensureUser(page, "mute1", "Mute One", "mute1");

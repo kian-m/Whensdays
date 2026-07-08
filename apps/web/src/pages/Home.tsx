@@ -9,7 +9,7 @@ import { Avatar, EventThumb, Loading, Pill, useAsync } from "../ui";
 type Face = { name: string; avatar_url: string; is_friend: boolean };
 type Pile = { faces: Face[]; going: number };
 type EventsResp = { hosting: Event[]; attending: Event[]; unseen: string[]; faces?: Record<string, Pile> };
-type Filter = "all" | "upcoming" | "hosting" | "attending";
+type Filter = "all" | "upcoming" | "hosting" | "attending" | "past";
 
 const DAY = 86_400_000;
 
@@ -42,21 +42,33 @@ export function Home() {
   const attending = data?.attending ?? [];
   const unseen = new Set(data?.unseen ?? []);
   const now = Date.now();
+  // An event is PAST from the day after it happens: its date is before today's
+  // midnight. Past events leave every active view and live only under "Past".
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const isPast = (e: Event) => !!e.starts_at && new Date(e.starts_at).getTime() < startOfToday.getTime();
 
-  // De-duped union for "all" / "upcoming".
+  // De-duped union for "all" / "upcoming" / "past".
   const byId = new Map<string, Event>();
   [...hosting, ...attending].forEach((e) => byId.set(e.id, e));
-  const all = [...byId.values()];
+  const union = [...byId.values()];
+  const past = union.filter(isPast);
+  const all = union.filter((e) => !isPast(e));
   const upcoming = all.filter((e) => e.status === "scheduled" && e.starts_at && new Date(e.starts_at).getTime() >= now);
 
   const counts: Record<Filter, number> = {
-    all: all.length, upcoming: upcoming.length, hosting: hosting.length, attending: attending.length,
+    all: all.length, upcoming: upcoming.length,
+    hosting: hosting.filter((e) => !isPast(e)).length,
+    attending: attending.filter((e) => !isPast(e)).length,
+    past: past.length,
   };
   const lists: Record<Filter, Event[]> = {
     all: [...all].sort(byWhen),
     upcoming: [...upcoming].sort(byWhen),
-    hosting: [...hosting].sort(byWhen),
-    attending: [...attending].sort(byWhen),
+    hosting: hosting.filter((e) => !isPast(e)).sort(byWhen),
+    attending: attending.filter((e) => !isPast(e)).sort(byWhen),
+    // Past reads newest-first — the most recent memory on top.
+    past: [...past].sort((a, b) => new Date(b.starts_at!).getTime() - new Date(a.starts_at!).getTime()),
   };
   const shown = lists[filter];
 
@@ -65,6 +77,7 @@ export function Home() {
     { key: "upcoming", label: "Upcoming" },
     { key: "hosting", label: "Hosting" },
     { key: "attending", label: "Attending" },
+    { key: "past", label: "Past" },
   ];
 
   return (
@@ -87,7 +100,7 @@ export function Home() {
         ))}
       </div>
 
-      {all.length === 0 ? (
+      {union.length === 0 ? (
         <div className="card empty stack" data-testid="events-empty">
           <div style={{ fontSize: "2.4rem" }}>🗓️</div>
           <h3>No plans yet</h3>
@@ -102,6 +115,8 @@ export function Home() {
         <p className="muted small" data-testid="filter-empty">
           {filter === "upcoming" ? "Nothing scheduled yet — check your polls for times still being decided."
             : filter === "hosting" ? "You're not hosting anything right now."
+            : filter === "past" ? "No past events yet — memories land here the day after."
+            : filter === "all" ? "Nothing coming up — everything's in Past."
             : "Nothing here — you haven't been added to any events."}
         </p>
       ) : (
