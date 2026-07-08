@@ -367,7 +367,11 @@ export function hourToDaypart(h: number): string {
 // Map imported events to a busy Set<"YYYY-MM-DD:daypart"> for DayGrid overlays,
 // plus raw [start,end) intervals for conflict badges. Untimed/all-day events
 // block the whole day; timed events default to 2h when no end is given.
-export function importedBusy(events: ImportedEvent[]): { cells: Set<string>; intervals: { start: Date; end: Date; title: string }[] } {
+// Anything with a start (and optionally an end / all-day flag) can block cells:
+// imported calendar events AND RSVP'd commitments share this shape.
+type BusySource = { title: string; starts_at: string; ends_at?: string; all_day?: boolean };
+
+export function importedBusy(events: BusySource[]): { cells: Set<string>; intervals: { start: Date; end: Date; title: string }[] } {
   const cells = new Set<string>();
   const intervals: { start: Date; end: Date; title: string }[] = [];
   for (const e of events) {
@@ -384,6 +388,13 @@ export function importedBusy(events: ImportedEvent[]): { cells: Set<string>; int
     }
   }
   return { cells, intervals };
+}
+
+// commitmentBusy maps RSVP'd-going events (2h assumed, like the ICS default)
+// onto availability-grid cells — an RSVP automatically shows as booked without
+// ever writing to availability_days (derived, so it can't go stale).
+export function commitmentBusy(commitments: Commitment[]): Set<string> {
+  return importedBusy(commitments.map((c) => ({ title: c.title, starts_at: c.starts_at }))).cells;
 }
 
 // The imported event (if any) that overlaps [when, when+2h).

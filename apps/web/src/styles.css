@@ -578,8 +578,17 @@ textarea.input { resize: vertical; min-height: 64px; }
   50% { opacity: 0.55; }
   75% { opacity: 0.9; }
 }
+/* Reduced motion (common on iPhones — Settings → Accessibility → Motion):
+   respect the setting by stopping the MOTION, not the vibe. Particles freeze
+   into a static scatter (each delay-group parked at a different height) instead
+   of disappearing entirely — hiding the layer read as "animations are broken
+   on mobile". !important overrides the per-theme top/bottom variants. */
 @media (prefers-reduced-motion: reduce) {
-  .theme-fx { display: none; }
+  .theme-fx .fx-p { animation: none; opacity: 0.65; top: 12% !important; bottom: auto !important; }
+  .theme-fx .fx-p:nth-child(5n+2) { top: 33% !important; }
+  .theme-fx .fx-p:nth-child(5n+3) { top: 54% !important; }
+  .theme-fx .fx-p:nth-child(5n+4) { top: 72% !important; }
+  .theme-fx .fx-p:nth-child(5n+5) { top: 88% !important; }
   .event-theme.theme-cozy::after { animation: none; }
 }
 

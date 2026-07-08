@@ -4,6 +4,7 @@ import {
   Commitment,
   Friend,
   FriendRequest,
+  commitmentBusy,
   fmtDateTime,
   getJSON,
   nextDays,
@@ -144,6 +145,9 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
 
   const free = new Set((avail?.days ?? []).filter((d) => d.status !== "busy").map((d) => `${d.day}:${d.daypart}`));
   const busy = new Set((avail?.days ?? []).filter((d) => d.status === "busy").map((d) => `${d.day}:${d.daypart}`));
+  // Their RSVP'd events overlay the grid as booked — derived from commitments,
+  // the same hatched treatment as imported-calendar busy.
+  const locked = commitmentBusy(avail?.commitments ?? []);
 
   return (
     <div className="card stack">
@@ -162,7 +166,7 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
       </div>
       {open && avail && (
         <div className="stack">
-          <DayGrid dates={nextDays(14)} free={free} busy={busy} readOnly testid="friend-availability" />
+          <DayGrid dates={nextDays(14)} free={free} busy={busy} locked={locked} readOnly testid="friend-availability" />
           <AvailLegend />
           {avail.commitments.length > 0 && (
             <div className="small">

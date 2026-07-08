@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   AvailabilityDay,
   AvailabilitySlot,
+  Commitment,
   DAYPARTS,
   ImportedEvent,
   Profile,
@@ -13,6 +14,7 @@ import {
   getJSON,
   getTheme,
   importedBusy,
+  commitmentBusy,
   sendJSON,
   useApi,
   useProfile,
@@ -77,7 +79,8 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   const asBusy = (rows: { key: string; status?: string }[]) => new Set(rows.filter((r) => r.status === "busy").map((r) => r.key));
 
   // Explicit date-based availability (the full set across all pages).
-  const { data: days, loading } = useAsync<AvailabilityDay[]>((a) => getJSON(a, "/api/availability/days"));
+  const { data: availData, loading } = useAsync<{ days: AvailabilityDay[]; commitments: Commitment[] }>((a) => getJSON(a, "/api/availability/days"));
+  const days = availData?.days;
   useEffect(() => {
     if (!days) return;
     const rows = days.map((d) => ({ key: `${d.day}:${d.daypart}`, status: d.status }));
@@ -96,7 +99,12 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
 
   // Imported-calendar busy times lock cells in the specific-dates grid (read-only).
   const { data: cal } = useAsync<{ events: ImportedEvent[] }>((a) => getJSON(a, "/api/calendar/events"));
-  const busyCells = importedBusy(cal?.events ?? []).cells;
+  // Locked (hatched, uneditable) cells = imported-calendar busy + your own
+  // RSVP'd commitments — an RSVP automatically blocks your availability.
+  const busyCells = new Set([
+    ...importedBusy(cal?.events ?? []).cells,
+    ...commitmentBusy(availData?.commitments ?? []),
+  ]);
 
   function mutate(setter: typeof setFree, fn: (s: Set<string>) => void) {
     setter((prev) => {
@@ -218,7 +226,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
     setEditingAvail(false);
   }
 
-  if (loading && !days) return <Loading />;
+  if (loading && !availData) return <Loading />;
 
   return (
     <div className="stack">

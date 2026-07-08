@@ -382,7 +382,15 @@ func (s *server) handleGetAvailabilityDays(w http.ResponseWriter, r *http.Reques
 		s.internal(w, "list availability days", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, formatDays(rows))
+	// Commitments (events you're going to) ride along so RSVPs automatically
+	// overlay the grid as booked — derived, never written into availability, so
+	// nothing goes stale when plans change. Same shape as the friend endpoint.
+	commitments, err := s.queries.ListUpcomingCommitments(r.Context(), uid)
+	if err != nil {
+		s.internal(w, "own commitments", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"days": formatDays(rows), "commitments": commitments})
 }
 
 func (s *server) handlePutAvailabilityDays(w http.ResponseWriter, r *http.Request) {
