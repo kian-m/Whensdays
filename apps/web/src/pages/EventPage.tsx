@@ -1300,8 +1300,27 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
     picked.has(key)
       ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative", zIndex: 2 }
       : {};
-  // next concrete date for a weekday (general scope cells aren't dated)
-  const nextDateOfWeekday = (wd: number, hour: number) => {
+  // General-scope cells aren't dated — the host first picks a TARGET MONTH
+  // (the group's month votes, best-first; "Soonest" = next occurrence), then a
+  // weekday cell resolves to that month's first future matching date.
+  const [targetMonth, setTargetMonth] = useState<string>("");
+  const monthChoices: { value: string; label: string }[] = (() => {
+    const voted = [...monthCounts.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+    const opts = voted.length > 0 ? voted : nextMonths(6).map((m) => m.value);
+    return opts.map((v) => {
+      const [y, mo] = v.split("-").map(Number);
+      return { value: v, label: new Date(y, mo - 1).toLocaleDateString(undefined, { month: "short", year: "numeric" }) };
+    });
+  })();
+  const nextDateOfWeekday = (wd: number, hour: number): string | null => {
+    if (targetMonth) {
+      const [y, mo] = targetMonth.split("-").map(Number);
+      const d = new Date(y, mo - 1, 1, hour, 0, 0, 0);
+      while (d.getDay() !== wd) d.setDate(d.getDate() + 1);
+      while (d.getTime() < Date.now() && d.getMonth() === mo - 1) d.setDate(d.getDate() + 7);
+      if (d.getMonth() !== mo - 1) return null; // that weekday has no future date left in the month
+      return toDatetimeLocal(d.toISOString());
+    }
     const d = new Date();
     do { d.setDate(d.getDate() + 1); } while (d.getDay() !== wd);
     d.setHours(hour, 0, 0, 0);
@@ -1406,6 +1425,17 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
 
           <div>
             <div className="section-h" style={{ margin: "0 0 4px" }}>Best times</div>
+            {canPick && (
+              <div className="row wrap" style={{ gap: 6, marginBottom: 6 }} data-testid="target-month-row">
+                <span className="muted small">Schedule into:</span>
+                <button type="button" className={`chip sm ${targetMonth === "" ? "on" : ""}`}
+                  data-testid="target-month-soon" onClick={() => setTargetMonth("")}>Soonest</button>
+                {monthChoices.map((m) => (
+                  <button key={m.value} type="button" className={`chip sm ${targetMonth === m.value ? "on" : ""}`}
+                    data-testid={`target-month-${m.value}`} onClick={() => setTargetMonth(m.value)}>{m.label}</button>
+                ))}
+              </div>
+            )}
             <div className="grid" style={{ gridTemplateColumns: "auto repeat(7, 1fr)" }}>
               <div />
               {WEEKDAYS.map((d, wd) => <div key={wd} className="hd">{d}</div>)}
@@ -1414,11 +1444,15 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                   <div className="day" style={{ textAlign: "left" }}>{dp.label}</div>
                   {WEEKDAYS.map((_, wd) => {
                     const key = slotKey(wd, dp.value);
+                    const pickKey = `${targetMonth || "soon"}|${key}`;
                     const n = slotCounts.get(key) ?? 0;
                     return (
                       <button key={wd} type="button" className="cell" data-testid={`grg-pick-${wd}-${dp.value}`}
-                        onClick={() => togglePick(key, nextDateOfWeekday(wd, DAYPART_HOUR[dp.value]))}
-                        style={{ ...heatStyle(n, slotTop), ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
+                        onClick={() => {
+                          const dt = nextDateOfWeekday(wd, DAYPART_HOUR[dp.value]);
+                          if (dt) togglePick(pickKey, dt);
+                        }}
+                        style={{ ...heatStyle(n, slotTop), ...pickedStyle(key), ...cellPickStyle(pickKey), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
                         {n > 0 ? n : ""}
                       </button>
                     );

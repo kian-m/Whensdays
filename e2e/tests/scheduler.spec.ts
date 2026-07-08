@@ -1280,6 +1280,18 @@ test.describe("scheduler", () => {
     await page.getByTestId("rsvp-going").click();
     await page.getByTestId("preview-toggle").click();
 
+    // Host can target a specific MONTH: pick next month, tap a weekday cell —
+    // the resolved date lands in that month (shown as a removable chip).
+    const nm = new Date(); nm.setMonth(nm.getMonth() + 1, 1);
+    const nmValue = `${nm.getFullYear()}-${String(nm.getMonth() + 1).padStart(2, "0")}`;
+    const nmShort = nm.toLocaleDateString("en-US", { month: "short" });
+    await page.getByTestId(`target-month-${nmValue}`).click();
+    await page.getByTestId("grg-pick-1-evening").click();
+    await expect(page.getByTestId("picked-cells")).toContainText(nmShort);
+    // unpick — back to manual-only for the rest of this test
+    await page.getByTestId(`picked-${nmValue}|1:evening`).click();
+    await expect(page.getByTestId("picked-cells")).toHaveCount(0);
+
     // Host picks TWO winning dates from the group's availability.
     await page.getByTestId("general-finalize-time").fill(dt(3));
     await page.getByTestId("general-add-date").click();
