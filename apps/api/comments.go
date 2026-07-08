@@ -273,17 +273,21 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Title           string `json:"title"`
-		Description     string `json:"description"`
-		LocationMode    string `json:"location_mode"`
-		LocationAddress string `json:"location_address"`
-		Visibility      string `json:"visibility"` // optional: keep current when empty
-		Topic           string `json:"topic"`
-		City            string `json:"city"`
-		PhotoUrl        string `json:"photo_url"`
-		Theme           string `json:"theme"`
-		StartsAt        string `json:"starts_at"`    // optional: reschedule a fixed/finalized time
-		ApplySeries     bool   `json:"apply_series"` // optional: copy content edits to every occurrence
+		Title           string     `json:"title"`
+		Description     string     `json:"description"`
+		LocationMode    string     `json:"location_mode"`
+		LocationAddress string     `json:"location_address"`
+		Visibility      string     `json:"visibility"` // optional: keep current when empty
+		Topic           string     `json:"topic"`
+		City            string     `json:"city"`
+		PhotoUrl        string     `json:"photo_url"`
+		Theme           string     `json:"theme"`
+		StartsAt        string     `json:"starts_at"`    // optional: reschedule a fixed/finalized time
+		ApplySeries     bool       `json:"apply_series"` // optional: copy content edits to every occurrence
+		SeriesTimes     []struct { // optional: retime sibling occurrences (id must share this series)
+			ID       string `json:"id"`
+			StartsAt string `json:"starts_at"`
+		} `json:"series_times"`
 	}
 	// Covers ride in as data URLs, so this endpoint gets a larger body cap.
 	if !decodeJSONLimit(w, r, &in, coverMaxBody) {
@@ -374,6 +378,34 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
+	}
+	// Retime sibling occurrences (the edit form shows one time input per date).
+	// Each id must belong to THIS event's series; content is preserved (only the
+	// time moves), and a genuine change re-arms that occurrence's reminder.
+	for _, st := range in.SeriesTimes {
+		sibID, ok := parseUUID(st.ID)
+		if !ok {
+			continue
+		}
+		sib, gerr := s.queries.GetEvent(r.Context(), sibID)
+		if gerr != nil || !current.SeriesID.Valid || sib.SeriesID != current.SeriesID || sibID == id {
+			continue
+		}
+		ts, tok := parseTS(st.StartsAt)
+		if !tok || !sib.StartsAt.Valid || ts.Time.Equal(sib.StartsAt.Time) {
+			continue
+		}
+		if timeInPast(ts) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "events can't start in the past"})
+			return
+		}
+		_, _ = s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
+			ID: sibID, Title: sib.Title, Description: sib.Description,
+			LocationMode: sib.LocationMode, LocationAddress: sib.LocationAddress,
+			Visibility: sib.Visibility, Topic: sib.Topic, City: sib.City,
+			PhotoUrl: sib.PhotoUrl, Theme: sib.Theme,
+			StartsAt: ts, ReminderSent: false,
+		})
 	}
 	s.analytics.Capture(uid, "event_edited", map[string]any{"event_id": r.PathValue("id"), "role": role, "series": in.ApplySeries})
 	writeJSON(w, http.StatusOK, ev)

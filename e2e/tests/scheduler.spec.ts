@@ -247,9 +247,19 @@ test.describe("scheduler", () => {
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
-    // Both dates form one series ("1 of 2", picked-dates recurrence).
+    // Both dates form one series ("1 of 2", picked-dates recurrence) — and the
+    // hero card lists EVERY date, not just this occurrence's.
     await expect(page.getByTestId("series")).toContainText("1 of 2");
     await expect(page.getByTestId("series")).toContainText("on picked dates");
+    await expect(page.getByTestId("hero-dates").locator("div")).toHaveCount(2);
+
+    // Every date is editable from the edit form: retime the sibling occurrence.
+    const sibWhen = dt(7);
+    const sibLabel = new Date(sibWhen).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-time-sib-0").fill(sibWhen);
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("hero-dates")).toContainText(sibLabel);
     // Series-wide editing: retitle with "apply to all dates" → the sibling
     // occurrence picks up the new title (its own date untouched).
     const newTitle = `${title} v2`;

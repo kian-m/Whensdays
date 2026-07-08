@@ -781,6 +781,11 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   // Editable start time — only meaningful once the event has a concrete time
   // (fixed or finalized); a poll still decides its time by voting.
   const [startsAt, setStartsAt] = useState(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
+  // Sibling occurrences (multi-date series): every date is editable from here,
+  // one input per occurrence. Keyed by sibling event id.
+  const sibs = (data.series ?? []).filter((x) => x.id !== e.id && x.starts_at);
+  const [sibTimes, setSibTimes] = useState<Record<string, string>>({});
+  const sibValue = (id: string, iso: string) => sibTimes[id] ?? toDatetimeLocal(iso);
   // Series editing: apply content edits (title/details/cover/theme…) to every
   // occurrence — each keeps its own date.
   const [applySeries, setApplySeries] = useState(false);
@@ -794,6 +799,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
     setTopic(e.topic); setCity(e.city || guessCity());
     setPhoto(e.photo_url); setTheme(e.theme); setMsg(null);
     setStartsAt(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
+    setSibTimes({});
     setEditing(true);
   }
 
@@ -816,6 +822,9 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       photo_url: photo, theme,
       starts_at: startsAt ? new Date(startsAt).toISOString() : "",
       apply_series: applySeries,
+      series_times: sibs
+        .filter((x) => sibTimes[x.id] && sibTimes[x.id] !== toDatetimeLocal(x.starts_at!))
+        .map((x) => ({ id: x.id, starts_at: new Date(sibTimes[x.id]).toISOString() })),
     });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
@@ -846,10 +855,22 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           </span>
         </div>
         {e.description && <p>{e.description}</p>}
-        <div className="muted small">
-          🗓️ {e.status === "polling" ? "Time being decided" : fmtDate(e.starts_at, e.timezone)}
-          {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
-        </div>
+        {(data.series?.length ?? 0) > 1 ? (
+          <div className="stack" style={{ gap: 2 }} data-testid="hero-dates">
+            {data.series!.map((occ) => (
+              <div key={occ.id} className={occ.id === e.id ? "small" : "muted small"}>
+                🗓️ {fmtDate(occ.starts_at, e.timezone)}
+                {occ.starts_at ? ` · ${fmtDateTime(occ.starts_at, e.timezone).split(", ").pop()}` : ""}
+                {occ.id === e.id && <span className="muted"> ← this one</span>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="muted small">
+            🗓️ {e.status === "polling" ? "Time being decided" : fmtDate(e.starts_at, e.timezone)}
+            {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
+          </div>
+        )}
         <div className="muted small">
           {e.location_mode === "find_venue" ? "📍 Venue to be decided"
             : e.location_address ? (
@@ -884,11 +905,18 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
       <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
       {e.status === "scheduled" && (
-        <label className="field">When
+        <label className="field">{sibs.length > 0 ? "This date" : "When"}
           <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="edit-time"
             value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
         </label>
       )}
+      {sibs.map((occ, i) => (
+        <label className="field" key={occ.id}>Date {i + 2} of the series
+          <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())}
+            data-testid={`edit-time-sib-${i}`} value={sibValue(occ.id, occ.starts_at!)}
+            onChange={(ev) => setSibTimes((m) => ({ ...m, [occ.id]: ev.target.value }))} />
+        </label>
+      ))}
       <div className="row" style={{ gap: 6 }}>
         <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
           data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>
