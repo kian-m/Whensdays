@@ -42,30 +42,8 @@ func (s *server) handleInviteFriend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.analytics.Capture(uid, "event_invite_sent", map[string]any{"event_id": r.PathValue("id")})
-	// Best-effort email to the invitee.
-	if s.notify.Enabled() {
-		if p, err := s.queries.GetProfile(r.Context(), in.FriendID); err == nil && p.Email != "" {
-			if inviter, err := s.queries.GetProfile(r.Context(), uid); err == nil {
-				// One-tap RSVP straight from the email (signed links) — the guest
-				// can answer without ever loading the app.
-				body := renderEmail(emailContent{
-					preheader: inviter.DisplayName + " invited you to " + ev.Title,
-					heading:   "You're invited to " + ev.Title,
-					lines:     []string{inviter.DisplayName + " invited you. One tap and you're in."},
-					meta:      eventMeta(ev),
-					ctaLabel:  "✅ I'm going",
-					ctaURL:    s.rsvpLink(in.FriendID, uuidStr(ev.ID), "going"),
-					cta2Label: "Can't make it",
-					cta2URL:   s.rsvpLink(in.FriendID, uuidStr(ev.ID), "declined"),
-					moreLabel: "See the details first",
-					moreURL:   campaignURL(s.eventURL(ev.ID), "invite"),
-					logoURL:   s.logoURL(),
-					unsubURL:  s.muteLink(in.FriendID, uuidStr(ev.ID)),
-				})
-				s.notify.Send([]string{p.Email}, "You're invited: "+ev.Title, body)
-			}
-		}
-	}
+	// Best-effort email to the invitee (one-tap RSVP buttons; see notifyInvite).
+	s.notifyInvite(r.Context(), ev, uid, in.FriendID)
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "ok"})
 }
 

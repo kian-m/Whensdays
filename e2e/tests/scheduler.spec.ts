@@ -223,6 +223,42 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("event-title")).toHaveValue(title);
   });
 
+  test("irregular series: multiple picked dates + host re-poll entry", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "multi1", "Multi One", "multi1");
+    const title = `Jam ${test.info().testId}-${Date.now()}`;
+    const dt = (days: number) => {
+      const d = new Date(Date.now() + days * 24 * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T19:00`;
+    };
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-party").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill(dt(2));
+    // Add a second, non-pattern date (different weekday) → an irregular series.
+    await page.getByTestId("add-date").click();
+    await page.getByTestId("more-date-0").fill(dt(5));
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Both dates form one series ("1 of 2", picked-dates recurrence).
+    await expect(page.getByTestId("series")).toContainText("1 of 2");
+    await expect(page.getByTestId("series")).toContainText("on picked dates");
+    // The last date is within 3 weeks → the host sees the re-poll entry, which
+    // opens a prefilled poll that will re-invite everyone.
+    await page.getByTestId("series-repoll").click();
+    await expect(page.getByTestId("event-title")).toHaveValue(title);
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await expect(page.getByTestId("sched-poll")).toHaveClass(/on/);
+  });
+
   test("mute event notifications toggles and persists", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
     await ensureUser(page, "mute1", "Mute One", "mute1");

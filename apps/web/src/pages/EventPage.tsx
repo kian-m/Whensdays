@@ -127,14 +127,20 @@ function MuteToggle({ data }: { data: EventDetail }) {
 // ---------------- recurring series ----------------
 
 const RECURRENCE_LABEL: Record<string, string> = {
-  weekly: "weekly", biweekly: "every 2 weeks", monthly: "monthly",
+  weekly: "weekly", biweekly: "every 2 weeks", monthly: "monthly", custom: "on picked dates",
 };
 
 // Sibling occurrences of a recurring event; the one being viewed is highlighted.
+// When the series is running dry (last occurrence within ~3 weeks or already
+// past), the host gets a one-tap "poll for next dates" that re-invites everyone.
 function SeriesCard({ data }: { data: EventDetail }) {
   const nav = useNavigate();
   const series = data.series!;
   const idx = series.findIndex((s) => s.id === data.event.id);
+  const last = series[series.length - 1];
+  const endingSoon = last?.starts_at
+    ? new Date(last.starts_at).getTime() < Date.now() + 21 * 24 * 3600_000
+    : false;
   return (
     <div className="card stack" data-testid="series">
       <h3 style={{ margin: 0 }}>
@@ -150,6 +156,13 @@ function SeriesCard({ data }: { data: EventDetail }) {
           </button>
         ))}
       </div>
+      {data.can_manage && endingSoon && (
+        <button type="button" className="btn soft sm" style={{ alignSelf: "flex-start" }}
+          data-testid="series-repoll"
+          onClick={() => nav(`/new?again=${last.id}&repoll=1`)}>
+          📅 Poll the group for the next dates
+        </button>
+      )}
     </div>
   );
 }

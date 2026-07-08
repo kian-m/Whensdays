@@ -122,6 +122,41 @@ func (s *server) notifyReminder(ctx context.Context, ev db.Event) int {
 	})
 }
 
+// notifyInvite emails one invitee with one-tap RSVP buttons. Shared by the
+// normal friend-invite flow and the series re-poll (invite_from on create).
+func (s *server) notifyInvite(ctx context.Context, ev db.Event, inviterID, inviteeID string) {
+	if !s.notify.Enabled() {
+		return
+	}
+	p, err := s.queries.GetProfile(ctx, inviteeID)
+	if err != nil || p.Email == "" {
+		return
+	}
+	inviter, err := s.queries.GetProfile(ctx, inviterID)
+	if err != nil {
+		return
+	}
+	verb := "invited you. One tap and you're in."
+	if ev.Status == "polling" {
+		verb = "wants to find the next time that works — cast your vote."
+	}
+	body := renderEmail(emailContent{
+		preheader: inviter.DisplayName + " invited you to " + ev.Title,
+		heading:   "You're invited to " + ev.Title,
+		lines:     []string{inviter.DisplayName + " " + verb},
+		meta:      eventMeta(ev),
+		ctaLabel:  "✅ I'm going",
+		ctaURL:    s.rsvpLink(inviteeID, uuidStr(ev.ID), "going"),
+		cta2Label: "Can't make it",
+		cta2URL:   s.rsvpLink(inviteeID, uuidStr(ev.ID), "declined"),
+		moreLabel: "See the details first",
+		moreURL:   campaignURL(s.eventURL(ev.ID), "invite"),
+		logoURL:   s.logoURL(),
+		unsubURL:  s.muteLink(inviteeID, uuidStr(ev.ID)),
+	})
+	s.notify.Send([]string{p.Email}, "You're invited: "+ev.Title, body)
+}
+
 // notifyRecap is the day-after email that closes the loop: pull everyone back
 // to the thread (the group's memory) and hand the host the next event
 // pre-filled. Post-event is where the next event is born.
@@ -139,6 +174,32 @@ func (s *server) notifyRecap(ctx context.Context, ev db.Event) int {
 			unsubURL:  unsub,
 		}
 	})
+}
+
+// notifySeriesEnded nudges the HOST when a series' last scheduled occurrence
+// has happened: re-poll the group for the next dates (one tap into a prefilled
+// poll that re-invites everyone via invite_from).
+func (s *server) notifySeriesEnded(ctx context.Context, ev db.Event) {
+	if !s.notify.Enabled() {
+		return
+	}
+	if muted, _ := s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: ev.ID, UserID: ev.HostID}); muted {
+		return
+	}
+	host, err := s.queries.GetProfile(ctx, ev.HostID)
+	if err != nil || host.Email == "" {
+		return
+	}
+	body := renderEmail(emailContent{
+		preheader: "That was the last one on the calendar.",
+		heading:   "Keep " + ev.Title + " going 🔁",
+		lines:     []string{"That was the last scheduled date for this series. One tap opens a poll with everyone already invited — find the next times that work."},
+		ctaLabel:  "Poll the group for next dates",
+		ctaURL:    campaignURL(s.appOrigin+"/new?again="+uuidStr(ev.ID)+"&repoll=1", "repoll"),
+		logoURL:   s.logoURL(),
+		unsubURL:  s.muteLink(ev.HostID, uuidStr(ev.ID)),
+	})
+	s.notify.Send([]string{host.Email}, "Plan the next "+ev.Title+"?", body)
 }
 
 // notifyNewComment tells the host someone commented (unless the host is the actor).

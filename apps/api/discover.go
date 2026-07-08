@@ -56,6 +56,23 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 			if s.notifyRecap(r.Context(), ev) > 0 {
 				recapped++
 			}
+			// If that was the LAST scheduled occurrence of a series, nudge the
+			// host to re-poll the group for the next dates (the recap marker
+			// makes this once-only too).
+			if ev.SeriesID.Valid {
+				if sibs, serr := s.queries.ListSeriesEvents(r.Context(), ev.SeriesID); serr == nil {
+					last := true
+					for _, sib := range sibs {
+						if sib.StartsAt.Valid && ev.StartsAt.Valid && sib.StartsAt.Time.After(ev.StartsAt.Time) {
+							last = false
+							break
+						}
+					}
+					if last {
+						s.notifySeriesEnded(r.Context(), ev)
+					}
+				}
+			}
 			if err := s.queries.MarkRecapSent(r.Context(), ev.ID); err != nil {
 				s.internal(w, "mark recapped", err)
 				return

@@ -552,6 +552,8 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		GroupID         string   `json:"group_id"`      // optional: attach to a group
 		Repeat          string   `json:"repeat"`        // optional: weekly|biweekly|monthly (fixed mode only)
 		RepeatCount     int      `json:"repeat_count"`  // total occurrences, 2-12 (default 4)
+		MoreStarts      []string `json:"more_starts"`   // optional extra dates (fixed mode): an IRREGULAR series — recurring, no exact pattern
+		InviteFrom      string   `json:"invite_from"`   // optional event id: re-poll — copy that event's people as invites (+ email them)
 		Visibility      string   `json:"visibility"`    // optional: private (default) | public
 		Topic           string   `json:"topic"`         // optional slug, for public discovery
 		City            string   `json:"city"`          // optional, for public discovery
@@ -681,6 +683,10 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "repeat must be weekly/biweekly/monthly, on a fixed-time event"})
 			return
 		}
+		if len(in.MoreStarts) > 0 {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "pick a repeat pattern OR extra dates, not both"})
+			return
+		}
 		if in.RepeatCount == 0 {
 			in.RepeatCount = 4
 		}
@@ -690,6 +696,30 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		}
 		params.SeriesID = newUUID()
 		params.Recurrence = in.Repeat
+	}
+	// Irregular series: explicit extra dates, any days — recurring without a
+	// pattern ("next three: the 12th, the 23rd, then a Tuesday"). Same series
+	// machinery as repeat, just with host-picked times.
+	var moreStarts []pgtype.Timestamptz
+	if len(in.MoreStarts) > 0 {
+		if in.SchedulingMode != "fixed" {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "extra dates need a fixed-time event"})
+			return
+		}
+		if len(in.MoreStarts) > 11 {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "at most 12 dates per series"})
+			return
+		}
+		for _, raw := range in.MoreStarts {
+			ts, ok := parseTS(raw)
+			if !ok {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid extra date"})
+				return
+			}
+			moreStarts = append(moreStarts, ts)
+		}
+		params.SeriesID = newUUID()
+		params.Recurrence = "custom"
 	}
 
 	ev, err := s.queries.CreateEvent(r.Context(), params)
@@ -708,6 +738,54 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			s.internal(w, "create series occurrence", err)
 			return
 		}
+	}
+	for _, ts := range moreStarts {
+		p := params
+		p.StartsAt = ts
+		if _, err := s.queries.CreateEvent(r.Context(), p); err != nil {
+			s.internal(w, "create series occurrence", err)
+			return
+		}
+	}
+	// Re-poll: pull the people from a previous event (e.g. the series that just
+	// ended) onto this one as invites, and email them — "the poll goes out".
+	// Manager-only on the SOURCE event, so only its host/cohost can re-poll it.
+	if in.InviteFrom != "" {
+		srcID, ok := parseUUID(in.InviteFrom)
+		if !ok {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid invite_from"})
+			return
+		}
+		src, role, rerr := s.eventAndRole(r.Context(), srcID, uid)
+		if rerr != nil || !isManager(role) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "invite_from must be an event you host"})
+			return
+		}
+		_ = src
+		seen := map[string]bool{uid: true}
+		if atts, aerr := s.queries.ListAttendees(r.Context(), srcID); aerr == nil {
+			for _, a := range atts {
+				seen[a.UserID] = false
+			}
+		}
+		if invs, ierr := s.queries.ListEventInvites(r.Context(), srcID); ierr == nil {
+			for _, i := range invs {
+				if _, dup := seen[i.UserID]; !dup {
+					seen[i.UserID] = false
+				}
+			}
+		}
+		invited := 0
+		for userID, isSelf := range seen {
+			if isSelf {
+				continue
+			}
+			if err := s.queries.AddEventInvite(r.Context(), db.AddEventInviteParams{EventID: ev.ID, UserID: userID, InviterID: uid}); err == nil {
+				s.notifyInvite(r.Context(), ev, uid, userID)
+				invited++
+			}
+		}
+		s.analytics.Capture(uid, "series_repolled", map[string]any{"event_id": uuidStr(ev.ID), "from": in.InviteFrom, "invited": invited})
 	}
 	for _, ts := range options {
 		if _, err := s.queries.AddTimeOption(r.Context(), db.AddTimeOptionParams{EventID: ev.ID, StartsAt: ts}); err != nil {

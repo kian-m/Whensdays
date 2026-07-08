@@ -20,6 +20,9 @@ export function NewEvent() {
   // "Plan the next one" (?again=<eventId>, from the recap email / a past event):
   // prefill the wizard from that event so re-hosting is one pass of Next-taps.
   const againId = params.get("again") || "";
+  // Re-poll (?repoll=1, from the series-ended email / series card): default to a
+  // time poll and re-invite everyone from the source event on create.
+  const repoll = params.get("repoll") === "1" && !!againId;
 
   useEffect(() => {
     analytics.capture(EVENTS.createEventOpened, againId ? { again: true } : undefined);
@@ -30,6 +33,7 @@ export function NewEvent() {
     getJSON<{ event: { title: string; event_type: EventType; description: string; location_mode: "host_place" | "find_venue"; location_address: string } }>(
       api, `/api/events/${againId}`,
     ).then((d) => {
+      if (repoll) setSchedulingMode("poll");
       setTitle(d.event.title);
       setType(d.event.event_type);
       setDescription(d.event.description);
@@ -50,6 +54,8 @@ export function NewEvent() {
   const [startsAt, setStartsAt] = useState("");
   const [repeat, setRepeat] = useState<"" | "weekly" | "biweekly" | "monthly">("");
   const [repeatCount, setRepeatCount] = useState(4);
+  // Irregular series: extra explicit dates (any days — recurring, no pattern).
+  const [moreStarts, setMoreStarts] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<"private" | "friends" | "public">("private");
   const [topic, setTopic] = useState("");
   const [city, setCity] = useState(guessCity());
@@ -113,6 +119,7 @@ export function NewEvent() {
       timezone: hostTimezone(),
     };
     if (groupId) body.group_id = groupId;
+    if (repoll) body.invite_from = againId;
     if (custom) {
       body.custom_emoji = custom.emoji;
       body.custom_label = custom.label;
@@ -128,6 +135,8 @@ export function NewEvent() {
         body.repeat = repeat;
         body.repeat_count = repeatCount;
       }
+      const extras = moreStarts.filter((d) => d.trim() !== "");
+      if (extras.length > 0) body.more_starts = extras.map((d) => new Date(d).toISOString());
     } else if (schedulingMode === "poll") {
       body.time_options = options
         .filter((o) => o.trim() !== "")
@@ -284,19 +293,38 @@ export function NewEvent() {
               <div className="stack" style={{ marginTop: 8 }}>
                 <input type="datetime-local" className="input"
                   data-testid="fixed-time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
-                <div className="row wrap" style={{ gap: 6 }}>
-                  <span className="muted small">Repeats:</span>
-                  {([["", "Never"], ["weekly", "Weekly"], ["biweekly", "Every 2 weeks"], ["monthly", "Monthly"]] as const).map(([v, l]) => (
-                    <button key={v} type="button" className={`chip sm ${repeat === v ? "on" : ""}`}
-                      data-testid={`repeat-${v || "never"}`} onClick={() => setRepeat(v)}>{l}</button>
-                  ))}
-                  {repeat && (
-                    <select className="input" style={{ width: "auto" }} data-testid="repeat-count"
-                      value={repeatCount} onChange={(e) => setRepeatCount(Number(e.target.value))}>
-                      {[2, 3, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{n} times</option>)}
-                    </select>
-                  )}
-                </div>
+                {/* Irregular series: stack more explicit dates (any days). Mutually
+                    exclusive with a repeat pattern — picking dates clears it. */}
+                {moreStarts.map((d, i) => (
+                  <div key={i} className="row" style={{ gap: 6 }}>
+                    <input type="datetime-local" className="input" data-testid={`more-date-${i}`}
+                      value={d} onChange={(e) => setMoreStarts((m) => m.map((x, j) => (j === i ? e.target.value : x)))} />
+                    <button type="button" className="btn ghost sm" data-testid={`more-date-remove-${i}`}
+                      onClick={() => setMoreStarts((m) => m.filter((_, j) => j !== i))}>✕</button>
+                  </div>
+                ))}
+                <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
+                  data-testid="add-date" onClick={() => { setRepeat(""); setMoreStarts((m) => [...m, ""]); }}>
+                  + Add another date
+                </button>
+                {moreStarts.length === 0 && (
+                  <div className="row wrap" style={{ gap: 6 }}>
+                    <span className="muted small">Repeats:</span>
+                    {([["", "Never"], ["weekly", "Weekly"], ["biweekly", "Every 2 weeks"], ["monthly", "Monthly"]] as const).map(([v, l]) => (
+                      <button key={v} type="button" className={`chip sm ${repeat === v ? "on" : ""}`}
+                        data-testid={`repeat-${v || "never"}`} onClick={() => setRepeat(v)}>{l}</button>
+                    ))}
+                    {repeat && (
+                      <select className="input" style={{ width: "auto" }} data-testid="repeat-count"
+                        value={repeatCount} onChange={(e) => setRepeatCount(Number(e.target.value))}>
+                        {[2, 3, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{n} times</option>)}
+                      </select>
+                    )}
+                  </div>
+                )}
+                {moreStarts.length > 0 && (
+                  <p className="muted small">These dates become one series — everyone RSVPs per date.</p>
+                )}
               </div>
             )}
             {schedulingMode === "poll" && (
