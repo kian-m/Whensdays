@@ -297,7 +297,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
           <h3 style={{ margin: 0 }}>Your availability</h3>
           {!editingAvail ? (
             <button type="button" className="btn ghost sm" data-testid="avail-edit"
-              onClick={() => setEditingAvail(true)}>Edit availability</button>
+              onClick={() => setEditingAvail(true)}>Open &amp; edit</button>
           ) : (
             <div className="row" style={{ gap: 6 }}>
               <button type="button" className={mode === "weekly" ? "btn sm" : "btn ghost sm"}
@@ -326,15 +326,17 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
           </div>
         )}
 
-        {mode === "weekly" ? (
+        {/* The grids only render while editing — collapsed, the card is just the
+            summary line + the Edit button, so the profile stays compact. */}
+        {editingAvail && (mode === "weekly" ? (
           <>
-            {editingAvail && <p className="muted small">Tap a cell to mark it {paintMode}; tap again to clear it. A row/column header fills the whole line.</p>}
-            <DayGrid dates={WEEK_ROWS} free={week} busy={weekBusy} cols={WEEK_PARTS} idPrefix="wk" readOnly={!editingAvail}
+            <p className="muted small">Tap a cell to mark it {paintMode}; tap again to clear it. A row/column header fills the whole line.</p>
+            <DayGrid dates={WEEK_ROWS} free={week} busy={weekBusy} cols={WEEK_PARTS} idPrefix="wk"
               onToggle={toggleWeekCell} onToggleRow={toggleWeekRow} onToggleCol={toggleWeekCol} testid="weekly-grid" />
           </>
         ) : (
           <>
-            {editingAvail && <p className="muted small">Tap a cell to mark it {paintMode}; tap again to clear it. A date/column header fills the whole line.</p>}
+            <p className="muted small">Tap a cell to mark it {paintMode}; tap again to clear it. A date/column header fills the whole line.</p>
             <div className="row between" style={{ alignItems: "center" }}>
               <button type="button" className="btn ghost sm" data-testid="avail-earlier"
                 disabled={pageOffset === 0} onClick={() => setPageOffset((o) => Math.max(0, o - PAGE))}>← Earlier</button>
@@ -342,18 +344,18 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
               <button type="button" className="btn ghost sm" data-testid="avail-later"
                 disabled={pageOffset >= MAX_OFFSET} onClick={() => setPageOffset((o) => Math.min(MAX_OFFSET, o + PAGE))}>Later →</button>
             </div>
-            <DayGrid dates={dates} free={free} busy={dayBusy} locked={busyCells} readOnly={!editingAvail}
+            <DayGrid dates={dates} free={free} busy={dayBusy} locked={busyCells}
               onToggle={toggleCell} onToggleRow={toggleRow} onToggleCol={toggleCol} testid="availability-grid" />
           </>
-        )}
+        ))}
 
-        <AvailLegend hasCalendar={mode === "specific" && busyCells.size > 0} />
+        {editingAvail && <AvailLegend hasCalendar={mode === "specific" && busyCells.size > 0} />}
 
         {editingAvail && (
           <div className="row">
             <button className="btn" data-testid={mode === "weekly" ? "save-weekly" : "save-availability"}
               onClick={() => (mode === "weekly" ? saveWeekly() : saveAvailability())}>Save availability</button>
-            <button type="button" className="btn ghost sm" data-testid="avail-cancel" onClick={cancelAvail}>Cancel</button>
+            <button type="button" className="btn ghost sm" data-testid="avail-cancel" onClick={cancelAvail}>Close</button>
           </div>
         )}
       </div>

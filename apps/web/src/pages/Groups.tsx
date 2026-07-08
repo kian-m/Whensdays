@@ -9,7 +9,7 @@ import { eventEmoji } from "../scheduler/questions";
 const GROUP_EMOJIS = ["👥", "🎉", "🍜", "📚", "🏃", "🎲", "⛺️", "🍻", "🎬", "🧗", "⚽️", "🎮"];
 
 // Group icon: uploaded photo wins over emoji.
-function GroupIcon({ group, size = 32 }: { group: Group; size?: number }) {
+function GroupIcon({ group, size = 44 }: { group: Group; size?: number }) {
   if (group.icon_url) return <Avatar url={group.icon_url} name={group.name} size={size} />;
   return <span style={{ fontSize: size * 0.72 }}>{group.emoji || "👥"}</span>;
 }
@@ -139,7 +139,7 @@ export function GroupPage() {
       <div className="card stack">
         <div className="row between">
           <span className="row" style={{ gap: 10 }}>
-            <GroupIcon group={group} size={44} />
+            <GroupIcon group={group} size={64} />
             <h1 data-testid="group-title">{group.name}</h1>
           </span>
           <button
