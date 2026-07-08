@@ -73,6 +73,9 @@ func (s *server) handleEventICS(w http.ResponseWriter, r *http.Request) {
 func buildICS(ev db.Event, now time.Time, link string) string {
 	start := ev.StartsAt.Time.UTC()
 	end := start.Add(exportDuration)
+	if ev.EndsAt.Valid {
+		end = ev.EndsAt.Time.UTC()
+	}
 
 	location := ev.LocationAddress
 	if ev.LocationMode == "find_venue" {

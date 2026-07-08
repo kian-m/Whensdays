@@ -357,6 +357,36 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("group-streak")).toContainText("2-month streak");
   });
 
+  test("events can carry an end time", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "endt1", "End Time", "endt1");
+    const title = `Ends ${test.info().testId}-${Date.now()}`;
+    const dt = (days: number, time: string) => {
+      const d = new Date(Date.now() + days * 24 * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${time}`;
+    };
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-party").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill(dt(3, "19:00"));
+    await page.getByTestId("fixed-end").fill(dt(3, "22:00"));
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    // Hero shows the range (start – end).
+    await expect(page.getByText(/– 10:00 PM/)).toBeVisible();
+    // Editable: push the end later.
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-end").fill(dt(3, "23:00"));
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByText(/– 11:00 PM/)).toBeVisible();
+  });
+
   test("past events leave All and live under the Past filter", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
     await ensureUser(page, "past1", "Past One", "past1");
@@ -1206,17 +1236,25 @@ test.describe("scheduler", () => {
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
     await expect(page.getByText("Which days work this month?")).toBeVisible();
-    // Select all / Clear bulk controls on the day chips.
-    await page.getByTestId("gp-days-all").click();
-    await expect(page.getByTestId("gp-day-27")).toHaveClass(/on/);
-    await page.getByTestId("gp-days-clear").click();
-    await expect(page.getByTestId("gp-day-27")).not.toHaveClass(/on/);
-    await page.getByTestId("gp-day-5").click();
-    await page.getByTestId("gp-day-12").click();
+    // Month is a dates × dayparts grid now (28 days) — pick times, not just days.
+    await page.getByTestId("gpm-cell-5-evening").click();
+    await page.getByTestId("gpm-cell-12-noon").click();
     await page.getByTestId("save-general").click();
     await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
     await page.getByTestId("preview-toggle").click();
-    await expect(page.getByTestId("gr-month-days")).toBeVisible();
+    // Host sees the heatmap and schedules straight from a cell: tap the winning
+    // cell → it lands in the picks → schedule.
+    await expect(page.getByTestId("gr-month-heat")).toBeVisible();
+    const cellDate = (days: number) => {
+      const d = new Date(Date.now() + days * 24 * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    };
+    await page.getByTestId(`grm-pick-${cellDate(5)}-evening`).click();
+    await expect(page.getByTestId("picked-cells")).toBeVisible();
+    await page.getByTestId("general-finalize").click();
+    await expect(page.getByTestId("event-title")).toBeVisible();
+    await expect(page.getByText("Confirmed")).toBeVisible();
   });
 
   test("general poll finalizes MULTIPLE winning dates into a series", async ({ page }) => {

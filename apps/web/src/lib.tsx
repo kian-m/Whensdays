@@ -28,6 +28,7 @@ export type Event = {
   photo_url: string;
   theme: string;
   timezone: string;
+  ends_at: string | null;
   created_at: string;
 };
 

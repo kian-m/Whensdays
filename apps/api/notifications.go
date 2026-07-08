@@ -55,7 +55,11 @@ func eventWhen(ev db.Event) string {
 	if !ev.StartsAt.Valid {
 		return ""
 	}
-	return ev.StartsAt.Time.In(eventLocation(ev)).Format("Mon Jan 2 · 3:04 PM MST")
+	w := ev.StartsAt.Time.In(eventLocation(ev)).Format("Mon Jan 2 · 3:04 PM MST")
+	if ev.EndsAt.Valid {
+		w += " – " + ev.EndsAt.Time.In(eventLocation(ev)).Format("3:04 PM")
+	}
+	return w
 }
 
 // eventCover returns the event's cover/GIF for email — https only (mail

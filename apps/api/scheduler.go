@@ -579,6 +579,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		LocationAddress string   `json:"location_address"`
 		SchedulingMode  string   `json:"scheduling_mode"`
 		StartsAt        string   `json:"starts_at"`     // RFC3339, for fixed mode
+		EndsAt          string   `json:"ends_at"`       // optional RFC3339 end (fixed mode)
 		TimeOptions     []string `json:"time_options"`  // RFC3339[], for poll mode
 		GroupID         string   `json:"group_id"`      // optional: attach to a group
 		Repeat          string   `json:"repeat"`        // optional: weekly|biweekly|monthly (fixed mode only)
@@ -691,6 +692,14 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		params.StartsAt = ts
+		if in.EndsAt != "" {
+			ets, eok := parseTS(in.EndsAt)
+			if !eok || !ets.Time.After(ts.Time) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "end time must be after the start"})
+				return
+			}
+			params.EndsAt = ets
+		}
 		params.Status = "scheduled"
 	case "poll":
 		if len(in.TimeOptions) < 1 || len(in.TimeOptions) > 20 {
@@ -773,6 +782,9 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	for i := 1; in.Repeat != "" && i < in.RepeatCount; i++ {
 		p := params
 		p.StartsAt = shiftOccurrence(params.StartsAt, in.Repeat, i)
+		if params.EndsAt.Valid {
+			p.EndsAt = pgtype.Timestamptz{Time: p.StartsAt.Time.Add(params.EndsAt.Time.Sub(params.StartsAt.Time)), Valid: true}
+		}
 		if _, err := s.queries.CreateEvent(r.Context(), p); err != nil {
 			s.internal(w, "create series occurrence", err)
 			return
@@ -781,6 +793,9 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	for _, ts := range moreStarts {
 		p := params
 		p.StartsAt = ts
+		if params.EndsAt.Valid {
+			p.EndsAt = pgtype.Timestamptz{Time: ts.Time.Add(params.EndsAt.Time.Sub(params.StartsAt.Time)), Valid: true}
+		}
 		if _, err := s.queries.CreateEvent(r.Context(), p); err != nil {
 			s.internal(w, "create series occurrence", err)
 			return
@@ -1149,7 +1164,9 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, vote{"dayslot", dsl.Day + ":" + dsl.Daypart})
 		}
 	case "month":
-		if len(in.Days) > 32 {
+		// Month scope is a dates × dayparts grid (28-day window). Plain day
+		// votes remain accepted for events answered before the grid upgrade.
+		if len(in.Days) > 32 || len(in.DaySlots) > 28*len(dayparts) {
 			fail("too many selections")
 			return
 		}
@@ -1159,6 +1176,13 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			rows = append(rows, vote{"day", d})
+		}
+		for _, dsl := range in.DaySlots {
+			if !inWindow(dsl.Day, 28) || !oneOf(dsl.Daypart, dayparts...) {
+				fail("invalid day slot")
+				return
+			}
+			rows = append(rows, vote{"dayslot", dsl.Day + ":" + dsl.Daypart})
 		}
 	default: // general
 		if len(in.Months) > 24 || len(in.Slots) > 7*len(dayparts) {

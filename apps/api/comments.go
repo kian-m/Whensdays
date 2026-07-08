@@ -283,6 +283,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		PhotoUrl        string     `json:"photo_url"`
 		Theme           string     `json:"theme"`
 		StartsAt        string     `json:"starts_at"`    // optional: reschedule a fixed/finalized time
+		EndsAt          string     `json:"ends_at"`      // optional end time ("" clears it)
 		ApplySeries     bool       `json:"apply_series"` // optional: copy content edits to every occurrence
 		SeriesTimes     []struct { // optional: retime sibling occurrences (id must share this series)
 			ID       string `json:"id"`
@@ -330,6 +331,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	// reminder_sent so the day-before reminder re-fires for the new date.
 	startsAt := current.StartsAt
 	reminderSent := current.ReminderSent
+	endsAt := current.EndsAt
 	if in.StartsAt != "" && current.StartsAt.Valid {
 		ts, valid := parseTS(in.StartsAt)
 		if !valid {
@@ -345,12 +347,23 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			reminderSent = false
 		}
 	}
+	// End time: "" clears it; otherwise it must land after the (possibly new) start.
+	if in.EndsAt == "" {
+		endsAt = pgtype.Timestamptz{}
+	} else {
+		ets, eok := parseTS(in.EndsAt)
+		if !eok || (startsAt.Valid && !ets.Time.After(startsAt.Time)) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "end time must be after the start"})
+			return
+		}
+		endsAt = ets
+	}
 	ev, err := s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
 		ID: id, Title: in.Title, Description: in.Description,
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress,
 		Visibility: in.Visibility, Topic: in.Topic, City: in.City,
 		PhotoUrl: in.PhotoUrl, Theme: in.Theme,
-		StartsAt: startsAt, ReminderSent: reminderSent,
+		StartsAt: startsAt, ReminderSent: reminderSent, EndsAt: endsAt,
 	})
 	if err != nil {
 		s.internal(w, "update event", err)
@@ -374,7 +387,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 					LocationMode: in.LocationMode, LocationAddress: in.LocationAddress,
 					Visibility: in.Visibility, Topic: in.Topic, City: in.City,
 					PhotoUrl: in.PhotoUrl, Theme: in.Theme,
-					StartsAt: full.StartsAt, ReminderSent: full.ReminderSent,
+					StartsAt: full.StartsAt, ReminderSent: full.ReminderSent, EndsAt: full.EndsAt,
 				})
 			}
 		}
@@ -399,12 +412,16 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "events can't start in the past"})
 			return
 		}
+		sibEnd := sib.EndsAt
+		if sib.EndsAt.Valid && sib.StartsAt.Valid {
+			sibEnd = pgtype.Timestamptz{Time: ts.Time.Add(sib.EndsAt.Time.Sub(sib.StartsAt.Time)), Valid: true}
+		}
 		_, _ = s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
 			ID: sibID, Title: sib.Title, Description: sib.Description,
 			LocationMode: sib.LocationMode, LocationAddress: sib.LocationAddress,
 			Visibility: sib.Visibility, Topic: sib.Topic, City: sib.City,
 			PhotoUrl: sib.PhotoUrl, Theme: sib.Theme,
-			StartsAt: ts, ReminderSent: false,
+			StartsAt: ts, ReminderSent: false, EndsAt: sibEnd,
 		})
 	}
 	s.analytics.Capture(uid, "event_edited", map[string]any{"event_id": r.PathValue("id"), "role": role, "series": in.ApplySeries})

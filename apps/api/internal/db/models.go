@@ -67,6 +67,7 @@ type Event struct {
 	PhotoUrl        string             `json:"photo_url"`
 	Theme           string             `json:"theme"`
 	Timezone        string             `json:"timezone"`
+	EndsAt          pgtype.Timestamptz `json:"ends_at"`
 }
 
 type EventAttendee struct {

@@ -53,6 +53,7 @@ export function NewEvent() {
   const [schedulingMode, setSchedulingMode] = useState<"fixed" | "poll" | "general">("fixed");
   const [generalScope, setGeneralScope] = useState<"week" | "month" | "general">("general");
   const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState(""); // optional end time (fixed mode)
   const [repeat, setRepeat] = useState<"" | "weekly" | "biweekly" | "monthly">("");
   const [repeatCount, setRepeatCount] = useState(4);
   // Irregular series: extra explicit dates (any days — recurring, no pattern).
@@ -140,6 +141,7 @@ export function NewEvent() {
     }
     if (schedulingMode === "fixed") {
       body.starts_at = startsAt ? new Date(startsAt).toISOString() : "";
+      if (endsAt) body.ends_at = new Date(endsAt).toISOString();
       if (repeat) {
         body.repeat = repeat;
         body.repeat_count = repeatCount;
@@ -302,6 +304,10 @@ export function NewEvent() {
               <div className="stack" style={{ marginTop: 8 }}>
                 <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())}
                   data-testid="fixed-time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+                <label className="field" style={{ marginBottom: 0 }}>Ends <span className="muted small">(optional)</span>
+                  <input type="datetime-local" className="input" min={startsAt || toDatetimeLocal(new Date().toISOString())}
+                    data-testid="fixed-end" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+                </label>
                 {/* Irregular series: stack more explicit dates (any days). Mutually
                     exclusive with a repeat pattern — picking dates clears it. */}
                 {moreStarts.map((d, i) => (

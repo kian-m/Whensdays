@@ -131,7 +131,7 @@ func (q *Queries) ListActiveTopics(ctx context.Context) ([]string, error) {
 const listEventsNeedingReminder = `-- name: ListEventsNeedingReminder :many
 
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
 FROM events
 WHERE status = 'scheduled' AND reminder_sent = false
   AND (starts_at AT TIME ZONE 'America/Los_Angeles')::date
@@ -179,6 +179,7 @@ func (q *Queries) ListEventsNeedingReminder(ctx context.Context) ([]Event, error
 			&i.PhotoUrl,
 			&i.Theme,
 			&i.Timezone,
+			&i.EndsAt,
 		); err != nil {
 			return nil, err
 		}

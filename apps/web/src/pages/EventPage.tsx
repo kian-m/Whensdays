@@ -126,6 +126,12 @@ function MuteToggle({ data }: { data: EventDetail }) {
 
 // ---------------- recurring series ----------------
 
+// Representative start hour per daypart — used when the host schedules straight
+// from a heat cell (they can fine-tune afterwards; the time stays editable).
+const DAYPART_HOUR: Record<string, number> = {
+  early_morning: 8, morning: 10, noon: 12, afternoon: 15, evening: 19, night: 21,
+};
+
 const RECURRENCE_LABEL: Record<string, string> = {
   weekly: "weekly", biweekly: "every 2 weeks", monthly: "monthly", custom: "on picked dates",
 };
@@ -503,9 +509,6 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
   const [dayCells, setDayCells] = useState<Set<string>>(
     new Set(mine.filter((v) => v.dimension === "dayslot").map((v) => v.value)),
   );
-  const [days, setDays] = useState<Set<string>>(
-    new Set(mine.filter((v) => v.dimension === "day").map((v) => v.value)),
-  );
   const [saved, setSaved] = useState(false);
 
   const mutate = <T,>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, fn: (s: Set<T>) => void) => {
@@ -544,9 +547,13 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
     keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
   });
 
-  // Month scope: 28 concrete date chips.
+  // Month scope: 28 concrete dates × dayparts — same grid as week, longer window.
   const monthDates = daysFromDate(event.created_at, 28);
-  const toggleDay = (d: string) => mutate(setDays, (s) => (s.has(d) ? s.delete(d) : s.add(d)));
+  const toggleMonthCol = (dp: string) => mutate(setDayCells, (s) => {
+    const keys = monthDates.map((d) => `${d.value}:${dp}`);
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
 
   async function save() {
     const body: Record<string, unknown> = {};
@@ -556,7 +563,10 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
         return { day, daypart: dp };
       });
     } else if (scope === "month") {
-      body.days = [...days];
+      body.day_slots = [...dayCells].map((k) => {
+        const [day, dp] = k.split(":");
+        return { day, daypart: dp };
+      });
     } else {
       body.months = [...selMonths];
       body.slots = [...cells].map((k) => {
@@ -592,20 +602,12 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
       {scope === "month" && (
         <div>
           <div className="row between" style={{ marginBottom: 6 }}>
-            <span className="muted small">Tap every day that works over the next 4 weeks</span>
-            <span className="row" style={{ gap: 6 }}>
-              <button type="button" className="btn ghost sm" data-testid="gp-days-all"
-                onClick={() => mutate(setDays, (s) => monthDates.forEach((d) => s.add(d.value)))}>Select all</button>
-              <button type="button" className="btn ghost sm" data-testid="gp-days-clear"
-                disabled={days.size === 0} onClick={() => mutate(setDays, (s) => s.clear())}>Clear</button>
-            </span>
+            <span className="muted small">Tap the times that work over the next 4 weeks (a date or column header fills the line)</span>
+            <button type="button" className="btn ghost sm" data-testid="gp-days-clear"
+              disabled={dayCells.size === 0} onClick={() => mutate(setDayCells, (s) => s.clear())}>Clear</button>
           </div>
-          <div className="row wrap" style={{ gap: 6 }} data-testid="gp-month-days">
-            {monthDates.map((d, i) => (
-              <button key={d.value} type="button" className={`chip sm ${days.has(d.value) ? "on" : ""}`}
-                data-testid={`gp-day-${i}`} onClick={() => toggleDay(d.value)}>{d.label}</button>
-            ))}
-          </div>
+          <DayGrid dates={monthDates} free={dayCells} idPrefix="gpm" testid="gp-month-grid"
+            onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleMonthCol} />
         </div>
       )}
 
@@ -781,6 +783,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   // Editable start time — only meaningful once the event has a concrete time
   // (fixed or finalized); a poll still decides its time by voting.
   const [startsAt, setStartsAt] = useState(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
+  const [endsAt, setEndsAt] = useState(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
   // Sibling occurrences (multi-date series): every date is editable from here,
   // one input per occurrence. Keyed by sibling event id.
   const sibs = (data.series ?? []).filter((x) => x.id !== e.id && x.starts_at);
@@ -799,6 +802,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
     setTopic(e.topic); setCity(e.city || guessCity());
     setPhoto(e.photo_url); setTheme(e.theme); setMsg(null);
     setStartsAt(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
+    setEndsAt(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
     setSibTimes({});
     setEditing(true);
   }
@@ -821,6 +825,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       visibility, topic: visibility === "public" ? topic : "", city: visibility === "public" ? city.trim() : "",
       photo_url: photo, theme,
       starts_at: startsAt ? new Date(startsAt).toISOString() : "",
+      ends_at: endsAt ? new Date(endsAt).toISOString() : "",
       apply_series: applySeries,
       series_times: sibs
         .filter((x) => sibTimes[x.id] && sibTimes[x.id] !== toDatetimeLocal(x.starts_at!))
@@ -869,6 +874,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           <div className="muted small">
             🗓️ {e.status === "polling" ? "Time being decided" : fmtDate(e.starts_at, e.timezone)}
             {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
+            {e.status !== "polling" && e.ends_at ? ` – ${fmtDateTime(e.ends_at, e.timezone).split(", ").pop()}` : ""}
           </div>
         )}
         <div className="muted small">
@@ -905,10 +911,16 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
       <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
       {e.status === "scheduled" && (
-        <label className="field">{sibs.length > 0 ? "This date" : "When"}
-          <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="edit-time"
-            value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
-        </label>
+        <>
+          <label className="field">{sibs.length > 0 ? "This date" : "When"}
+            <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="edit-time"
+              value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
+          </label>
+          <label className="field">Ends <span className="muted small">(optional)</span>
+            <input type="datetime-local" className="input" min={startsAt || undefined} data-testid="edit-end"
+              value={endsAt} onChange={(ev) => setEndsAt(ev.target.value)} />
+          </label>
+        </>
       )}
       {sibs.map((occ, i) => (
         <label className="field" key={occ.id}>Date {i + 2} of the series
@@ -1140,6 +1152,23 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
     await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, { starts_at: o.starts_at });
     reload();
   }
+  // Multi-pick: tap several options, schedule them all as one series (everyone
+  // carried onto each date, RSVPs intact).
+  const [multi, setMulti] = useState<Set<string>>(new Set());
+  const toggleMulti = (id: string) => setMulti((m) => {
+    const next = new Set(m);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+  async function finalizeMulti() {
+    const times = ranked.filter((o) => multi.has(o.id)).map((o) => o.starts_at).sort();
+    if (times.length === 0) return;
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, {
+      starts_at: times[0], more_starts: times.slice(1),
+    });
+    reload();
+  }
   return (
     <div className="card stack">
       <h3>Availability</h3>
@@ -1161,6 +1190,10 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
               </span>
               <div className="row">
                 <span className="muted small">{yes} available</span>
+                <button type="button" className={`chip sm ${multi.has(o.id) ? "on" : ""}`} data-testid={`select-${i}`}
+                  onClick={() => toggleMulti(o.id)} title="Select several, then schedule them together">
+                  {multi.has(o.id) ? "Selected ✓" : "Select"}
+                </button>
                 <button className="btn sm" data-testid={`finalize-${i}`} onClick={() => finalize(o)}>Pick</button>
               </div>
             </div>
@@ -1168,6 +1201,11 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
           </div>
         );
       })}
+      {multi.size > 0 && (
+        <button className="btn" style={{ alignSelf: "flex-start" }} data-testid="finalize-multi" onClick={finalizeMulti}>
+          Schedule {multi.size} date{multi.size > 1 ? "s" : ""} as a series
+        </button>
+      )}
     </div>
   );
 }
@@ -1228,6 +1266,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
 
   // week scope: dates × dayparts heatmap over the event's answer window.
   const weekDates = daysFromDate(data.event.created_at, 7);
+  const monthDates28 = daysFromDate(data.event.created_at, 28);
   const dayslotCounts = countBy("dayslot");
   const dayslotTop = Math.max(1, ...dayslotCounts.values());
 
@@ -1240,12 +1279,36 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
     return new Date(y, mo - 1, d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   };
 
-  // Multi-date finalize: the host reads the group's availability above and
-  // schedules ONE OR SEVERAL winning dates. Extra dates become a series with
+  // Multi-date finalize: the host TAPS winning cells right on the results (or
+  // types times manually) — one or several. Extra dates become a series with
   // everyone (RSVPs intact) carried onto each occurrence.
   const [moreWhens, setMoreWhens] = useState<string[]>([]);
+  // picked: heat-cell selections, cellKey -> datetime-local (daypart mapped to
+  // a sensible start hour; the host can still fine-tune via the manual inputs).
+  const [picked, setPicked] = useState<Map<string, string>>(new Map());
+  const canPick = data.can_manage;
+  const togglePick = (key: string, dtLocal: string) => {
+    if (!canPick) return;
+    setPicked((m) => {
+      const next = new Map(m);
+      if (next.has(key)) next.delete(key);
+      else next.set(key, dtLocal);
+      return next;
+    });
+  };
+  const cellPickStyle = (key: string): React.CSSProperties =>
+    picked.has(key)
+      ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative", zIndex: 2 }
+      : {};
+  // next concrete date for a weekday (general scope cells aren't dated)
+  const nextDateOfWeekday = (wd: number, hour: number) => {
+    const d = new Date();
+    do { d.setDate(d.getDate() + 1); } while (d.getDay() !== wd);
+    d.setHours(hour, 0, 0, 0);
+    return toDatetimeLocal(d.toISOString());
+  };
   async function finalize() {
-    const all = [when, ...moreWhens].filter((v) => v.trim() !== "")
+    const all = [when, ...moreWhens, ...picked.values()].filter((v) => v.trim() !== "")
       .map((v) => new Date(v).toISOString()).sort();
     if (all.length === 0) return;
     await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, {
@@ -1253,7 +1316,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
     });
     reload();
   }
-  const pickCount = [when, ...moreWhens].filter((v) => v.trim() !== "").length;
+  const pickCount = [when, ...moreWhens].filter((v) => v.trim() !== "").length + picked.size;
 
   return (
     <div className="card stack">
@@ -1273,9 +1336,11 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                     const key = `${d.value}:${dp.value}`;
                     const n = dayslotCounts.get(key) ?? 0;
                     return (
-                      <div key={dp.value} className="cell" style={{ ...heatStyle(n, dayslotTop), ...pickedStyle(key), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700 }}>
+                      <button key={dp.value} type="button" className="cell" data-testid={`grw-pick-${d.value}-${dp.value}`}
+                        onClick={() => togglePick(key, `${d.value}T${String(DAYPART_HOUR[dp.value]).padStart(2, "0")}:00`)}
+                        style={{ ...heatStyle(n, dayslotTop), ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
                         {n > 0 ? n : ""}
-                      </div>
+                      </button>
                     );
                   })}
                 </Fragment>
@@ -1287,14 +1352,36 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
 
       {scope === "month" && (
         <div>
-          <div className="section-h" style={{ margin: "0 0 4px" }}>Most-picked days</div>
-          {days.length === 0 ? <p className="muted small">No picks yet.</p> : (
+          <div className="section-h" style={{ margin: "0 0 4px" }}>Best times over the next 4 weeks</div>
+          {dayslotCounts.size === 0 && days.length > 0 ? (
+            /* legacy events answered as day-only chips */
             <div className="stack" style={{ gap: 4 }} data-testid="gr-month-days">
               {days.map(([value, n]) => (
                 <div key={value} className="stack" style={{ gap: 2, ...pickedStyle(value), paddingLeft: sel && selVals.has(value) ? 6 : 0 }}>
                   <div className="row between"><span className="small">{dayLabel(value)}</span><span className="muted small">{n}</span></div>
                   <div className="tally"><span style={{ width: `${(n / dayTop) * 100}%` }} /></div>
                 </div>
+              ))}
+            </div>
+          ) : dayslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
+            <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-month-heat">
+              <div />
+              {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
+              {monthDates28.map((d) => (
+                <Fragment key={d.value}>
+                  <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
+                  {DAYPARTS.map((dp) => {
+                    const key = `${d.value}:${dp.value}`;
+                    const n = dayslotCounts.get(key) ?? 0;
+                    return (
+                      <button key={dp.value} type="button" className="cell" data-testid={`grm-pick-${d.value}-${dp.value}`}
+                        onClick={() => togglePick(key, `${d.value}T${String(DAYPART_HOUR[dp.value]).padStart(2, "0")}:00`)}
+                        style={{ ...heatStyle(n, dayslotTop), ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
+                        {n > 0 ? n : ""}
+                      </button>
+                    );
+                  })}
+                </Fragment>
               ))}
             </div>
           )}
@@ -1326,11 +1413,14 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                 <Fragment key={dp.value}>
                   <div className="day" style={{ textAlign: "left" }}>{dp.label}</div>
                   {WEEKDAYS.map((_, wd) => {
-                    const n = slotCounts.get(slotKey(wd, dp.value)) ?? 0;
+                    const key = slotKey(wd, dp.value);
+                    const n = slotCounts.get(key) ?? 0;
                     return (
-                      <div key={wd} className="cell" style={{ ...heatStyle(n, slotTop), ...pickedStyle(slotKey(wd, dp.value)), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700 }}>
+                      <button key={wd} type="button" className="cell" data-testid={`grg-pick-${wd}-${dp.value}`}
+                        onClick={() => togglePick(key, nextDateOfWeekday(wd, DAYPART_HOUR[dp.value]))}
+                        style={{ ...heatStyle(n, slotTop), ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
                         {n > 0 ? n : ""}
-                      </div>
+                      </button>
                     );
                   })}
                 </Fragment>
@@ -1364,7 +1454,20 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
       )}
 
       <div className="divider" />
-      <div className="muted small">Pick the winning date{pickCount > 1 ? "s" : ""} &amp; time{pickCount > 1 ? "s" : ""} from the availability above:</div>
+      <div className="muted small">
+        {canPick ? "Tap winning cells above to schedule them" : "Pick the winning date & time"}
+        {canPick ? " — or type times manually:" : ":"}
+      </div>
+      {picked.size > 0 && (
+        <div className="row wrap" style={{ gap: 6 }} data-testid="picked-cells">
+          {[...picked.entries()].map(([key, v]) => (
+            <button key={key} type="button" className="chip sm on" data-testid={`picked-${key}`}
+              onClick={() => togglePick(key, v)} title="Tap to remove">
+              {fmtDateTime(new Date(v).toISOString())} ✕
+            </button>
+          ))}
+        </div>
+      )}
       <div className="row">
         <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="general-finalize-time" value={when}
           onChange={(ev) => setWhen(ev.target.value)} />
