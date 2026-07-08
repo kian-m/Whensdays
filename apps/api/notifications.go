@@ -122,6 +122,25 @@ func (s *server) notifyReminder(ctx context.Context, ev db.Event) int {
 	})
 }
 
+// notifyRecap is the day-after email that closes the loop: pull everyone back
+// to the thread (the group's memory) and hand the host the next event
+// pre-filled. Post-event is where the next event is born.
+func (s *server) notifyRecap(ctx context.Context, ev db.Event) int {
+	return s.broadcastToGoing(ctx, ev, "How was "+ev.Title+"?", func(_, unsub string) emailContent {
+		return emailContent{
+			preheader: "Relive it — and plan the next one.",
+			heading:   "How was " + ev.Title + "? 📸",
+			lines:     []string{"Drop a photo or a highlight in the thread — it's the group's memory now.", "And if it was a good one… same time next month?"},
+			ctaLabel:  "Drop a pic 📸",
+			ctaURL:    campaignURL(s.eventURL(ev.ID), "recap"),
+			cta2Label: "Plan the next one",
+			cta2URL:   campaignURL(s.appOrigin+"/new?again="+uuidStr(ev.ID), "recap_next"),
+			logoURL:   s.logoURL(),
+			unsubURL:  unsub,
+		}
+	})
+}
+
 // notifyNewComment tells the host someone commented (unless the host is the actor).
 func (s *server) notifyNewComment(ctx context.Context, ev db.Event, actorID, actorName, text string) {
 	s.notifyHostActivity(ctx, ev, actorID, "comment",

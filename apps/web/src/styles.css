@@ -589,17 +589,26 @@ textarea.input { resize: vertical; min-height: 64px; }
   50% { opacity: 0.55; }
   75% { opacity: 0.9; }
 }
-/* Reduced motion (common on iPhones — Settings → Accessibility → Motion):
-   respect the setting by stopping the MOTION, not the vibe. Particles freeze
-   into a static scatter (each delay-group parked at a different height) instead
-   of disappearing entirely — hiding the layer read as "animations are broken
-   on mobile". !important overrides the per-theme top/bottom variants. */
+/* Static particle mode (.fx-static, set by ThemeFx in JS) — used when motion
+   can't or shouldn't play: prefers-reduced-motion, AND iOS Low Power Mode,
+   which PAUSES CSS animations mid-frame (frozen mid-fall confetti reads as a
+   bug). Instead of freezing or hiding, particles become a DESIGNED scatter:
+   parked in height bands with varied rotation + opacity, like decoration.
+   !important overrides the per-theme top/bottom variants. */
+.theme-fx.fx-static .fx-p { animation: none !important; opacity: 0.55; top: 10% !important; bottom: auto !important; }
+.theme-fx.fx-static .fx-p:nth-child(5n+2) { top: 31% !important; }
+.theme-fx.fx-static .fx-p:nth-child(5n+3) { top: 52% !important; }
+.theme-fx.fx-static .fx-p:nth-child(5n+4) { top: 71% !important; }
+.theme-fx.fx-static .fx-p:nth-child(5n+5) { top: 87% !important; }
+.theme-fx.fx-static .fx-p:nth-child(3n)   { opacity: 0.38; }
+.theme-fx.fx-static .fx-p:nth-child(4n+1) { opacity: 0.7; }
+/* confetti + leaves get sprinkle rotations so they read as intentional */
+.fx-static.fx-party .fx-p:nth-child(2n)   { transform: rotate(38deg); }
+.fx-static.fx-party .fx-p:nth-child(3n)   { transform: rotate(-24deg); }
+.fx-static.fx-party .fx-p:nth-child(7n+2) { transform: rotate(80deg); }
+.fx-static.fx-forest .fx-p:nth-child(2n)   { transform: rotate(28deg); }
+.fx-static.fx-forest .fx-p:nth-child(3n+1) { transform: rotate(-38deg); }
 @media (prefers-reduced-motion: reduce) {
-  .theme-fx .fx-p { animation: none; opacity: 0.65; top: 12% !important; bottom: auto !important; }
-  .theme-fx .fx-p:nth-child(5n+2) { top: 33% !important; }
-  .theme-fx .fx-p:nth-child(5n+3) { top: 54% !important; }
-  .theme-fx .fx-p:nth-child(5n+4) { top: 72% !important; }
-  .theme-fx .fx-p:nth-child(5n+5) { top: 88% !important; }
   .event-theme.theme-cozy::after { animation: none; }
 }
 

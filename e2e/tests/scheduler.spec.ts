@@ -201,6 +201,28 @@ test.describe("scheduler", () => {
     await expect(page.getByText(/October 11/)).toBeVisible();
   });
 
+  test("plan the next one: ?again= prefills the wizard from a past event", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "again1", "Again One", "again1");
+    const title = `Round1 ${test.info().testId}-${Date.now()}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-party").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-12-01T19:00");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
+
+    // The recap email's "Plan the next one" link lands here — prefilled.
+    await page.goto(`/new?again=${id}`);
+    await expect(page.getByTestId("event-title")).toHaveValue(title);
+  });
+
   test("mute event notifications toggles and persists", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
     await ensureUser(page, "mute1", "Mute One", "mute1");

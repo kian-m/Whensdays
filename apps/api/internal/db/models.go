@@ -127,6 +127,11 @@ type EventPreferenceAnswer struct {
 	Answer      string      `json:"answer"`
 }
 
+type EventRecap struct {
+	EventID pgtype.UUID        `json:"event_id"`
+	SentAt  pgtype.Timestamptz `json:"sent_at"`
+}
+
 type EventTimeOption struct {
 	ID       pgtype.UUID        `json:"id"`
 	EventID  pgtype.UUID        `json:"event_id"`

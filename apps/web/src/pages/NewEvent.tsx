@@ -17,10 +17,27 @@ export function NewEvent() {
   // Arriving from a group page (?group=<id>) attaches the event to that group.
   const [params] = useSearchParams();
   const groupId = params.get("group") || "";
+  // "Plan the next one" (?again=<eventId>, from the recap email / a past event):
+  // prefill the wizard from that event so re-hosting is one pass of Next-taps.
+  const againId = params.get("again") || "";
 
   useEffect(() => {
-    analytics.capture(EVENTS.createEventOpened);
+    analytics.capture(EVENTS.createEventOpened, againId ? { again: true } : undefined);
   }, []);
+
+  useEffect(() => {
+    if (!againId) return;
+    getJSON<{ event: { title: string; event_type: EventType; description: string; location_mode: "host_place" | "find_venue"; location_address: string } }>(
+      api, `/api/events/${againId}`,
+    ).then((d) => {
+      setTitle(d.event.title);
+      setType(d.event.event_type);
+      setDescription(d.event.description);
+      setLocationMode(d.event.location_mode);
+      setAddress(d.event.location_address);
+    }).catch(() => { /* stale link — start blank */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [againId]);
 
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");

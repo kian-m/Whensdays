@@ -48,8 +48,22 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent})
-	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent})
+	// Day-after recaps ride the same daily tick: yesterday's events get the
+	// "how was it? plan the next one" email (idempotent via event_recaps).
+	recapped := 0
+	if recaps, err := s.queries.ListEventsNeedingRecap(r.Context()); err == nil {
+		for _, ev := range recaps {
+			if s.notifyRecap(r.Context(), ev) > 0 {
+				recapped++
+			}
+			if err := s.queries.MarkRecapSent(r.Context(), ev.ID); err != nil {
+				s.internal(w, "mark recapped", err)
+				return
+			}
+		}
+	}
+	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped})
+	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped})
 }
 
 // ---------------------- public discovery ----------------------

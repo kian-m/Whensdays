@@ -47,9 +47,31 @@ const THEME_FX: Record<string, { count: number; glyph?: string }> = {
 
 function ThemeFx({ theme }: { theme: string }) {
   const fx = THEME_FX[theme];
+  // Static mode when motion can't/shouldn't play. Two triggers:
+  //  1. prefers-reduced-motion (accessibility setting), known up front;
+  //  2. iOS Low Power Mode, which PAUSES CSS animations mid-frame — frozen
+  //     mid-fall confetti reads as a bug. No API exposes it, so probe: sample a
+  //     particle's animated transform twice; if it hasn't moved, animations are
+  //     stalled → switch to the designed static scatter (.fx-static).
+  const [staticFx, setStaticFx] = useState(() =>
+    typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const layerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (staticFx) return;
+    const el = layerRef.current?.querySelector<HTMLElement>(".fx-p");
+    if (!el) return;
+    const first = getComputedStyle(el).transform;
+    const t = setTimeout(() => {
+      if (document.visibilityState !== "visible") return;
+      const again = layerRef.current?.querySelector<HTMLElement>(".fx-p");
+      if (again && getComputedStyle(again).transform === first) setStaticFx(true);
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme]);
   if (!fx) return null;
   return (
-    <div className={`theme-fx fx-${theme}`} aria-hidden="true">
+    <div className={`theme-fx fx-${theme} ${staticFx ? "fx-static" : ""}`} aria-hidden="true" ref={layerRef}>
       {Array.from({ length: fx.count }).map((_, i) => (
         <span className="fx-p" key={i}>{fx.glyph ?? ""}</span>
       ))}
