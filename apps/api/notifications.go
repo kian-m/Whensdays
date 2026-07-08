@@ -97,22 +97,44 @@ func (s *server) broadcastToGoing(ctx context.Context, ev db.Event, subject stri
 	return len(contacts)
 }
 
-// notifyFinalized emails every 'going', unmuted attendee once a time is locked in.
-func (s *server) notifyFinalized(ctx context.Context, ev db.Event) {
-	s.broadcastToGoing(ctx, ev, fmt.Sprintf("It's on — %s is locked in 🎉", ev.Title), func(_, unsub string) emailContent {
-		return emailContent{
+// notifyFinalized announces the locked-in date(s) to EVERYONE meaningfully
+// attached: going + maybe attendees AND invited people who haven't answered
+// (in a poll most of the group has only voted, not RSVP'd). Declines and mutes
+// are respected. Multi-date finalizes list every date.
+func (s *server) notifyFinalized(ctx context.Context, ev db.Event, extra []pgtype.Timestamptz) {
+	if !s.notify.Enabled() {
+		return
+	}
+	contacts, err := s.queries.ListFinalizeContacts(ctx, ev.ID)
+	if err != nil {
+		return
+	}
+	meta := eventMeta(ev)
+	heading, line := ev.Title+" has a time 🎉", "Good news — the group landed on a time. Add it to your calendar so it actually happens."
+	if len(extra) > 0 {
+		heading = fmt.Sprintf("%s has its dates 🎉", ev.Title)
+		line = fmt.Sprintf("Good news — the group locked in %d dates. Add them to your calendar so they actually happen.", 1+len(extra))
+		loc := eventLocation(ev)
+		for _, ts := range extra {
+			meta = append(meta, emailMetaRow{"Also", ts.Time.In(loc).Format("Mon Jan 2 · 3:04 PM MST")})
+		}
+	}
+	subject := fmt.Sprintf("It's on — %s is locked in 🎉", ev.Title)
+	for _, c := range contacts {
+		body := renderEmail(emailContent{
 			preheader: "A time is set — here are the details.",
-			heading:   ev.Title + " has a time 🎉",
-			lines:     []string{"Good news — the group landed on a time. Add it to your calendar so it actually happens."},
-			meta:      eventMeta(ev),
+			heading:   heading,
+			lines:     []string{line},
+			meta:      meta,
 			ctaLabel:  "View the plan →",
 			ctaURL:    campaignURL(s.eventURL(ev.ID), "finalized"),
 			logoURL:   s.logoURL(),
-			unsubURL:  unsub,
+			unsubURL:  s.muteLink(c.UserID, uuidStr(ev.ID)),
 			coverURL:  eventCover(ev),
 			theme:     ev.Theme,
-		}
-	})
+		})
+		s.notify.Send([]string{c.Email}, subject, body)
+	}
 }
 
 // sendReminders sends tomorrow's reminders with per-recipient DIGESTING: a
@@ -269,50 +291,168 @@ func (s *server) notifySeriesEnded(ctx context.Context, ev db.Event) {
 	s.notify.Send([]string{host.Email}, "Plan the next "+ev.Title+"?", body)
 }
 
-// notifyNewComment tells the host someone commented (unless the host is the actor).
+// --- host-activity digest -----------------------------------------------
+//
+// Comments and RSVPs do NOT email the host per action — someone flip-flopping
+// an RSVP or posting five comments would be spam. Instead each action enqueues
+// into notification_queue; a flusher (started from main, every 5 min) drains
+// items older than digestWindowMins, collapses them (latest RSVP per person
+// wins; comments keep up to a few quotes), and sends ONE digest per host.
+
+const digestWindowMins = 10
+
+// notifyNewComment queues a comment notification for the host.
 func (s *server) notifyNewComment(ctx context.Context, ev db.Event, actorID, actorName, text string) {
-	s.notifyHostActivity(ctx, ev, actorID, "comment",
-		fmt.Sprintf("💬 %s commented on %s", actorName, ev.Title),
-		actorName+" commented on "+ev.Title,
-		[]string{actorName + " left a comment:"},
-		text)
+	s.enqueueActivity(ctx, ev, "comment", actorID, actorName, text)
 }
 
-// notifyNewRSVP tells the host someone RSVP'd going (unless the host is the actor).
+// notifyNewRSVP queues a going-RSVP notification for the host.
 func (s *server) notifyNewRSVP(ctx context.Context, ev db.Event, actorID, actorName string) {
-	s.notifyHostActivity(ctx, ev, actorID, "rsvp",
-		fmt.Sprintf("✅ %s is going to %s", actorName, ev.Title),
-		actorName+" is going to "+ev.Title,
-		[]string{actorName + " just RSVP'd — they're going. 🎉"},
-		"")
+	s.enqueueActivity(ctx, ev, "rsvp", actorID, actorName, "")
 }
 
-// notifyHostActivity is the shared "someone did something on your event" mail.
-// Hosts are subscribed to their own events' activity by default; the message is
-// skipped when the host themselves is the actor.
-func (s *server) notifyHostActivity(ctx context.Context, ev db.Event, actorID, campaign, subject, heading string, lines []string, quote string) {
+func (s *server) enqueueActivity(ctx context.Context, ev db.Event, kind, actorID, actorName, body string) {
 	if !s.notify.Enabled() || actorID == ev.HostID {
 		return
 	}
-	// Honour a host who muted this event's activity stream.
-	if muted, _ := s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: ev.ID, UserID: ev.HostID}); muted {
-		return
-	}
-	host, err := s.queries.GetProfile(ctx, ev.HostID)
-	if err != nil || host.Email == "" {
-		return
-	}
-	body := renderEmail(emailContent{
-		preheader: heading,
-		heading:   heading,
-		lines:     lines,
-		quote:     quote,
-		ctaLabel:  "Open your event →",
-		ctaURL:    campaignURL(s.eventURL(ev.ID), campaign),
-		logoURL:   s.logoURL(),
-		unsubURL:  s.muteLink(ev.HostID, uuidStr(ev.ID)),
-		coverURL:  eventCover(ev),
-		theme:     ev.Theme,
+	_ = s.queries.EnqueueNotification(ctx, db.EnqueueNotificationParams{
+		RecipientID: ev.HostID, EventID: ev.ID, Kind: kind,
+		ActorID: actorID, ActorName: actorName, Body: body,
 	})
-	s.notify.Send([]string{host.Email}, subject, body)
+}
+
+// digestLine is one collapsed update inside a digest.
+type digestLine struct {
+	eventID pgtype.UUID
+	text    string
+}
+
+// collapseActivity turns raw queue rows into per-recipient digest lines:
+// RSVP flip-flops collapse to the latest per (actor, event); comments all
+// survive. Pure — unit-tested without a DB.
+func collapseActivity(rows []db.DrainDueNotificationsRow) map[string][]digestLine {
+	out := map[string][]digestLine{}
+	seenRsvp := map[string]bool{} // recipient|event|actor — latest wins (rows scan newest-last, so walk backwards)
+	for i := len(rows) - 1; i >= 0; i-- {
+		r := rows[i]
+		if r.Kind == "rsvp" {
+			k := r.RecipientID + "|" + uuidStr(r.EventID) + "|" + r.ActorID
+			if seenRsvp[k] {
+				continue
+			}
+			seenRsvp[k] = true
+			out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, "✅ " + r.ActorName + " is going"})
+			continue
+		}
+		text := r.Body
+		if len(text) > 120 {
+			text = text[:117] + "…"
+		}
+		if text == "" {
+			text = "sent a GIF"
+		}
+		out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, "💬 " + r.ActorName + ": " + text})
+	}
+	// walking backwards reversed the order — restore oldest-first per recipient
+	for k := range out {
+		lines := out[k]
+		for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
+			lines[i], lines[j] = lines[j], lines[i]
+		}
+	}
+	return out
+}
+
+// startNotificationFlusher drains + sends activity digests on a fixed cadence.
+// Safe with multiple instances: DrainDueNotifications claims rows atomically.
+func (s *server) startNotificationFlusher(ctx context.Context) {
+	if !s.notify.Enabled() {
+		return
+	}
+	t := time.NewTicker(5 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.flushActivityDigests(ctx)
+		}
+	}
+}
+
+func (s *server) flushActivityDigests(ctx context.Context) {
+	rows, err := s.queries.DrainDueNotifications(ctx, digestWindowMins)
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	for recipient, lines := range collapseActivity(rows) {
+		// Mute + email checks happen at SEND time (state may have changed while
+		// queued). Muted events drop out of the digest.
+		prof, perr := s.queries.GetProfile(ctx, recipient)
+		if perr != nil || prof.Email == "" {
+			continue
+		}
+		byEvent := map[string][]string{}
+		muted := map[string]bool{}
+		eventOrder := []pgtype.UUID{}
+		for _, ln := range lines {
+			k := uuidStr(ln.eventID)
+			if _, checked := muted[k]; !checked {
+				m, _ := s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: ln.eventID, UserID: recipient})
+				muted[k] = m
+				if !m {
+					eventOrder = append(eventOrder, ln.eventID)
+				}
+			}
+			if muted[k] {
+				continue
+			}
+			byEvent[k] = append(byEvent[k], ln.text)
+		}
+		items := []emailItem{}
+		total := 0
+		for _, evID := range eventOrder {
+			k := uuidStr(evID)
+			if len(byEvent[k]) == 0 {
+				continue
+			}
+			ev, gerr := s.queries.GetEvent(ctx, evID)
+			if gerr != nil || ev.Status == "cancelled" {
+				continue
+			}
+			summary := strings.Join(byEvent[k], "  ·  ")
+			if len(summary) > 300 {
+				summary = summary[:297] + "…"
+			}
+			items = append(items, emailItem{
+				title:   ev.Title,
+				when:    summary,
+				url:     campaignURL(s.eventURL(ev.ID), "activity"),
+				muteURL: s.muteLink(recipient, uuidStr(ev.ID)),
+			})
+			total += len(byEvent[k])
+		}
+		if len(items) == 0 {
+			continue
+		}
+		subject := fmt.Sprintf("%d update%s on %s", total, plural(total), items[0].title)
+		if len(items) > 1 {
+			subject = fmt.Sprintf("%d updates on your events", total)
+		}
+		body := renderEmail(emailContent{
+			preheader: "The latest from your plans.",
+			heading:   subject,
+			items:     items,
+			logoURL:   s.logoURL(),
+		})
+		s.notify.Send([]string{prof.Email}, subject, body)
+	}
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }

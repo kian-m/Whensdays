@@ -1331,7 +1331,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.analytics.Capture(uid, "event_finalized", map[string]any{"event_id": r.PathValue("id"), "dates": 1 + len(extra)})
-	s.notifyFinalized(r.Context(), ev)
+	s.notifyFinalized(r.Context(), ev, extra)
 	writeJSON(w, http.StatusOK, ev)
 }
 

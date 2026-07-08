@@ -22,3 +22,19 @@ FROM event_attendees a
 JOIN profiles p ON p.user_id = a.user_id
 WHERE a.event_id = $1 AND a.rsvp = 'going' AND p.email <> ''
   AND NOT EXISTS (SELECT 1 FROM event_mutes m WHERE m.event_id = a.event_id AND m.user_id = a.user_id);
+
+-- name: ListFinalizeContacts :many
+-- The finalize announcement audience: everyone meaningfully attached — going
+-- AND maybe attendees, plus invited people who haven't answered yet (in a poll
+-- most of the group hasn't formally RSVP'd). Deduped, email required,
+-- mute-filtered. Declines are respected and skipped.
+SELECT DISTINCT u.user_id, p.email
+FROM (
+    SELECT a.user_id FROM event_attendees a WHERE a.event_id = $1::uuid AND a.rsvp IN ('going', 'maybe')
+    UNION
+    SELECT i.user_id FROM event_invites i WHERE i.event_id = $1::uuid
+) u
+JOIN profiles p ON p.user_id = u.user_id
+WHERE p.email <> ''
+  AND NOT EXISTS (SELECT 1 FROM event_mutes m WHERE m.event_id = $1::uuid AND m.user_id = u.user_id)
+  AND NOT EXISTS (SELECT 1 FROM event_attendees d WHERE d.event_id = $1::uuid AND d.user_id = u.user_id AND d.rsvp = 'declined');

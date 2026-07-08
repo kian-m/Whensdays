@@ -29,6 +29,48 @@ func (q *Queries) IsEventMuted(ctx context.Context, arg IsEventMutedParams) (boo
 	return muted, err
 }
 
+const listFinalizeContacts = `-- name: ListFinalizeContacts :many
+SELECT DISTINCT u.user_id, p.email
+FROM (
+    SELECT a.user_id FROM event_attendees a WHERE a.event_id = $1::uuid AND a.rsvp IN ('going', 'maybe')
+    UNION
+    SELECT i.user_id FROM event_invites i WHERE i.event_id = $1::uuid
+) u
+JOIN profiles p ON p.user_id = u.user_id
+WHERE p.email <> ''
+  AND NOT EXISTS (SELECT 1 FROM event_mutes m WHERE m.event_id = $1::uuid AND m.user_id = u.user_id)
+  AND NOT EXISTS (SELECT 1 FROM event_attendees d WHERE d.event_id = $1::uuid AND d.user_id = u.user_id AND d.rsvp = 'declined')
+`
+
+type ListFinalizeContactsRow struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+}
+
+// The finalize announcement audience: everyone meaningfully attached — going
+// AND maybe attendees, plus invited people who haven't answered yet (in a poll
+// most of the group hasn't formally RSVP'd). Deduped, email required,
+// mute-filtered. Declines are respected and skipped.
+func (q *Queries) ListFinalizeContacts(ctx context.Context, dollar_1 pgtype.UUID) ([]ListFinalizeContactsRow, error) {
+	rows, err := q.db.Query(ctx, listFinalizeContacts, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListFinalizeContactsRow{}
+	for rows.Next() {
+		var i ListFinalizeContactsRow
+		if err := rows.Scan(&i.UserID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGoingAttendeeContacts = `-- name: ListGoingAttendeeContacts :many
 SELECT a.user_id, p.email
 FROM event_attendees a

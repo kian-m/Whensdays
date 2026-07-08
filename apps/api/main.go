@@ -200,6 +200,12 @@ func main() {
 	mux.Handle("GET /api/flags", auth(http.HandlerFunc(s.handleFlags)))
 
 	port := envOr("API_PORT", "8080")
+	// Activity emails (comments/RSVPs) are digested: the flusher drains the
+	// notification queue every 5 minutes and sends one email per host instead of
+	// per action. No-ops when email is disabled. min-instances=1 keeps it alive;
+	// the drain is atomic so a second instance can't double-send.
+	go s.startNotificationFlusher(context.Background())
+
 	srv := &http.Server{
 		Addr: ":" + port,
 		// telemetry (innermost) captures per-request metrics to PostHog.

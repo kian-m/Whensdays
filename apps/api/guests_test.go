@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/clsandbox/api/internal/db"
 	"github.com/clsandbox/api/internal/notify"
 )
 
@@ -162,5 +163,30 @@ func TestCampaignURL(t *testing.T) {
 	// Preserves an existing query string with & instead of ?.
 	if q := campaignURL("https://w.app/e/abc?x=1", "reminder"); !strings.Contains(q, "?x=1&utm_source=") {
 		t.Fatalf("existing query not preserved: %s", q)
+	}
+}
+
+func TestCollapseActivity(t *testing.T) {
+	ev1, ev2 := newUUID(), newUUID()
+	rows := []db.DrainDueNotificationsRow{
+		{RecipientID: "host", EventID: ev1, Kind: "rsvp", ActorID: "u1", ActorName: "Maya"},
+		{RecipientID: "host", EventID: ev1, Kind: "comment", ActorID: "u2", ActorName: "Dev", Body: "see you there"},
+		{RecipientID: "host", EventID: ev1, Kind: "rsvp", ActorID: "u1", ActorName: "Maya"}, // flip-flop → one line
+		{RecipientID: "host", EventID: ev2, Kind: "comment", ActorID: "u3", ActorName: "Sam", Body: ""},
+		{RecipientID: "other", EventID: ev2, Kind: "rsvp", ActorID: "u1", ActorName: "Maya"},
+	}
+	got := collapseActivity(rows)
+	if len(got["host"]) != 3 {
+		t.Fatalf("host lines = %d, want 3 (rsvp collapsed): %+v", len(got["host"]), got["host"])
+	}
+	if len(got["other"]) != 1 {
+		t.Fatalf("other lines = %d, want 1", len(got["other"]))
+	}
+	joined := ""
+	for _, l := range got["host"] {
+		joined += l.text + "\n"
+	}
+	if !strings.Contains(joined, "Maya is going") || !strings.Contains(joined, "Dev: see you there") || !strings.Contains(joined, "sent a GIF") {
+		t.Fatalf("unexpected digest lines: %s", joined)
 	}
 }

@@ -182,6 +182,17 @@ type Note struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type NotificationQueue struct {
+	ID          pgtype.UUID        `json:"id"`
+	RecipientID string             `json:"recipient_id"`
+	EventID     pgtype.UUID        `json:"event_id"`
+	Kind        string             `json:"kind"`
+	ActorID     string             `json:"actor_id"`
+	ActorName   string             `json:"actor_name"`
+	Body        string             `json:"body"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type Profile struct {
 	UserID      string             `json:"user_id"`
 	DisplayName string             `json:"display_name"`
