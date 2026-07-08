@@ -54,8 +54,12 @@ type emailContent struct {
 	quote     string         // optional highlighted snippet (e.g. a comment)
 	ctaLabel  string         // button text
 	ctaURL    string         // button href (already UTM-tagged by the caller)
-	logoURL   string         // hosted PNG logo (APP_ORIGIN/apple-touch-icon.png)
-	unsubURL  string         // optional one-click mute link for THIS recipient
+	cta2Label string         // optional secondary button (ghost style)
+	cta2URL   string
+	moreLabel string // optional centered text link under the buttons
+	moreURL   string
+	logoURL   string // hosted PNG logo (APP_ORIGIN/apple-touch-icon.png)
+	unsubURL  string // optional one-click mute link for THIS recipient
 }
 
 func esc(s string) string { return html.EscapeString(s) }
@@ -111,8 +115,19 @@ func renderEmail(c emailContent) string {
 	}
 
 	if c.ctaURL != "" && c.ctaLabel != "" {
-		fmt.Fprintf(&b, `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 4px"><tr><td style="border-radius:10px;background:linear-gradient(120deg,%s,%s)"><a href="%s" style="display:inline-block;padding:12px 26px;font-size:15px;font-weight:700;color:#fff;text-decoration:none;border-radius:10px">%s</a></td></tr></table>`,
+		b.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 4px"><tr>`)
+		fmt.Fprintf(&b, `<td style="border-radius:10px;background:linear-gradient(120deg,%s,%s)"><a href="%s" style="display:inline-block;padding:12px 26px;font-size:15px;font-weight:700;color:#fff;text-decoration:none;border-radius:10px">%s</a></td>`,
 			emailAccent, emailAccnt2, esc(c.ctaURL), esc(c.ctaLabel))
+		// Secondary action (e.g. "Can't make it") as a quiet ghost button.
+		if c.cta2URL != "" && c.cta2Label != "" {
+			fmt.Fprintf(&b, `<td style="width:10px"></td><td style="border-radius:10px;border:1px solid %s"><a href="%s" style="display:inline-block;padding:11px 20px;font-size:15px;font-weight:600;color:%s;text-decoration:none;border-radius:10px">%s</a></td>`,
+				emailLine, esc(c.cta2URL), esc(emailInk), esc(c.cta2Label))
+		}
+		b.WriteString(`</tr></table>`)
+	}
+	if c.moreURL != "" && c.moreLabel != "" {
+		fmt.Fprintf(&b, `<p style="margin:10px 0 0;font-size:13px"><a href="%s" style="color:%s;text-decoration:underline">%s</a></p>`,
+			esc(c.moreURL), emailMuted, esc(c.moreLabel))
 	}
 
 	b.WriteString(`</td></tr></table>`)

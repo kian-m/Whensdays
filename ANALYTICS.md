@@ -106,7 +106,10 @@ attribution is done with UTM tags, not a tracking pixel. Every link in a
 Whensdays email is built by `campaignURL` (`apps/api/emails.go`) as
 `?utm_source=whensdays&utm_medium=email&utm_campaign=email_<type>` — one
 `utm_campaign` per email type: `email_finalized`, `email_reminder`,
-`email_comment`, `email_rsvp`, `email_invite`, `email_cancelled`. PostHog
+`email_comment`, `email_rsvp`, `email_invite`, `email_cancelled`, `email_nudge`.
+One-tap RSVP buttons in email fire the backend `rsvp_submitted` with
+`via: "email"` (and `nudge_sent` counts recipients), so inbox-only conversions
+are still attributable without any pageview. PostHog
 auto-captures `utm_*` on the landing `$pageview`, so email-driven visits (and any
 downstream conversion) are attributable per campaign in the same funnels — no new
 event names to wire. Add a matching `email_<type>` when you add an email trigger.

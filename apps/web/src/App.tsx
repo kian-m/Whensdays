@@ -370,7 +370,6 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
               <NavLink to="/" end>Events{badges.invites > 0 && <span className="dot-badge" data-testid="nav-badge-events">{badges.invites}</span>}</NavLink>
               <NavLink to="/friends">Friends{badges.friend_requests > 0 && <span className="dot-badge" data-testid="nav-badge-friends">{badges.friend_requests}</span>}</NavLink>
               <NavLink to="/groups">Groups</NavLink>
-              <NavLink to="/discover">Discover</NavLink>
               <NavLink to="/calendars">Calendars</NavLink>
               <NavLink to="/profile">Profile</NavLink>
             </div>
@@ -412,11 +411,13 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
 
 // Bottom tab bar for mobile (CSS hides it on wider screens). Same destinations
 // as the top nav, as icon + label — inspired by app-style bottom navigation.
+// Discover is deliberately NOT here (roadmap: no public social surface before
+// group density — empty rooms kill trust). Its routes stay live for direct
+// links; re-add the tab when there's density to show.
 const TABS = [
   { to: "/", id: "events", label: "Events", end: true, icon: IconHome },
   { to: "/friends", id: "friends", label: "Friends", icon: IconFriends },
   { to: "/groups", id: "groups", label: "Groups", icon: IconGroups },
-  { to: "/discover", id: "discover", label: "Discover", icon: IconCompass },
   { to: "/calendars", id: "calendars", label: "Calendars", icon: IconCalendar },
   { to: "/profile", id: "profile", label: "Profile", icon: IconUser },
 ];
@@ -458,6 +459,9 @@ function IconFriends(_: IconProps) {
     <svg {...svgProps}><circle cx="9.5" cy="8" r="3.2" /><path d="M3.8 19v-1a4 4 0 0 1 4-4h3.4a4 4 0 0 1 4 4v1" /><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6" /><path d="M17.5 14.2A4 4 0 0 1 20.2 18v1" /></svg>
   );
 }
+// IconCompass belonged to the Discover tab — kept for when Discover returns to
+// the nav (see the TABS comment); referenced here so strict TS keeps it.
+void IconCompass;
 function IconCompass(_: IconProps) {
   return (
     <svg {...svgProps}><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2 5-5 2 2-5z" /></svg>

@@ -15,8 +15,9 @@
   --go: #34b986;
   --maybe: #e2a33d;
   --no: #e2606e;
-  --radius: 10px;      /* cards / panels */
-  --radius-sm: 8px;    /* buttons / chips / inputs */
+  --radius: 14px;       /* cards / panels */
+  --radius-sm: 10px;    /* buttons / chips / inputs — crisp, editorial */
+  --radius-xs: 7px;     /* status pills / micro elements */
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 12px 32px rgba(0, 0, 0, 0.35);
   /* dusk sky — sunset through glass: coral glow sinking into teal-navy */
   --sky: linear-gradient(180deg, #16203a 0%, #121728 55%, #0e1220 100%);
@@ -97,10 +98,12 @@ body::after {
   body::after { animation: none; }
 }
 
-h1, h2, h3 { letter-spacing: -0.02em; line-height: 1.1; margin: 0; }
-h1 { font-size: 2rem; font-weight: 800; }
-h2 { font-size: 1.3rem; font-weight: 750; }
-h3 { font-size: 1.02rem; font-weight: 700; }
+/* type scale — display-weight headings with tight tracking read editorial,
+   not template. */
+h1, h2, h3 { letter-spacing: -0.025em; line-height: 1.08; margin: 0; }
+h1 { font-size: 2.2rem; font-weight: 850; }
+h2 { font-size: 1.35rem; font-weight: 800; }
+h3 { font-size: 1.02rem; font-weight: 750; }
 p { margin: 0; }
 a { color: inherit; text-decoration: none; }
 
@@ -142,7 +145,10 @@ a { color: inherit; text-decoration: none; }
   gap: 3px; color: var(--muted); font-size: 0.68rem; font-weight: 650; letter-spacing: -0.01em;
 }
 .tab svg { width: 24px; height: 24px; }
+.tab .icon-wrap { border-radius: var(--radius-sm); padding: 3px 14px; transition: background 0.15s ease; }
 .tab.active { color: var(--accent); }
+/* modern active indicator: a soft accent pill hugging the icon */
+.tab.active .icon-wrap { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 /* tiny red notification count on nav items */
 .dot-badge {
   background: var(--no); color: #fff; font-size: 0.62rem; font-weight: 800;
@@ -219,29 +225,35 @@ a { color: inherit; text-decoration: none; }
 }
 .ev .title { font-weight: 700; }
 
-/* buttons — square-ish crystal. The primary keeps a solid accent (contrast on
-   any sky); ghost/soft read as etched glass. */
+/* buttons — crisp, editorial, high-contrast. Sharp radius, confident weight,
+   real interaction physics: lift on hover, press on tap, visible focus ring.
+   Primary carries the coral gradient; ghost is a hairline-bordered dark surface.
+   Interaction feel lives here once — never per-component. */
 .btn {
-  font: inherit; font-weight: 650; cursor: pointer;
+  font: inherit; font-weight: 700; letter-spacing: -0.01em; cursor: pointer;
   border: 1px solid color-mix(in srgb, var(--accent) 80%, #000 20%);
-  border-radius: var(--radius-sm); padding: 0.6rem 1.1rem;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff 12%), var(--accent));
+  border-radius: var(--radius-sm); padding: 0.62rem 1.2rem;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
   color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
-  transition: filter 0.1s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 14px color-mix(in srgb, var(--accent) 34%, transparent);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
 }
-.btn:hover { filter: brightness(1.05); }
-.btn:disabled { opacity: 0.5; cursor: default; }
+.btn:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 6px 20px color-mix(in srgb, var(--accent) 42%, transparent); }
+.btn:active { transform: translateY(0) scale(0.98); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 8px color-mix(in srgb, var(--accent) 28%, transparent); }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: 0.5; cursor: default; transform: none; }
 .btn.ghost {
-  background: var(--glass-2); color: var(--ink); border-color: var(--glass-line);
+  background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--ink); border-color: var(--glass-line);
   box-shadow: inset 0 1px 0 var(--glass-glint);
 }
+.btn.ghost:hover { border-color: color-mix(in srgb, var(--ink) 30%, transparent); box-shadow: inset 0 1px 0 var(--glass-glint), 0 4px 14px rgba(0, 0, 0, 0.18); }
 .btn.soft {
   background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   box-shadow: inset 0 1px 0 var(--glass-glint);
 }
-.btn.sm { padding: 0.35rem 0.75rem; font-size: 0.85rem; }
+.btn.soft:hover { box-shadow: inset 0 1px 0 var(--glass-glint), 0 4px 14px color-mix(in srgb, var(--accent) 22%, transparent); }
+.btn.sm { padding: 0.35rem 0.85rem; font-size: 0.85rem; }
 .btn-block { width: 100%; text-align: center; }
 
 /* inputs */
@@ -251,22 +263,40 @@ label.field { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom
   border-radius: var(--radius-sm); background: var(--glass-2); color: var(--ink);
   box-shadow: inset 0 1px 0 var(--glass-glint);
 }
-.input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: inset 0 1px 0 var(--glass-glint), 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
 textarea.input { resize: vertical; min-height: 64px; }
 
-/* chips / pills */
+/* chips / pills — crisp and typographic. A selected chip fills with the accent
+   gradient and glows. Status pills read as editorial state labels: uppercase
+   letterspaced micro-type, hairline colored border, live status dot. */
 .chip {
   border: 1px solid var(--glass-line); background: var(--glass-2); border-radius: var(--radius-sm);
-  padding: 0.45rem 0.85rem; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+  padding: 0.45rem 0.9rem; font-weight: 600; font-size: 0.9rem; cursor: pointer;
   color: var(--ink); box-shadow: inset 0 1px 0 var(--glass-glint);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
-.chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-.pill { border-radius: 6px; padding: 0.15rem 0.6rem; font-size: 0.78rem; font-weight: 700; }
-.pill.going { background: rgba(35,160,115,0.14); color: var(--go); }
-.pill.maybe { background: rgba(197,143,45,0.16); color: var(--maybe); }
-.pill.declined { background: rgba(210,90,105,0.14); color: var(--no); }
-.pill.polling { background: var(--accent-soft); color: var(--accent); }
-.pill.scheduled { background: rgba(35,160,115,0.14); color: var(--go); }
+.chip:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--ink) 25%, transparent); }
+.chip:active { transform: scale(0.97); }
+.chip.on {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
+  color: #fff; border-color: transparent;
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--radius-xs); padding: 0.22rem 0.6rem;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase;
+  border: 1px solid transparent;
+}
+.pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.pill.going, .pill.scheduled { background: rgba(35,160,115,0.13); color: var(--go); border-color: rgba(35,160,115,0.35); }
+.pill.maybe { background: rgba(197,143,45,0.14); color: var(--maybe); border-color: rgba(197,143,45,0.36); }
+.pill.declined { background: rgba(210,90,105,0.13); color: var(--no); border-color: rgba(210,90,105,0.34); }
+.pill.polling { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 36%, transparent); }
+.pill.polling::before { animation: fx-twinkle 2s ease-in-out infinite; }
 
 /* availability grid */
 .grid {
@@ -374,7 +404,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 .theme-fx .fx-p:nth-child(5n+4) { animation-delay: -1.5s; }
 .theme-fx .fx-p:nth-child(5n+5) { animation-delay: -5.3s; }
 
-/* PARTY — confetti squares falling + tumbling, in the split-complementary palette */
+/* PARTY — confetti in three shapes (rects, ribbons, dots) and mixed speeds,
+   tumbling with a pendulum sway so the fall reads physical, not linear */
 .fx-party .fx-p { width: 8px; height: 13px; border-radius: 2px; animation: fx-fall 6s linear infinite; }
 .fx-party .fx-p:nth-child(6n+1) { background: #ee6c4d; }
 .fx-party .fx-p:nth-child(6n+2) { background: #e0a13b; }
@@ -382,9 +413,14 @@ textarea.input { resize: vertical; min-height: 64px; }
 .fx-party .fx-p:nth-child(6n+4) { background: #e0559b; }
 .fx-party .fx-p:nth-child(6n+5) { background: #7a8cff; }
 .fx-party .fx-p:nth-child(6n+6) { background: #3f9d6f; }
+.fx-party .fx-p:nth-child(2n)   { animation-name: fx-fall-sway; animation-duration: 7.4s; }
+.fx-party .fx-p:nth-child(3n)   { width: 11px; height: 18px; }             /* big ribbons */
+.fx-party .fx-p:nth-child(7n+2) { width: 6px; height: 6px; border-radius: 50%; animation-duration: 4.8s; } /* fast dots */
 
-/* FOREST — leaves (emoji) drifting down with a gentle sway */
-.fx-forest .fx-p { font-size: 20px; line-height: 1; animation: fx-fall 10s linear infinite; }
+/* FOREST — leaves in two sizes swaying down like real leaf-fall */
+.fx-forest .fx-p { font-size: 20px; line-height: 1; animation: fx-fall-sway 11s linear infinite; }
+.fx-forest .fx-p:nth-child(2n) { font-size: 15px; animation-duration: 14s; }
+.fx-forest .fx-p:nth-child(5n) { font-size: 24px; animation-duration: 9s; }
 
 /* NIGHT — twinkling stars: fixed dots scattered across the sky, no falling */
 .fx-night .fx-p { top: auto; width: 3px; height: 3px; border-radius: 50%; background: #fff;
@@ -393,26 +429,65 @@ textarea.input { resize: vertical; min-height: 64px; }
 .fx-night .fx-p:nth-child(4n+2) { top: 26%; }
 .fx-night .fx-p:nth-child(4n+3) { top: 44%; }
 .fx-night .fx-p:nth-child(4n+4) { top: 63%; }
+.fx-night .fx-p:nth-child(3n)   { width: 2px; height: 2px; animation-duration: 2.1s; }
+.fx-night .fx-p:nth-child(7n+3) { width: 4px; height: 4px; animation-duration: 4.6s; }
+/* two shooting stars streaking across on long cycles */
+.fx-night .fx-p:nth-child(9),
+.fx-night .fx-p:nth-child(18) {
+  top: 8%; width: 60px; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.95), transparent);
+  box-shadow: none; animation: fx-shoot 7s ease-in infinite;
+}
+.fx-night .fx-p:nth-child(18) { top: 30%; animation-delay: -3.5s; animation-duration: 9s; }
 
-/* COZY — embers rising from the bottom, plus a flickering hearth glow (::after) */
+/* COZY — embers in mixed sizes rising with a flame-like sway, over a hearth
+   glow that flickers like real firelight (::after) */
 .fx-cozy .fx-p { top: auto; bottom: -4vh; width: 5px; height: 5px; border-radius: 50%;
   background: radial-gradient(circle, #ffd07a, #e0662f 70%); box-shadow: 0 0 8px 2px rgba(224,102,47,0.7);
   animation: fx-rise 7s ease-in infinite; }
+.fx-cozy .fx-p:nth-child(2n)   { width: 3px; height: 3px; animation-duration: 5.2s; }
+.fx-cozy .fx-p:nth-child(5n+1) { width: 7px; height: 7px; animation-duration: 9s; }
+.fx-cozy .fx-p:nth-child(3n)   { animation-name: fx-rise-sway; }
 .event-theme.theme-cozy::after {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(90% 55% at 50% 112%, rgba(233,120,40,0.55), transparent 70%);
   animation: fx-flicker 4.5s ease-in-out infinite;
 }
 
-/* BEACH — warm sun-sparkles bobbing up like light on water */
+/* BEACH — warm sun-sparkles bobbing up like light on water, mixed speeds */
 .fx-beach .fx-p { top: auto; bottom: -4vh; width: 7px; height: 7px; border-radius: 50%;
   background: radial-gradient(circle, rgba(255,240,200,0.95), rgba(240,180,90,0.15) 70%);
-  box-shadow: 0 0 8px 1px rgba(255,225,150,0.6); animation: fx-rise 11s linear infinite; }
+  box-shadow: 0 0 8px 1px rgba(255,225,150,0.6); animation: fx-rise-sway 11s linear infinite; }
+.fx-beach .fx-p:nth-child(2n) { width: 5px; height: 5px; animation-duration: 14s; }
+.fx-beach .fx-p:nth-child(5n) { width: 9px; height: 9px; animation-duration: 8s; }
 
-/* NEON — big soft glow orbs drifting across the page */
+/* NEON — glow orbs in three hues drifting and breathing, cut by club lasers */
 .fx-neon .fx-p { top: 20%; width: 70px; height: 70px; border-radius: 50%; filter: blur(16px);
-  background: radial-gradient(circle, rgba(255,45,148,0.55), transparent 70%); animation: fx-drift 13s ease-in-out infinite; }
-.fx-neon .fx-p:nth-child(2n) { background: radial-gradient(circle, rgba(0,229,255,0.5), transparent 70%); top: 60%; }
+  background: radial-gradient(circle, rgba(255,45,148,0.55), transparent 70%);
+  animation: fx-drift 13s ease-in-out infinite, fx-pulse 5s ease-in-out infinite; }
+.fx-neon .fx-p:nth-child(2n) { background: radial-gradient(circle, rgba(0,229,255,0.5), transparent 70%); top: 60%; animation-duration: 16s, 6.4s; }
+.fx-neon .fx-p:nth-child(3n) { background: radial-gradient(circle, rgba(155,92,255,0.5), transparent 70%); top: 40%; width: 96px; height: 96px; }
+/* three laser beams — long thin glowing lines pivoting from the page edges,
+   sweeping back and forth (alternate) like club lights. Declared after the orb
+   rules so these fully override them for the chosen indexes. */
+.fx-neon .fx-p:nth-child(1), .fx-neon .fx-p:nth-child(7), .fx-neon .fx-p:nth-child(11) {
+  top: -2vh; left: -8vw; width: 160vmax; height: 2px; border-radius: 2px; filter: none;
+  background: linear-gradient(90deg, rgba(255,45,148,0.95), rgba(255,45,148,0.45) 60%, transparent);
+  box-shadow: 0 0 14px 2px rgba(255,45,148,0.5);
+  transform-origin: 0 50%;
+  animation: fx-laser 7s ease-in-out infinite alternate;
+}
+.fx-neon .fx-p:nth-child(7) {
+  top: auto; bottom: -2vh; left: auto; right: -8vw; transform-origin: 100% 50%;
+  background: linear-gradient(270deg, rgba(0,229,255,0.95), rgba(0,229,255,0.45) 60%, transparent);
+  box-shadow: 0 0 14px 2px rgba(0,229,255,0.5);
+  animation: fx-laser-rev 9s ease-in-out infinite alternate;
+}
+.fx-neon .fx-p:nth-child(11) {
+  top: 38vh; background: linear-gradient(90deg, rgba(155,92,255,0.9), rgba(155,92,255,0.4) 60%, transparent);
+  box-shadow: 0 0 14px 2px rgba(155,92,255,0.5);
+  animation-duration: 11s;
+}
 
 @keyframes fx-fall {
   0%   { transform: translateY(-10vh) translateX(0) rotate(0deg); opacity: 0; }
@@ -421,9 +496,70 @@ textarea.input { resize: vertical; min-height: 64px; }
   92%  { opacity: 1; }
   100% { transform: translateY(116vh) translateX(-14px) rotate(520deg); opacity: 0; }
 }
+/* fall with a pendulum sway — reads like paper/leaves, not raindrops */
+@keyframes fx-fall-sway {
+  0%   { transform: translateY(-10vh) translateX(0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 1; }
+  25%  { transform: translateY(24vh) translateX(-34px) rotate(140deg); }
+  50%  { transform: translateY(52vh) translateX(30px) rotate(300deg); }
+  75%  { transform: translateY(84vh) translateX(-26px) rotate(460deg); }
+  92%  { opacity: 1; }
+  100% { transform: translateY(116vh) translateX(18px) rotate(600deg); opacity: 0; }
+}
 @keyframes fx-twinkle {
   0%, 100% { opacity: 0.2; transform: scale(0.6); }
   50%      { opacity: 1; transform: scale(1.3); }
+}
+/* a shooting star: long idle, then a fast diagonal streak */
+@keyframes fx-shoot {
+  0%, 62%  { transform: translate(0, 0); opacity: 0; }
+  64%      { opacity: 1; }
+  74%      { transform: translate(46vw, 24vh); opacity: 0; }
+  100%     { transform: translate(46vw, 24vh); opacity: 0; }
+}
+/* rise with a flame-like side-to-side wobble */
+@keyframes fx-rise-sway {
+  0%   { transform: translateY(0) translateX(0); opacity: 0; }
+  15%  { opacity: 1; }
+  35%  { transform: translateY(-38vh) translateX(-16px); }
+  65%  { transform: translateY(-76vh) translateX(14px); }
+  85%  { opacity: 0.85; }
+  100% { transform: translateY(-120vh) translateX(-8px); opacity: 0; }
+}
+@keyframes fx-pulse {
+  0%, 100% { opacity: 0.75; scale: 1; }
+  50%      { opacity: 1; scale: 1.18; }
+}
+/* who's-in social-pressure bar (invite page): committed vs invited */
+.whosin-bar { height: 8px; border-radius: 999px; background: var(--glass-2); border: 1px solid var(--glass-line); overflow: hidden; }
+.whosin-bar span { display: block; height: 100%; border-radius: 999px; min-width: 4px;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #ffb46b 30%));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: width 0.5s cubic-bezier(0.2, 0.9, 0.3, 1); }
+
+/* the lock moment: a one-shot confetti burst + banner when a time is finalized */
+.theme-fx.fx-burst .fx-p { animation-iteration-count: 1; animation-fill-mode: forwards; animation-duration: 2.9s !important; animation-delay: 0s !important; }
+.fx-locked {
+  position: fixed; top: 28%; left: 50%; z-index: 4; pointer-events: none;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
+  color: #fff; font-weight: 800; font-size: 1.15rem; letter-spacing: -0.01em;
+  padding: 0.85rem 1.7rem; border-radius: var(--radius-sm);
+  box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: fx-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both, fx-fadeout 0.6s ease 2.6s both;
+}
+@keyframes fx-pop { from { transform: translateX(-50%) scale(0.4); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+@keyframes fx-fadeout { to { opacity: 0; } }
+
+/* club lasers: pivot sweep with a brightness swell mid-arc */
+@keyframes fx-laser {
+  0%   { transform: rotate(14deg); opacity: 0.25; }
+  45%  { opacity: 0.85; }
+  100% { transform: rotate(58deg); opacity: 0.35; }
+}
+@keyframes fx-laser-rev {
+  0%   { transform: rotate(-12deg); opacity: 0.3; }
+  45%  { opacity: 0.85; }
+  100% { transform: rotate(-56deg); opacity: 0.3; }
 }
 @keyframes fx-rise {
   0%   { transform: translateY(0) translateX(0); opacity: 0; }
@@ -519,8 +655,10 @@ textarea.input { resize: vertical; min-height: 64px; }
 .resp-dot { background: none; border: none; padding: 0; cursor: pointer; border-radius: 50%; opacity: 0.8; transition: opacity 0.1s ease, transform 0.1s ease; }
 .resp-dot:hover { opacity: 1; }
 .resp-dot:active { transform: scale(0.94); }
-.resp-dot.on { opacity: 1; }
-.resp-dot.on .avatar { box-shadow: 0 0 0 2px var(--accent); }
+.resp-dot.on { opacity: 1; transform: scale(1.12); }
+.resp-dot.on .avatar { box-shadow: 0 0 0 2.5px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent); }
+/* fade unselected responders while one is active, so who-you're-viewing is obvious */
+.resp-dot:not(.on):has(~ .resp-dot.on), .resp-dot.on ~ .resp-dot:not(.on) { opacity: 0.45; }
 
 /* toast: prominent, mobile-visible save confirmation (auto-dismiss) */
 .toast {
@@ -575,7 +713,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 
 /* misc */
 .empty { text-align: center; color: var(--muted); padding: 2.2rem 1rem; }
-.section-h { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 1.4rem 0 0.2rem; }
+.section-h { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 1.4rem 0 0.2rem; }
 .hero { text-align: center; padding: 3.5rem 1rem; }
 .hero h1 { font-size: 2.6rem; }
 .tally { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }

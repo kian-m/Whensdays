@@ -70,9 +70,10 @@ func eventMeta(ev db.Event) []emailMetaRow {
 }
 
 // broadcastToGoing renders `build` once per going, unmuted attendee (so each
-// message carries its own one-click unsubscribe link) and sends individually.
-// build receives that recipient's unsubscribe URL. Returns the recipient count.
-func (s *server) broadcastToGoing(ctx context.Context, ev db.Event, subject string, build func(unsub string) emailContent) int {
+// message carries its own one-click links) and sends individually. build
+// receives the recipient's user id (for signed per-recipient links) and their
+// unsubscribe URL. Returns the recipient count.
+func (s *server) broadcastToGoing(ctx context.Context, ev db.Event, subject string, build func(userID, unsub string) emailContent) int {
 	if !s.notify.Enabled() {
 		return 0
 	}
@@ -81,14 +82,14 @@ func (s *server) broadcastToGoing(ctx context.Context, ev db.Event, subject stri
 		return 0
 	}
 	for _, c := range contacts {
-		s.notify.Send([]string{c.Email}, subject, renderEmail(build(s.muteLink(c.UserID, uuidStr(ev.ID)))))
+		s.notify.Send([]string{c.Email}, subject, renderEmail(build(c.UserID, s.muteLink(c.UserID, uuidStr(ev.ID)))))
 	}
 	return len(contacts)
 }
 
 // notifyFinalized emails every 'going', unmuted attendee once a time is locked in.
 func (s *server) notifyFinalized(ctx context.Context, ev db.Event) {
-	s.broadcastToGoing(ctx, ev, fmt.Sprintf("It's on — %s is locked in 🎉", ev.Title), func(unsub string) emailContent {
+	s.broadcastToGoing(ctx, ev, fmt.Sprintf("It's on — %s is locked in 🎉", ev.Title), func(_, unsub string) emailContent {
 		return emailContent{
 			preheader: "A time is set — here are the details.",
 			heading:   ev.Title + " has a time 🎉",
@@ -105,7 +106,7 @@ func (s *server) notifyFinalized(ctx context.Context, ev db.Event) {
 // notifyReminder emails every 'going', unmuted attendee ~24h out (called by the
 // cron). Returns the number of recipients (for the cron's telemetry).
 func (s *server) notifyReminder(ctx context.Context, ev db.Event) int {
-	return s.broadcastToGoing(ctx, ev, "Tomorrow: "+ev.Title, func(unsub string) emailContent {
+	return s.broadcastToGoing(ctx, ev, "Tomorrow: "+ev.Title, func(userID, unsub string) emailContent {
 		return emailContent{
 			preheader: "Happening soon — don't forget.",
 			heading:   ev.Title + " is tomorrow",
@@ -113,6 +114,8 @@ func (s *server) notifyReminder(ctx context.Context, ev db.Event) int {
 			meta:      eventMeta(ev),
 			ctaLabel:  "See the details →",
 			ctaURL:    campaignURL(s.eventURL(ev.ID), "reminder"),
+			moreLabel: "Can't make it anymore?",
+			moreURL:   s.rsvpLink(userID, uuidStr(ev.ID), "declined"),
 			logoURL:   s.logoURL(),
 			unsubURL:  unsub,
 		}

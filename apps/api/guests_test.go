@@ -65,6 +65,22 @@ func TestMuteTokenRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRsvpTokenRoundTrip(t *testing.T) {
+	g := guestSigner{key: []byte("test-key")}
+	tok := g.signRsvp("user_2abc", "evt-123")
+	uid, evt, ok := g.verifyRsvp(tok)
+	if !ok || uid != "user_2abc" || evt != "evt-123" {
+		t.Fatalf("verifyRsvp = %q,%q,%v", uid, evt, ok)
+	}
+	// Namespace isolation: mute/guest tokens must not validate as RSVP tokens.
+	if _, _, ok := g.verifyRsvp(g.signMute("user_2abc", "evt-123")); ok {
+		t.Fatal("mute token accepted as rsvp token")
+	}
+	if _, _, ok := g.verifyRsvp(g.sign("guest_abc")); ok {
+		t.Fatal("guest token accepted as rsvp token")
+	}
+}
+
 func TestNotifyPayload(t *testing.T) {
 	p := notify.Payload("a@x.com", []string{"b@y.com"}, "Sub", "<b>hi</b>")
 	if p["from"] != "a@x.com" || p["subject"] != "Sub" {

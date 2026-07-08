@@ -58,9 +58,11 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await expect(page.getByTestId("share-link")).toBeVisible();
 
-    // Preview as a guest: RSVP, then answer the one-at-a-time preference Qs.
+    // Preview as a guest: RSVP, then answer the one-at-a-time preference Qs
+    // (they live off the critical path now — expand the optional section).
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("pref-summary").click();
     await page.getByTestId("pref-input").fill("Vegetarian");
     await page.getByTestId("pref-next").click();
     await page.getByTestId("pref-input").fill("Italian");

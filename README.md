@@ -25,18 +25,46 @@ Priorities, in order — growth loop over feature breadth:
 
 Measure in PostHog: activation (host invites ≥1), invite→participant conversion, participant→new-host (K-factor), events/group/month, W4 retention. **Feature breadth is not a moat — defer new event types/polish until the loop works.**
 
-**Roadmap (updated 2026-07-06).** The original priority list and Phases 2–3 are **shipped**; what remains is launch and retention work:
+**Roadmap (updated 2026-07-08).** The foundational phases are **shipped** — including the real deploy (Cloud Run + Pages + Neon), live transactional email, guest→account merge, per-event mute, and host-timezone times. What remains is making one loop spin fast, then adding fuel.
 
-- **Now — launch:** deploy for real (Cloud Run + Cloudflare Pages + Neon per `docs/DEPLOY.md`), turn on live Clerk auth, production Klipy key (the test key is 100 calls/hr), seed the first real groups (initial audience: improv/stand-up/sketch/theater locals — the show/practice/open-mic types + Comedy & performance category exist for this).
-- **Next — retention:** guest→account merge (Clerk sign-up should adopt the guest's plans, not orphan them), smarter time suggestions (rank poll options against ALL attendees' availability + imported calendars, not just the viewer's), series editing (change one vs all occurrences), public-event moderation basics (report/hide) before pushing Discover harder.
-- **Later:** organizer premium (never paywall basics), deeper intent/affiliate links, per-user live `.ics` feed subscriptions, localization.
+**North-star metric: time-to-locked-plan** (event created → time finalized). Everything the group feels — relief, momentum, "this app works" — hangs on that moment. Guardrails: invite→RSVP conversion, participant→host conversion (K-factor), events per group per month, W4 retention.
+
+**The loop (every feature must serve it):**
+`host creates → invitees hit a zero-friction link → RSVPs pile up visibly → the time locks (the magic moment) → the event happens → the recap pulls everyone back → "same time next month?" re-hosts` — each turn of the loop mints new hosts from guests.
+
+- **Now — tighten the loop:**
+  - **One-tap RSVP from email** — "Going / Can't make it" buttons in the invite + reminder emails via signed links (same HMAC pattern as one-click unsubscribe). Every removed tap on the guest path compounds.
+  - **Live social pressure on the invite page** — "4 of 7 in" progress + the facepile above the fold; a host **Nudge** button that re-emails only non-responders (rate-limited, once per day).
+  - **Lock-the-time celebration** — finalizing currently renders as a silent status flip. Make it the peak moment: confetti burst, a shareable "It's happening 🎉" card (the per-event OG image already exists), one-tap add-to-calendar for everyone.
+  - **Seed real groups** (improv/stand-up/theater locals — the show/practice/open-mic types exist for this) and watch the funnel in PostHog before adding surface area.
+- **Next — retention fuel:**
+  - **Post-event recap thread** — a day-after email: "How was it? Drop a pic 📸" → the comment thread becomes the group's memory, and the recap ends with **"Plan the next one"** (pre-filled from the last event). Post-event is where the next event is born.
+  - **Group rituals & streaks** — "3rd Thursday · 4 months running" on the group page; breaking the streak should feel like a loss (structural retention for the wedge audience).
+  - **Best-time ranking across everyone** — rank poll options against ALL attendees' availability + imported calendars, not just the viewer's. The "it just knows" moment.
+  - Series editing (change one vs all occurrences).
+- **Later:** organizer premium (never paywall basics), deeper intent links, per-user live `.ics` feeds, localization, re-expanding Discover once group density exists.
+
+### Viral-readiness: add / update / remove
+
+| Action | What | Why |
+|---|---|---|
+| **Add** | One-tap RSVP links in email | Highest-leverage conversion fix left — guests say yes without ever loading the app |
+| **Add** | Nudge non-responders (host, one tap) | Hosts are the engine; this answers the #1 host anxiety ("nobody replied") |
+| **Add** | Finalize celebration + shareable card | The product's peak emotion is currently invisible; make it the screenshot people post |
+| **Add** | Post-event recap → "plan the next one" | Converts a finished event into the next one — the re-host loop is the real K-factor |
+| **Add** | Group streaks | Loss-aversion retention, purpose-built for recurring groups |
+| **Update** | Invite page as the flagship screen | The most-seen surface by new users: social proof above the fold, RSVP within thumb reach, zero chrome |
+| **Update** | Poll ranking → all-attendee availability | Upgrades calendars from display-only to decision-making moat |
+| **Remove (de-emphasize)** | Discover / For-you feed / follows / topic-city taxonomy | A public social graph before density = empty rooms + moderation surface. Keep the code; pull it from the nav until groups are dense |
+| **Remove** | Per-type preference questions in the guest flow | An extra step on the critical path whose answers are rarely load-bearing — fold into comments |
+| **Remove (simplify)** | Dual availability systems (weekly grid + date grid) | Two grids confuse; date-based wins, weekly becomes a prefill |
 
 Shipped, mapped to the original phases:
-1. ✅ **Frictionless guests** — no-account RSVP/vote/comment via the invite link; guests can host ("Start a plan"); Sign-up conversion CTA.
-2. ✅ **Notifications** — transactional email (invites, finalize, comments, reminders) + in-app badges.
+1. ✅ **Frictionless guests** — no-account RSVP/vote/comment via the invite link; guests can host ("Start a plan"); guest→account merge on sign-up.
+2. ✅ **Notifications** — branded transactional email (invite, finalize, comments, day-before reminder, cancel) rendered in the host's timezone, per-event mute with one-click unsubscribe, in-app badges.
 3. ✅ **Calendar** — import (Google OAuth / Apple iCal) blocks availability + flags poll conflicts; one-tap export (Apple/Google/.ics with a link back).
 4. ✅ **Recurring groups** — groups with icons/members, recurring series events, group event lists.
-5. ✅ **Growth surfaces** (was Phases 2–3) — OG unfurls with a branded card, Web Share, PWA, quick-create, code-split bundle, public Discover + ranked For-you feed with follows, event covers (photo/Klipy GIF) + backdrop themes, avatar-stack social proof on tiles.
+5. ✅ **Growth surfaces** — OG unfurls with a branded per-event card, Web Share, PWA, quick-create, code-split bundle, public Discover + ranked For-you feed with follows, event covers (photo/Klipy GIF) + animated backdrop themes, avatar-stack social proof on tiles.
 
 
 ---
@@ -140,6 +168,10 @@ fill a row/column from its header). The host sees a matching heatmap or day rank
 | **Join as a guest (no account)** | Any invite link, signed out | Invitees enter just a name to RSVP, vote, and comment; a signed guest token (90d) lives in their browser. Dev/E2E: append `?guest=1` | `POST /api/guest/join` (unauthenticated; event id = capability), `Authorization: Guest <token>` |
 | **Email notifications** | Automatic | Uses your **account email** (from Clerk — no separate field to fill): hosts hear about RSVPs & comments; attendees get an **invite**, a **time-locked** note, a **day-before reminder** (sent 2pm Pacific for next-day events), and a **cancel** notice. Branded HTML (logo + sunset palette); **times render in the event's timezone** (the host's, captured at creation), not UTC; every link is UTM-tagged so PostHog attributes email-driven visits. No-op unless `EMAIL_API_KEY`/`EMAIL_FROM` set | `internal/notify` (Resend-compatible) + `emails.go` templates + `notifications.go` triggers, async; `POST /api/cron/reminders` (X-Cron-Key) |
 | **Mute an event** | Event page + any email | 🔔/🔕 toggle on any event (host or attendee) stops its notification emails. Also one-click from the footer of every email — no login needed (identity rides in a signed token) — with an instant undo | `POST /api/events/{id}/mute` (signed-in) + `GET /api/events/{id}/unsubscribe?token=` (HMAC, unauthenticated); `event_mutes` table |
+| **One-tap RSVP from email** | Invite / nudge / reminder emails | "✅ I'm going" / "Can't make it" buttons answer straight from the inbox — no login, no app load (signed per-recipient links; confirmation page with one-tap undo). The reminder carries a "can't make it anymore?" escape hatch | `GET /api/events/{id}/rsvp-link?token=&r=` (HMAC, unauthenticated, rate-limited) |
+| **Nudge non-responders** | Event page (host/cohost) | One tap re-emails only the invited people who haven't answered, with one-tap RSVP buttons. Rate-limited to once a day per event | `POST /api/events/{id}/nudge`; `event_nudges` table |
+| **The lock moment** | Event page | When the time gets finalized, the page celebrates: a confetti burst + "It's locked in 🎉" banner (one-shot, deterministic) | client-side, fires on the polling→scheduled transition |
+| **Who's in** | Invite page (guests) | "4 of 7 in" progress bar + the going facepile above the fold — social proof where new invitees land | computed from attendees + pending invites in the event detail |
 | **Discover (public events)** | **Discover** — works signed-out | Events are **🔒 invite-only, 🤝 friends, or 🌎 public**. Public ones take a **preset category** (13 incl. Comedy & performance, server-enforced — never free text) + a city (curated autocomplete list, prefilled from your timezone; no external geo API). Browse/filter by category chips (**dynamic — a chip only renders when that category has an upcoming event**) & city; **follow hosts or categories** | `GET /api/discover` (unauthenticated, read-only), `POST/DELETE /api/follows` |
 | **Tile styling** | Everywhere events are listed | Tiles carry a **type-colored edge** (dinner amber, drinks violet, …); in the stream, events **you're going to glow accent**, **friend-connected ones glow green**, plain public stays neutral; a **"👥 N friends going"** badge shows social proof | annotated `friends_going`/`viewer_rsvp`/`from_friend`; `GET /api/discover/mine` (authed twin of the public browse) |
 | **"For you" feed** | **Discover**, signed in | Ranked like a (transparent) social feed: follows > friends-going social proof > your RSVP-history taste (host/category/type) > popularity > time-proximity sweet spot. Toggle between **🌎 Public** and **🤝 Friends** (what your friends are hosting) | `GET /api/feed?scope=public\|friends`; scorer + weights in `apps/api/ranking.go` |

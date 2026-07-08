@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Attendee,
@@ -42,7 +42,7 @@ const THEME_FX: Record<string, { count: number; glyph?: string }> = {
   night: { count: 22 },            // twinkling stars (CSS dots)
   cozy: { count: 14 },             // rising embers + flame glow
   beach: { count: 12 },            // floating sun sparkles
-  neon: { count: 8 },              // drifting glow orbs
+  neon: { count: 11 },             // drifting glow orbs + 3 sweeping laser beams
 };
 
 function ThemeFx({ theme }: { theme: string }) {
@@ -64,6 +64,21 @@ export function EventPage() {
   // Live theme preview while editing the hero card — reflects the whole page
   // before the edit is saved. null = show the saved theme.
   const [themePreview, setThemePreview] = useState<string | null>(null);
+  // The lock moment: when this session watches the status flip polling →
+  // scheduled, celebrate — a one-shot confetti burst + banner. Catching the
+  // transition here (rather than in each finalize button) covers every path.
+  const prevStatus = useRef<string | null>(null);
+  const [celebrate, setCelebrate] = useState(false);
+  useEffect(() => {
+    if (!data) return;
+    const prev = prevStatus.current;
+    prevStatus.current = data.event.status;
+    if (prev === "polling" && data.event.status === "scheduled") {
+      setCelebrate(true);
+      const t = setTimeout(() => setCelebrate(false), 3400);
+      return () => clearTimeout(t);
+    }
+  }, [data]);
 
   if (loading && !data) return <Loading />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Event not found.</p></div>;
@@ -75,6 +90,14 @@ export function EventPage() {
   return (
     <div className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
       {effTheme && <ThemeFx theme={effTheme} />}
+      {celebrate && (
+        <>
+          <div className="theme-fx fx-party fx-burst" aria-hidden="true">
+            {Array.from({ length: 26 }).map((_, i) => <span className="fx-p" key={i} />)}
+          </div>
+          <div className="fx-locked" data-testid="locked-banner">It&rsquo;s locked in 🎉</div>
+        </>
+      )}
       <BackLink />
       <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} />
 
@@ -339,8 +362,10 @@ function IntentLinks({ event, attendees }: { event: EventDetail["event"]; attend
 function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) {
   const e = data.event;
   const myRsvp = data.attendees.find((a) => a.user_id === data.viewer_id)?.rsvp;
+  const myAnswers = data.preference_answers.filter((a) => a.user_id === data.viewer_id);
   return (
     <div className="stack">
+      <WhosIn data={data} />
       <Rsvp eventId={e.id} current={myRsvp} reload={reload} />
       {e.scheduling_mode === "poll" && e.status === "polling" && (
         <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} reload={reload} />
@@ -348,8 +373,44 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
       {e.scheduling_mode === "general" && e.status === "polling" && (
         <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id} reload={reload} />
       )}
-      <PrefFlow eventId={e.id} type={e.event_type} answers={data.preference_answers.filter((a) => a.user_id === data.viewer_id)} reload={reload} />
+      {/* Preferences sit OFF the critical path (roadmap): collapsed unless the
+          guest already answered. Skipped entirely for types with no questions. */}
+      {(QUESTIONS[e.event_type] ?? []).length > 0 && (
+        <details data-testid="pref-details" open={myAnswers.length > 0}>
+          <summary className="muted small" style={{ cursor: "pointer" }} data-testid="pref-summary">
+            ✍️ Anything the host should know? (optional)
+          </summary>
+          <PrefFlow eventId={e.id} type={e.event_type} answers={myAnswers} reload={reload} />
+        </details>
+      )}
       <Guests attendees={data.attendees} viewerId={data.viewer_id} />
+    </div>
+  );
+}
+
+// WhosIn — live social pressure above the fold on the invite page: a progress
+// bar of committed vs invited plus the going facepile.
+function WhosIn({ data }: { data: EventDetail }) {
+  const going = data.attendees.filter((a) => a.rsvp === "going");
+  const responded = new Set(data.attendees.map((a) => a.user_id));
+  const pending = data.invites.filter((i) => !responded.has(i.user_id)).length;
+  const total = data.attendees.length + pending;
+  if (total < 2) return null; // nothing social to show yet
+  return (
+    <div className="card stack" style={{ gap: 8 }} data-testid="whos-in">
+      <div className="row between">
+        <h3 style={{ margin: 0 }}>Who&rsquo;s in</h3>
+        <span className="muted small" data-testid="whos-in-count"><b>{going.length}</b> of {total} in</span>
+      </div>
+      <div className="whosin-bar"><span style={{ width: `${Math.round((going.length / total) * 100)}%` }} /></div>
+      {going.length > 0 && (
+        <div className="facepile">
+          {going.slice(0, 6).map((a) => (
+            <span className="face" key={a.user_id}><Avatar url={a.avatar_url ?? ""} name={a.display_name ?? "?"} size={28} /></span>
+          ))}
+          {going.length > 6 && <span className="muted small" style={{ marginLeft: 8 }}>+{going.length - 6} more</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -671,6 +732,7 @@ function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
   return (
     <div className="stack">
       <ShareLink eventId={e.id} />
+      <Nudge data={data} />
       {e.scheduling_mode === "poll" && e.status === "polling" && (
         <PollResults data={data} reload={reload} />
       )}
@@ -680,6 +742,32 @@ function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
       <Guests attendees={data.attendees} viewerId={data.viewer_id} />
       <AnswerSummary data={data} />
       {data.role === "host" && <HostControls data={data} reload={reload} />}
+    </div>
+  );
+}
+
+// Nudge — the host's lever for "nobody replied": one tap re-emails only the
+// invited people who haven't responded (server rate-limits to once a day).
+function Nudge({ data }: { data: EventDetail }) {
+  const api = useApi();
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const responded = new Set(data.attendees.map((a) => a.user_id));
+  const pending = data.invites.filter((i) => !responded.has(i.user_id)).length;
+  if (pending === 0 || data.event.status === "cancelled") return null;
+  async function nudge() {
+    setBusy(true);
+    const res = await sendJSON(api, "POST", `/api/events/${data.event.id}/nudge`, {});
+    const b = await res.json().catch(() => ({}));
+    setBusy(false);
+    setMsg(res.ok ? `Nudged ${b.nudged} ${b.nudged === 1 ? "person" : "people"} 📣` : b.error || "could not nudge");
+  }
+  return (
+    <div className="row wrap" style={{ gap: 10 }}>
+      <button className="btn soft sm" data-testid="nudge" disabled={busy} onClick={nudge}>
+        🔔 Nudge {pending} who haven&rsquo;t replied
+      </button>
+      {msg && <span className="muted small" data-testid="nudge-msg">{msg}</span>}
     </div>
   );
 }
@@ -1072,10 +1160,19 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
     return { id: uid, name: a?.display_name || "Guest", avatar: a?.avatar_url ?? null };
   });
   const selVals = new Set(sel ? data.general_votes.filter((v) => v.user_id === sel).map((v) => v.value) : []);
-  const pickedStyle = (value: string): React.CSSProperties =>
-    sel && selVals.has(value)
-      ? { outline: "2px solid var(--accent)", outlineOffset: "-2px", position: "relative", zIndex: 1 }
-      : {};
+  // With a responder selected, make their availability unmistakable: their
+  // picks fill + glow in the accent while every other cell fades right back.
+  // (A subtle border alone was unreadable over the heat colors.)
+  const pickedStyle = (value: string): React.CSSProperties => {
+    if (!sel) return {};
+    return selVals.has(value)
+      ? {
+          background: "color-mix(in srgb, var(--accent) 38%, transparent)",
+          boxShadow: "inset 0 0 0 2px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 50%, transparent)",
+          position: "relative", zIndex: 1,
+        }
+      : { opacity: 0.22, filter: "saturate(0.35)" };
+  };
 
   const countBy = (dimension: string) => {
     const m = new Map<string, number>();

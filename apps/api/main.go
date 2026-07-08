@@ -163,6 +163,10 @@ func main() {
 	// is UNauthenticated — identity rides in a signed token; see mute.go).
 	mux.Handle("POST /api/events/{id}/mute", auth(http.HandlerFunc(s.handleMuteToggle)))
 	mux.Handle("GET /api/events/{id}/unsubscribe", readLimit(http.HandlerFunc(s.handleUnsubscribe)))
+	// One-tap RSVP from email (UNauthenticated — signed token; see engage.go)
+	// and the host's nudge-non-responders lever.
+	mux.Handle("GET /api/events/{id}/rsvp-link", readLimit(http.HandlerFunc(s.handleEmailRsvp)))
+	mux.Handle("POST /api/events/{id}/nudge", auth(http.HandlerFunc(s.handleNudge)))
 	// Public on purpose: the event id IS the invite capability (same fields the
 	// OG unfurl already serves), and a bare <a href> can't attach a bearer —
 	// this is what lets iOS open the invite directly in Calendar.

@@ -114,6 +114,11 @@ type EventMute struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type EventNudge struct {
+	EventID  pgtype.UUID        `json:"event_id"`
+	NudgedAt pgtype.Timestamptz `json:"nudged_at"`
+}
+
 type EventPreferenceAnswer struct {
 	ID          pgtype.UUID `json:"id"`
 	EventID     pgtype.UUID `json:"event_id"`
