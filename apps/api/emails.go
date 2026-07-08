@@ -44,6 +44,32 @@ func campaignURL(base, campaign string) string {
 // emailMetaRow is a labelled fact shown in the event summary block (When / Where).
 type emailMetaRow struct{ label, value string }
 
+// emailItem is one row of a digest list (e.g. "your events tomorrow"): a title
+// with its own links.
+type emailItem struct {
+	title, when, url, muteURL string
+}
+
+// themeAccent maps an event theme to its accent gradient pair — mirrors the
+// .theme-* --accent tokens in styles.css (keep in sync). Empty theme → brand coral.
+func themeAccent(theme string) (string, string) {
+	switch theme {
+	case "party":
+		return "#e0559b", "#b03a7a"
+	case "beach":
+		return "#f0993a", "#d3752f"
+	case "forest":
+		return "#3f9d6f", "#2b7a52"
+	case "night":
+		return "#8b83ff", "#5f57d6"
+	case "neon":
+		return "#ff2d94", "#b01c67"
+	case "cozy":
+		return "#df8038", "#b05f22"
+	}
+	return emailAccent, emailAccnt2
+}
+
 // emailContent is the variable payload for one message; renderEmail turns it into
 // a full, client-safe HTML document.
 type emailContent struct {
@@ -58,8 +84,11 @@ type emailContent struct {
 	cta2URL   string
 	moreLabel string // optional centered text link under the buttons
 	moreURL   string
-	logoURL   string // hosted PNG logo (APP_ORIGIN/apple-touch-icon.png)
-	unsubURL  string // optional one-click mute link for THIS recipient
+	logoURL   string      // hosted PNG logo (APP_ORIGIN/apple-touch-icon.png)
+	unsubURL  string      // optional one-click mute link for THIS recipient
+	coverURL  string      // optional event cover/GIF banner (https only — mail clients block data: URIs)
+	theme     string      // optional event theme — tints the header/CTA to match the event page
+	items     []emailItem // optional digest list (e.g. multiple events tomorrow)
 }
 
 func esc(s string) string { return html.EscapeString(s) }
@@ -69,6 +98,7 @@ func esc(s string) string { return html.EscapeString(s) }
 // paragraphs, optional quote, optional meta table, coral CTA) → muted footer.
 func renderEmail(c emailContent) string {
 	var b strings.Builder
+	accent, accent2 := themeAccent(c.theme)
 
 	// Hidden preheader — the grey preview text next to the subject in most inboxes.
 	if c.preheader != "" {
@@ -87,11 +117,16 @@ func renderEmail(c emailContent) string {
 		logo = fmt.Sprintf(`<img src="%s" width="34" height="34" alt="" style="vertical-align:middle;border-radius:9px;margin-right:10px">`, esc(c.logoURL))
 	}
 	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background:linear-gradient(120deg,%s,%s);border-radius:14px 14px 0 0"><tr><td style="padding:18px 24px">%s<span style="font-size:20px;font-weight:700;letter-spacing:-0.02em;color:#fff;vertical-align:middle">Whensdays</span></td></tr></table>`,
-		emailAccent, emailAccnt2, logo)
+		accent, accent2, logo)
 
 	// Content card.
 	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background:%s;border:1px solid %s;border-top:none;border-radius:0 0 14px 14px"><tr><td style="padding:28px 24px">`,
 		emailPanel, emailLine)
+
+	// Event cover / GIF banner (https-only; Gmail & friends strip data: URIs).
+	if c.coverURL != "" {
+		fmt.Fprintf(&b, `<img src="%s" alt="" width="512" style="width:100%%;max-height:220px;object-fit:cover;border-radius:10px;margin:0 0 16px;display:block">`, esc(c.coverURL))
+	}
 
 	fmt.Fprintf(&b, `<h1 style="margin:0 0 14px;font-size:22px;line-height:1.25;font-weight:700;color:%s">%s</h1>`,
 		emailInk, esc(c.heading))
@@ -102,7 +137,13 @@ func renderEmail(c emailContent) string {
 
 	if c.quote != "" {
 		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:4px 0 16px"><tr><td style="padding:12px 16px;background:%s;border-left:3px solid %s;border-radius:8px;font-size:15px;line-height:1.5;color:%s">%s</td></tr></table>`,
-			emailBG, emailAccent, emailInk, esc(c.quote))
+			emailBG, accent, emailInk, esc(c.quote))
+	}
+
+	// Digest list: one bordered row per event, each with its own links.
+	for _, it := range c.items {
+		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:0 0 10px"><tr><td style="padding:12px 16px;background:%s;border:1px solid %s;border-radius:10px"><span style="font-size:15px;font-weight:700;color:%s">%s</span><br><span style="font-size:13px;color:%s">%s</span><br><a href="%s" style="font-size:13px;color:%s;font-weight:600;text-decoration:none">View →</a>&nbsp;&nbsp;<a href="%s" style="font-size:12px;color:%s;text-decoration:underline">mute</a></td></tr></table>`,
+			emailBG, emailLine, emailInk, esc(it.title), emailMuted, esc(it.when), esc(it.url), accent, esc(it.muteURL), emailMuted)
 	}
 
 	if len(c.meta) > 0 {
@@ -117,7 +158,7 @@ func renderEmail(c emailContent) string {
 	if c.ctaURL != "" && c.ctaLabel != "" {
 		b.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 4px"><tr>`)
 		fmt.Fprintf(&b, `<td style="border-radius:10px;background:linear-gradient(120deg,%s,%s)"><a href="%s" style="display:inline-block;padding:12px 26px;font-size:15px;font-weight:700;color:#fff;text-decoration:none;border-radius:10px">%s</a></td>`,
-			emailAccent, emailAccnt2, esc(c.ctaURL), esc(c.ctaLabel))
+			accent, accent2, esc(c.ctaURL), esc(c.ctaLabel))
 		// Secondary action (e.g. "Can't make it") as a quiet ghost button.
 		if c.cta2URL != "" && c.cta2Label != "" {
 			fmt.Fprintf(&b, `<td style="width:10px"></td><td style="border-radius:10px;border:1px solid %s"><a href="%s" style="display:inline-block;padding:11px 20px;font-size:15px;font-weight:600;color:%s;text-decoration:none;border-radius:10px">%s</a></td>`,

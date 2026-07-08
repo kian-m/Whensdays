@@ -29,7 +29,7 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { AddressInput, Avatar, BackLink, DayGrid, GifPicker, Loading, Pill, fileToAvatar, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, DayGrid, GifPicker, Loading, Pill, fileToAvatar, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 
@@ -989,19 +989,11 @@ function HostControls({ data, reload }: { data: EventDetail; reload: () => void 
 
       <div className="section-h">Danger zone</div>
       <div className="row wrap">
-        <button className="btn ghost sm" style={{ color: "var(--no)" }} data-testid="cancel-event"
-          onClick={async () => {
-            if (!window.confirm("Cancel this get-together? Guests will see it as cancelled.")) return;
-            await api(`/api/events/${e.id}`, { method: "DELETE" });
-            reload();
-          }}>Cancel event</button>
+        <ConfirmButton label="Cancel event" confirmLabel="Tap again — guests will see it as cancelled" testid="cancel-event"
+          onConfirm={async () => { await api(`/api/events/${e.id}`, { method: "DELETE" }); reload(); }} />
         {e.series_id && (
-          <button className="btn ghost sm" style={{ color: "var(--no)" }} data-testid="cancel-series"
-            onClick={async () => {
-              if (!window.confirm("Cancel EVERY occurrence in this series?")) return;
-              await api(`/api/events/${e.id}?series=all`, { method: "DELETE" });
-              reload();
-            }}>Cancel whole series</button>
+          <ConfirmButton label="Cancel whole series" confirmLabel="Tap again — cancels EVERY date" testid="cancel-series"
+            onConfirm={async () => { await api(`/api/events/${e.id}?series=all`, { method: "DELETE" }); reload(); }} />
         )}
       </div>
     </div>
@@ -1211,11 +1203,20 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
     return new Date(y, mo - 1, d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   };
 
+  // Multi-date finalize: the host reads the group's availability above and
+  // schedules ONE OR SEVERAL winning dates. Extra dates become a series with
+  // everyone (RSVPs intact) carried onto each occurrence.
+  const [moreWhens, setMoreWhens] = useState<string[]>([]);
   async function finalize() {
-    if (!when) return;
-    await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, { starts_at: new Date(when).toISOString() });
+    const all = [when, ...moreWhens].filter((v) => v.trim() !== "")
+      .map((v) => new Date(v).toISOString()).sort();
+    if (all.length === 0) return;
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, {
+      starts_at: all[0], more_starts: all.slice(1),
+    });
     reload();
   }
+  const pickCount = [when, ...moreWhens].filter((v) => v.trim() !== "").length;
 
   return (
     <div className="card stack">
@@ -1326,12 +1327,29 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
       )}
 
       <div className="divider" />
-      <div className="muted small">Pick the final date &amp; time:</div>
+      <div className="muted small">Pick the winning date{pickCount > 1 ? "s" : ""} &amp; time{pickCount > 1 ? "s" : ""} from the availability above:</div>
       <div className="row">
         <input type="datetime-local" className="input" data-testid="general-finalize-time" value={when}
           onChange={(ev) => setWhen(ev.target.value)} />
-        <button className="btn sm" data-testid="general-finalize" disabled={!when} onClick={finalize}>Finalize</button>
       </div>
+      {moreWhens.map((v, i) => (
+        <div key={i} className="row" style={{ gap: 6 }}>
+          <input type="datetime-local" className="input" data-testid={`general-finalize-time-${i + 1}`} value={v}
+            onChange={(ev) => setMoreWhens((m) => m.map((x, j) => (j === i ? ev.target.value : x)))} />
+          <button type="button" className="btn ghost sm" data-testid={`general-finalize-remove-${i + 1}`}
+            onClick={() => setMoreWhens((m) => m.filter((_, j) => j !== i))}>✕</button>
+        </div>
+      ))}
+      <div className="row wrap">
+        <button type="button" className="btn ghost sm" data-testid="general-add-date"
+          onClick={() => setMoreWhens((m) => [...m, ""])}>+ Add another date</button>
+        <button className="btn sm" data-testid="general-finalize" disabled={pickCount === 0} onClick={finalize}>
+          {pickCount > 1 ? `Schedule ${pickCount} dates` : "Finalize"}
+        </button>
+      </div>
+      {pickCount > 1 && (
+        <p className="muted small">All {pickCount} dates become one series — everyone here is on each date, RSVPs carried over.</p>
+      )}
     </div>
   );
 }

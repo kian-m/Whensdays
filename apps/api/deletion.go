@@ -74,6 +74,8 @@ func (s *server) handleCancelEvent(w http.ResponseWriter, r *http.Request) {
 				ctaURL:    campaignURL(s.eventURL(ev.ID), "cancelled"),
 				logoURL:   s.logoURL(),
 				unsubURL:  s.muteLink(c.UserID, uuidStr(ev.ID)),
+				coverURL:  eventCover(ev),
+				theme:     ev.Theme,
 			})
 			s.notify.Send([]string{c.Email}, "Cancelled: "+ev.Title, body)
 		}

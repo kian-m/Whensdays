@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -57,6 +58,15 @@ func eventWhen(ev db.Event) string {
 	return ev.StartsAt.Time.In(eventLocation(ev)).Format("Mon Jan 2 · 3:04 PM MST")
 }
 
+// eventCover returns the event's cover/GIF for email — https only (mail
+// clients strip data: URIs, which is what uploaded covers are).
+func eventCover(ev db.Event) string {
+	if strings.HasPrefix(ev.PhotoUrl, "https://") {
+		return ev.PhotoUrl
+	}
+	return ""
+}
+
 // eventMeta builds the When/Where fact rows shown in time-bearing emails.
 func eventMeta(ev db.Event) []emailMetaRow {
 	var rows []emailMetaRow
@@ -99,27 +109,78 @@ func (s *server) notifyFinalized(ctx context.Context, ev db.Event) {
 			ctaURL:    campaignURL(s.eventURL(ev.ID), "finalized"),
 			logoURL:   s.logoURL(),
 			unsubURL:  unsub,
+			coverURL:  eventCover(ev),
+			theme:     ev.Theme,
 		}
 	})
 }
 
-// notifyReminder emails every 'going', unmuted attendee ~24h out (called by the
-// cron). Returns the number of recipients (for the cron's telemetry).
-func (s *server) notifyReminder(ctx context.Context, ev db.Event) int {
-	return s.broadcastToGoing(ctx, ev, "Tomorrow: "+ev.Title, func(userID, unsub string) emailContent {
-		return emailContent{
-			preheader: "Happening soon — don't forget.",
-			heading:   ev.Title + " is tomorrow",
-			lines:     []string{"Just a heads up — this is coming up soon. See you there!"},
-			meta:      eventMeta(ev),
-			ctaLabel:  "See the details →",
-			ctaURL:    campaignURL(s.eventURL(ev.ID), "reminder"),
-			moreLabel: "Can't make it anymore?",
-			moreURL:   s.rsvpLink(userID, uuidStr(ev.ID), "declined"),
-			logoURL:   s.logoURL(),
-			unsubURL:  unsub,
+// sendReminders sends tomorrow's reminders with per-recipient DIGESTING: a
+// person going to several events tomorrow gets ONE email listing them all,
+// instead of a pile of near-identical mails. Returns the recipient count.
+func (s *server) sendReminders(ctx context.Context, events []db.Event) int {
+	if !s.notify.Enabled() || len(events) == 0 {
+		return 0
+	}
+	type rec struct {
+		email  string
+		events []db.Event
+	}
+	byUser := map[string]*rec{}
+	order := []string{}
+	for _, ev := range events {
+		contacts, err := s.queries.ListGoingAttendeeContacts(ctx, ev.ID)
+		if err != nil {
+			continue
 		}
-	})
+		for _, c := range contacts {
+			if byUser[c.UserID] == nil {
+				byUser[c.UserID] = &rec{email: c.Email}
+				order = append(order, c.UserID)
+			}
+			byUser[c.UserID].events = append(byUser[c.UserID].events, ev)
+		}
+	}
+	for _, userID := range order {
+		r := byUser[userID]
+		if len(r.events) == 1 {
+			ev := r.events[0]
+			body := renderEmail(emailContent{
+				preheader: "Happening soon — don't forget.",
+				heading:   ev.Title + " is tomorrow",
+				lines:     []string{"Just a heads up — this is coming up soon. See you there!"},
+				meta:      eventMeta(ev),
+				ctaLabel:  "See the details →",
+				ctaURL:    campaignURL(s.eventURL(ev.ID), "reminder"),
+				moreLabel: "Can't make it anymore?",
+				moreURL:   s.rsvpLink(userID, uuidStr(ev.ID), "declined"),
+				logoURL:   s.logoURL(),
+				unsubURL:  s.muteLink(userID, uuidStr(ev.ID)),
+				coverURL:  eventCover(ev),
+				theme:     ev.Theme,
+			})
+			s.notify.Send([]string{r.email}, "Tomorrow: "+ev.Title, body)
+			continue
+		}
+		items := make([]emailItem, 0, len(r.events))
+		for _, ev := range r.events {
+			items = append(items, emailItem{
+				title:   ev.Title,
+				when:    eventWhen(ev),
+				url:     campaignURL(s.eventURL(ev.ID), "reminder"),
+				muteURL: s.muteLink(userID, uuidStr(ev.ID)),
+			})
+		}
+		body := renderEmail(emailContent{
+			preheader: "Busy day ahead — here's the lineup.",
+			heading:   fmt.Sprintf("You have %d plans tomorrow", len(items)),
+			lines:     []string{"Here's everything on your calendar for tomorrow:"},
+			items:     items,
+			logoURL:   s.logoURL(),
+		})
+		s.notify.Send([]string{r.email}, fmt.Sprintf("Tomorrow: %d plans", len(items)), body)
+	}
+	return len(order)
 }
 
 // notifyInvite emails one invitee with one-tap RSVP buttons. Shared by the
@@ -153,6 +214,8 @@ func (s *server) notifyInvite(ctx context.Context, ev db.Event, inviterID, invit
 		moreURL:   campaignURL(s.eventURL(ev.ID), "invite"),
 		logoURL:   s.logoURL(),
 		unsubURL:  s.muteLink(inviteeID, uuidStr(ev.ID)),
+		coverURL:  eventCover(ev),
+		theme:     ev.Theme,
 	})
 	s.notify.Send([]string{p.Email}, "You're invited: "+ev.Title, body)
 }
@@ -172,6 +235,8 @@ func (s *server) notifyRecap(ctx context.Context, ev db.Event) int {
 			cta2URL:   campaignURL(s.appOrigin+"/new?again="+uuidStr(ev.ID), "recap_next"),
 			logoURL:   s.logoURL(),
 			unsubURL:  unsub,
+			coverURL:  eventCover(ev),
+			theme:     ev.Theme,
 		}
 	})
 }
@@ -198,6 +263,8 @@ func (s *server) notifySeriesEnded(ctx context.Context, ev db.Event) {
 		ctaURL:    campaignURL(s.appOrigin+"/new?again="+uuidStr(ev.ID)+"&repoll=1", "repoll"),
 		logoURL:   s.logoURL(),
 		unsubURL:  s.muteLink(ev.HostID, uuidStr(ev.ID)),
+		coverURL:  eventCover(ev),
+		theme:     ev.Theme,
 	})
 	s.notify.Send([]string{host.Email}, "Plan the next "+ev.Title+"?", body)
 }
@@ -244,6 +311,8 @@ func (s *server) notifyHostActivity(ctx context.Context, ev db.Event, actorID, c
 		ctaURL:    campaignURL(s.eventURL(ev.ID), campaign),
 		logoURL:   s.logoURL(),
 		unsubURL:  s.muteLink(ev.HostID, uuidStr(ev.ID)),
+		coverURL:  eventCover(ev),
+		theme:     ev.Theme,
 	})
 	s.notify.Send([]string{host.Email}, subject, body)
 }

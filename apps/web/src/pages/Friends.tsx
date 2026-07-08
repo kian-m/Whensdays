@@ -11,7 +11,7 @@ import {
   sendJSON,
   useApi,
 } from "../lib";
-import { AvailLegend, Avatar, DayGrid, Loading, useAsync } from "../ui";
+import { AvailLegend, Avatar, ConfirmButton, DayGrid, Loading, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 type Suggestion = { friend_id: string; display_name: string; handle: string; avatar_url: string; score: number; shared_events: number };
@@ -160,8 +160,8 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
           <button className="btn ghost sm" data-testid={`view-avail-${friend.handle}`} onClick={toggle}>
             {open ? "Hide" : "Availability"}
           </button>
-          <button className="btn ghost sm" data-testid={`unfriend-${friend.handle}`}
-            onClick={() => window.confirm(`Remove ${friend.display_name} as a friend?`) && onRemove()}>Remove</button>
+          <ConfirmButton label="Remove" confirmLabel="Tap again to unfriend" testid={`unfriend-${friend.handle}`}
+            onConfirm={onRemove} />
         </span>
       </div>
       {open && avail && (

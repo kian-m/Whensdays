@@ -339,3 +339,18 @@ DELETE FROM groups WHERE id = $1 AND owner_id = $2;
 SELECT ad.user_id, ad.day, ad.daypart, ad.status
 FROM availability_days ad
 WHERE ad.user_id IN (SELECT user_id FROM event_attendees WHERE event_id = $1);
+
+-- name: SetSeries :exec
+-- Attach an event to a series after the fact (multi-date finalize).
+UPDATE events SET series_id = $2, recurrence = $3 WHERE id = $1;
+
+-- name: CopyAttendees :exec
+-- Carry everyone (with their RSVP) onto a sibling occurrence.
+INSERT INTO event_attendees (event_id, user_id, rsvp)
+SELECT $2::uuid, src.user_id, src.rsvp FROM event_attendees src WHERE src.event_id = $1
+ON CONFLICT DO NOTHING;
+
+-- name: CopyInvites :exec
+INSERT INTO event_invites (event_id, user_id, inviter_id)
+SELECT $2::uuid, src.user_id, src.inviter_id FROM event_invites src WHERE src.event_id = $1
+ON CONFLICT DO NOTHING;

@@ -42,6 +42,31 @@ export function Pill({ kind, children }: { kind: string; children: React.ReactNo
   return <span className={`pill ${kind}`}>{children}</span>;
 }
 
+// Two-tap destructive confirmation — native confirm() dialogs are silently
+// suppressed on iOS (especially installed-PWA standalone mode), so "Cancel
+// event" did nothing on phones. First tap arms the button (auto-disarms after
+// 4s); the second tap actually fires.
+export function ConfirmButton({ label, confirmLabel, onConfirm, testid }: {
+  label: string; confirmLabel: string; onConfirm: () => void | Promise<void>; testid: string;
+}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return (
+    <button type="button" className="btn ghost sm" data-testid={testid}
+      style={{
+        color: "var(--no)",
+        ...(armed ? { background: "color-mix(in srgb, var(--no) 16%, transparent)", borderColor: "var(--no)", fontWeight: 700 } : {}),
+      }}
+      onClick={() => { if (armed) { setArmed(false); void onConfirm(); } else setArmed(true); }}>
+      {armed ? confirmLabel : label}
+    </button>
+  );
+}
+
 // Availability grid: rows = dates, columns = the 6 dayparts. Editable (tap a
 // cell; tap a date or daypart header to fill that row/column) or read-only.
 // `selected` and `busy` are sets of "YYYY-MM-DD:daypart" keys.

@@ -17,7 +17,7 @@ function groupStreak(events: Event[]): number {
   while (months.has(m)) { n++; m--; }
   return n;
 }
-import { Avatar, BackLink, GifPicker, Loading, fileToAvatar, useAsync, EventThumb } from "../ui";
+import { Avatar, BackLink, ConfirmButton, GifPicker, Loading, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { eventEmoji } from "../scheduler/questions";
 
 // Group icons are an emoji from this palette or an uploaded photo — never free
@@ -183,12 +183,8 @@ export function GroupPage() {
               style={{ display: "none" }} onChange={onPickIcon} />
             <button type="button" className="btn ghost sm" data-testid="group-icon-gif"
               onClick={() => setPickingGif((p) => !p)}>GIF</button>
-            <button type="button" className="btn ghost sm" style={{ color: "var(--no)" }} data-testid="group-delete"
-              onClick={async () => {
-                if (!window.confirm(`Delete "${group.name}"? Its events stay, but the group and memberships go.`)) return;
-                await api(`/api/groups/${id}`, { method: "DELETE" });
-                nav("/groups");
-              }}>Delete group</button>
+            <ConfirmButton label="Delete group" confirmLabel="Tap again — events stay, group goes" testid="group-delete"
+              onConfirm={async () => { await api(`/api/groups/${id}`, { method: "DELETE" }); nav("/groups"); }} />
           </div>
         )}
         {is_owner && pickingGif && (

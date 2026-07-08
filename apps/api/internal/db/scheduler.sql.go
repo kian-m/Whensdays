@@ -232,6 +232,39 @@ func (q *Queries) ClearGeneralVotes(ctx context.Context, arg ClearGeneralVotesPa
 	return err
 }
 
+const copyAttendees = `-- name: CopyAttendees :exec
+INSERT INTO event_attendees (event_id, user_id, rsvp)
+SELECT $2::uuid, src.user_id, src.rsvp FROM event_attendees src WHERE src.event_id = $1
+ON CONFLICT DO NOTHING
+`
+
+type CopyAttendeesParams struct {
+	EventID pgtype.UUID `json:"event_id"`
+	Column2 pgtype.UUID `json:"column_2"`
+}
+
+// Carry everyone (with their RSVP) onto a sibling occurrence.
+func (q *Queries) CopyAttendees(ctx context.Context, arg CopyAttendeesParams) error {
+	_, err := q.db.Exec(ctx, copyAttendees, arg.EventID, arg.Column2)
+	return err
+}
+
+const copyInvites = `-- name: CopyInvites :exec
+INSERT INTO event_invites (event_id, user_id, inviter_id)
+SELECT $2::uuid, src.user_id, src.inviter_id FROM event_invites src WHERE src.event_id = $1
+ON CONFLICT DO NOTHING
+`
+
+type CopyInvitesParams struct {
+	EventID pgtype.UUID `json:"event_id"`
+	Column2 pgtype.UUID `json:"column_2"`
+}
+
+func (q *Queries) CopyInvites(ctx context.Context, arg CopyInvitesParams) error {
+	_, err := q.db.Exec(ctx, copyInvites, arg.EventID, arg.Column2)
+	return err
+}
+
 const createEvent = `-- name: CreateEvent :one
 
 INSERT INTO events (
@@ -1353,6 +1386,22 @@ func (q *Queries) SetProfileEmail(ctx context.Context, arg SetProfileEmailParams
 		&i.Email,
 	)
 	return i, err
+}
+
+const setSeries = `-- name: SetSeries :exec
+UPDATE events SET series_id = $2, recurrence = $3 WHERE id = $1
+`
+
+type SetSeriesParams struct {
+	ID         pgtype.UUID `json:"id"`
+	SeriesID   pgtype.UUID `json:"series_id"`
+	Recurrence string      `json:"recurrence"`
+}
+
+// Attach an event to a series after the fact (multi-date finalize).
+func (q *Queries) SetSeries(ctx context.Context, arg SetSeriesParams) error {
+	_, err := q.db.Exec(ctx, setSeries, arg.ID, arg.SeriesID, arg.Recurrence)
+	return err
 }
 
 const updateEvent = `-- name: UpdateEvent :one

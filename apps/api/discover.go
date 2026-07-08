@@ -38,11 +38,10 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "list reminders", err)
 		return
 	}
-	sent := 0
+	// Reminders are digested per recipient (one email even with several events
+	// tomorrow), so send for the whole batch first, then mark each reminded.
+	sent := s.sendReminders(r.Context(), events)
 	for _, ev := range events {
-		if s.notifyReminder(r.Context(), ev) > 0 {
-			sent++
-		}
 		if err := s.queries.MarkEventReminded(r.Context(), ev.ID); err != nil {
 			s.internal(w, "mark reminded", err)
 			return

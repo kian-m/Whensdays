@@ -772,7 +772,7 @@ test.describe("scheduler", () => {
   test("deletion: cancel event, delete group, decline + unfriend", async ({ page, browser }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
     await ensureUser(page, "deleter", "Del Eter", "deleter");
-    page.on("dialog", (d) => d.accept()); // auto-accept the confirm()s
+    // Destructive buttons are two-tap confirms now (no native dialogs).
 
     // Cancel an event → page shows the cancelled state; it leaves the dashboard.
     const title = `Doomed ${test.info().testId}`;
@@ -787,7 +787,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
-    await page.getByTestId("cancel-event").click();
+    await page.getByTestId("cancel-event").click(); // arm…
+    await page.getByTestId("cancel-event").click(); // …confirm
     await expect(page.getByTestId("cancelled-note")).toBeVisible();
     await page.goto("/");
     await expect(page.getByText(title)).toHaveCount(0);
@@ -798,7 +799,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("group-name").fill(gname);
     await page.getByTestId("group-create").click();
     await page.getByText(gname).first().click();
-    await page.getByTestId("group-delete").click();
+    await page.getByTestId("group-delete").click(); // arm…
+    await page.getByTestId("group-delete").click(); // …confirm
     await expect(page).toHaveURL(/\/groups$/);
     await expect(page.getByText(gname)).toHaveCount(0);
 
@@ -826,7 +828,8 @@ test.describe("scheduler", () => {
       await page.getByTestId("friend-handle").waitFor();
       await page.getByTestId("accept-delfriend").click();
       await expect(page.getByTestId("unfriend-delfriend")).toBeVisible();
-      await page.getByTestId("unfriend-delfriend").click();
+      await page.getByTestId("unfriend-delfriend").click(); // arm…
+      await page.getByTestId("unfriend-delfriend").click(); // …confirm
       await expect(page.getByTestId("unfriend-delfriend")).toHaveCount(0);
     } finally {
       await otherCtx.close();
@@ -1171,6 +1174,43 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
     await page.getByTestId("preview-toggle").click();
     await expect(page.getByTestId("gr-month-days")).toBeVisible();
+  });
+
+  test("general poll finalizes MULTIPLE winning dates into a series", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "mfin1", "Multi Fin", "mfin1");
+    const title = `MultiFin ${test.info().testId}-${Date.now()}`;
+    const dt = (days: number) => {
+      const d = new Date(Date.now() + days * 24 * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T19:00`;
+    };
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-party").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-general").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    // RSVP as a participant so someone is carried onto the extra dates.
+    await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("preview-toggle").click();
+
+    // Host picks TWO winning dates from the group's availability.
+    await page.getByTestId("general-finalize-time").fill(dt(3));
+    await page.getByTestId("general-add-date").click();
+    await page.getByTestId("general-finalize-time-1").fill(dt(9));
+    await page.getByTestId("general-finalize").click();
+
+    // One series, both dates; the RSVP carried onto the sibling occurrence.
+    await expect(page.getByTestId("series")).toContainText("1 of 2");
+    await page.getByTestId("series-occ-1").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    await expect(page.getByTestId("series")).toContainText("2 of 2");
+    await expect(page.getByText("1 going · 1 responded")).toBeVisible();
   });
 
   test("invite links unfurl: /e/{id} serves Open Graph tags", async ({ page, request }) => {

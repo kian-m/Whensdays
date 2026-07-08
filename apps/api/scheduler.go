@@ -1227,7 +1227,8 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		StartsAt string `json:"starts_at"`
+		StartsAt   string   `json:"starts_at"`
+		MoreStarts []string `json:"more_starts"` // optional: schedule SEVERAL winning dates from the poll
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -1236,6 +1237,19 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	if !valid {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "valid starts_at required"})
 		return
+	}
+	if len(in.MoreStarts) > 11 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "at most 12 dates"})
+		return
+	}
+	var extra []pgtype.Timestamptz
+	for _, raw := range in.MoreStarts {
+		ets, ok := parseTS(raw)
+		if !ok {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid extra date"})
+			return
+		}
+		extra = append(extra, ets)
 	}
 	// Host or cohost may finalize (cohosts help run the event).
 	loaded, role, err := s.eventAndRole(r.Context(), id, uid)
@@ -1260,7 +1274,35 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "finalize", err)
 		return
 	}
-	s.analytics.Capture(uid, "event_finalized", map[string]any{"event_id": r.PathValue("id")})
+	// Multi-date finalize: the host picked SEVERAL winning dates off the group's
+	// availability. The poll event becomes the first occurrence; each extra date
+	// becomes a sibling in a new series with everyone (attendees + invites, RSVPs
+	// intact) carried over.
+	if len(extra) > 0 {
+		series := newUUID()
+		if err := s.queries.SetSeries(r.Context(), db.SetSeriesParams{ID: id, SeriesID: series, Recurrence: "custom"}); err != nil {
+			s.internal(w, "finalize: set series", err)
+			return
+		}
+		for _, ets := range extra {
+			sib, cerr := s.queries.CreateEvent(r.Context(), db.CreateEventParams{
+				HostID: ev.HostID, Title: ev.Title, EventType: ev.EventType, Description: ev.Description,
+				LocationMode: ev.LocationMode, LocationAddress: ev.LocationAddress,
+				SchedulingMode: "fixed", StartsAt: ets, Status: "scheduled",
+				GroupID: ev.GroupID, SeriesID: series, Recurrence: "custom",
+				Visibility: ev.Visibility, Topic: ev.Topic, City: ev.City,
+				CustomEmoji: ev.CustomEmoji, CustomLabel: ev.CustomLabel,
+				GeneralScope: ev.GeneralScope, Timezone: ev.Timezone,
+			})
+			if cerr != nil {
+				s.internal(w, "finalize: create occurrence", cerr)
+				return
+			}
+			_ = s.queries.CopyAttendees(r.Context(), db.CopyAttendeesParams{EventID: id, Column2: sib.ID})
+			_ = s.queries.CopyInvites(r.Context(), db.CopyInvitesParams{EventID: id, Column2: sib.ID})
+		}
+	}
+	s.analytics.Capture(uid, "event_finalized", map[string]any{"event_id": r.PathValue("id"), "dates": 1 + len(extra)})
 	s.notifyFinalized(r.Context(), ev)
 	writeJSON(w, http.StatusOK, ev)
 }
