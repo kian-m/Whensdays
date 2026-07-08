@@ -92,7 +92,7 @@ export function Home() {
           <div style={{ fontSize: "2.4rem" }}>🗓️</div>
           <h3>No plans yet</h3>
           <p className="muted">Host a dinner, movie night or camping trip — or wait for an invite.</p>
-          <div className="row" style={{ justifyContent: "center" }}>
+          <div className="row wrap" style={{ justifyContent: "center" }}>
             <Link to="/new" className="btn soft">Create your first event</Link>
             <Link to="/discover" className="btn ghost">Browse public events</Link>
           </div>

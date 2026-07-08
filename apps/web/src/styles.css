@@ -178,6 +178,9 @@ a { color: inherit; text-decoration: none; }
   }
   /* keep content clear of the fixed bar */
   .app { padding-bottom: calc(58px + env(safe-area-inset-bottom) + 1rem); }
+  /* mobile-first: rows wrap rather than overflow. Buttons are nowrap, so a row
+     that can't fit folds to the next line instead of pushing off-screen. */
+  .row { flex-wrap: wrap; }
 }
 
 /* cards — the frosted-glass panel every feature sits in */
@@ -231,6 +234,7 @@ a { color: inherit; text-decoration: none; }
    Interaction feel lives here once — never per-component. */
 .btn {
   font: inherit; font-weight: 700; letter-spacing: -0.01em; cursor: pointer;
+  white-space: nowrap; /* a button label must never wrap mid-phrase on mobile */
   border: 1px solid color-mix(in srgb, var(--accent) 80%, #000 20%);
   border-radius: var(--radius-sm); padding: 0.62rem 1.2rem;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
@@ -259,9 +263,16 @@ a { color: inherit; text-decoration: none; }
 /* inputs */
 label.field { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35rem; }
 .input, select.input, textarea.input {
-  width: 100%; font: inherit; padding: 0.65rem 0.8rem; border: 1px solid var(--glass-line);
+  width: 100%; min-width: 0; max-width: 100%; font: inherit; padding: 0.65rem 0.8rem; border: 1px solid var(--glass-line);
   border-radius: var(--radius-sm); background: var(--glass-2); color: var(--ink);
   box-shadow: inset 0 1px 0 var(--glass-glint);
+}
+/* iOS Safari gives date/time inputs an intrinsic width that refuses to shrink,
+   so they can blow past their container on phones. Strip the native chrome and
+   force them to behave like every other input (with a tap-friendly height,
+   since appearance:none collapses them). */
+input.input[type="datetime-local"], input.input[type="date"], input.input[type="time"] {
+  -webkit-appearance: none; appearance: none; min-height: 44px; display: block;
 }
 .input:focus {
   outline: none; border-color: var(--accent);
@@ -274,7 +285,7 @@ textarea.input { resize: vertical; min-height: 64px; }
    letterspaced micro-type, hairline colored border, live status dot. */
 .chip {
   border: 1px solid var(--glass-line); background: var(--glass-2); border-radius: var(--radius-sm);
-  padding: 0.45rem 0.9rem; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+  padding: 0.45rem 0.9rem; font-weight: 600; font-size: 0.9rem; cursor: pointer; white-space: nowrap;
   color: var(--ink); box-shadow: inset 0 1px 0 var(--glass-glint);
   transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }

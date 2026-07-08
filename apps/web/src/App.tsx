@@ -25,6 +25,23 @@ const GroupPage = lazy(() => import("./pages/Groups").then((m) => ({ default: m.
 const Discover = lazy(() => import("./pages/Discover").then((m) => ({ default: m.Discover })));
 const Quick = lazy(() => import("./pages/Quick").then((m) => ({ default: m.Quick })));
 
+// Warm the lazy chunks once the first paint has settled: navigation then swaps
+// routes instantly instead of flashing "Loading…". Chunks are tiny and cached,
+// so this trades a few idle-time requests for zero perceived nav latency.
+function warmRouteChunks() {
+  const warm = () => {
+    void import("./pages/EventPage");
+    void import("./pages/NewEvent");
+    void import("./pages/Quick");
+    void import("./pages/Friends");
+    void import("./pages/Groups");
+    void import("./pages/Profile");
+    void import("./pages/Calendars");
+  };
+  if ("requestIdleCallback" in window) requestIdleCallback(warm, { timeout: 4000 });
+  else setTimeout(warm, 2000);
+}
+
 // Build-time constant. When "dev", the app runs without Clerk (hermetic
 // local/CI runs). Default (prod) uses Clerk. See main.tsx.
 export const DEV_AUTH = import.meta.env.VITE_AUTH_MODE === "dev";
@@ -54,6 +71,7 @@ function resolveDevGuest(): boolean {
 const DEV_GUEST = resolveDevGuest();
 
 export function App() {
+  useEffect(() => warmRouteChunks(), []);
   return (
     <BrowserRouter>
       <AnalyticsPageviews />

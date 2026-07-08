@@ -6,6 +6,12 @@
     <title>Whensdays — plans, minus the group-chat chaos</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <!-- Warm the TLS handshakes we know are coming (Clerk auth JS, GIF CDN) so
+         they don't stack on top of first interaction. dns-prefetch is the cheap
+         fallback for browsers that ignore preconnect. -->
+    <link rel="preconnect" href="https://clerk.whensdays.com" crossorigin />
+    <link rel="dns-prefetch" href="https://clerk.whensdays.com" />
+    <link rel="dns-prefetch" href="https://static.klipy.com" />
     <!-- iOS home-screen bookmarks need a PNG (SVG + transparency render black). -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#ee6c4d" />

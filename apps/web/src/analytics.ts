@@ -1,5 +1,3 @@
-import posthog from "posthog-js";
-
 // Frontend analytics wrapper. Safe to call always: when VITE_PUBLIC_POSTHOG_KEY
 // is unset (hermetic E2E/docs builds, or any build without analytics) every call
 // is a no-op. The distinct id is the app user id (Clerk sub / "demo-user") — the
@@ -13,8 +11,6 @@ import posthog from "posthog-js";
 const KEY = import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined;
 const HOST = (import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined) ?? "https://us.i.posthog.com";
 const RECORD = (import.meta.env.VITE_PUBLIC_POSTHOG_RECORD as string | undefined) !== "false";
-
-let enabled = false;
 
 // Canonical client-side event names. Backend owns the authoritative business
 // events (event_created, rsvp_submitted, …); these are UI/intent signals the
@@ -33,12 +29,35 @@ export const EVENTS = {
   guestSignupClicked: "guest_signup_clicked",
 } as const;
 
+// posthog-js is ~fifty KB gzipped — keep it OUT of the critical bundle. The
+// library loads on idle after first paint; calls made before then queue and
+// flush in order once it's ready, so no event is lost.
+type PostHog = typeof import("posthog-js").default;
+let ph: PostHog | null = null;
+let pending: Array<(p: PostHog) => void> = [];
+const run = (fn: (p: PostHog) => void) => {
+  if (ph) fn(ph);
+  else if (KEY) pending.push(fn);
+};
+
 export function initAnalytics() {
   if (!KEY) {
     console.info("[analytics] disabled (no VITE_PUBLIC_POSTHOG_KEY)");
     return;
   }
-  posthog.init(KEY, {
+  const load = async () => {
+    const { default: posthog } = await import("posthog-js");
+    init(posthog);
+    ph = posthog;
+    pending.forEach((fn) => fn(posthog));
+    pending = [];
+  };
+  if ("requestIdleCallback" in window) requestIdleCallback(() => void load(), { timeout: 3000 });
+  else setTimeout(() => void load(), 1500);
+}
+
+function init(posthog: PostHog) {
+  posthog.init(KEY!, {
     api_host: HOST,
     // Dated defaults preset — opts into PostHog's current recommended behaviors.
     defaults: "2026-05-30",
@@ -61,20 +80,19 @@ export function initAnalytics() {
       maskTextSelector: "*",
     },
   });
-  enabled = true;
 }
 
 export const analytics = {
   capture(event: string, props?: Record<string, unknown>) {
-    if (enabled) posthog.capture(event, props);
+    run((p) => p.capture(event, props));
   },
   identify(distinctId: string, props?: Record<string, unknown>) {
-    if (enabled) posthog.identify(distinctId, props);
+    run((p) => p.identify(distinctId, props));
   },
   pageview() {
-    if (enabled) posthog.capture("$pageview");
+    run((p) => p.capture("$pageview"));
   },
   reset() {
-    if (enabled) posthog.reset();
+    run((p) => p.reset());
   },
 };

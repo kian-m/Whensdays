@@ -36,14 +36,19 @@ jobs:
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
       - name: Deploy to Cloud Run
         run: |
+          # min-instances 1 + cpu-boost kill cold starts (the biggest perceived-
+          # latency source for a scale-to-zero API). Costs a few $/mo of idle —
+          # speed outranks hosting cost in this repo's priorities; set back to 0
+          # to return to ~$0 idle.
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
             --platform managed \
             --allow-unauthenticated \
-            --min-instances 0 \
+            --min-instances 1 \
             --max-instances 2 \
+            --cpu-boost \
             --port 8080 \
             --set-env-vars "APP_ENV=production,RUN_MIGRATIONS=true,POSTHOG_HOST=https://us.i.posthog.com,APP_VERSION=${GITHUB_SHA},APP_ORIGIN=${{ secrets.APP_ORIGIN }}" \
             --set-secrets "DATABASE_URL=DATABASE_URL:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest,POSTHOG_API_KEY=POSTHOG_API_KEY:latest,POSTHOG_PERSONAL_API_KEY=POSTHOG_PERSONAL_API_KEY:latest,GUEST_TOKEN_KEY=GUEST_TOKEN_KEY:latest,KLIPY_API_KEY=KLIPY_API_KEY:latest,EMAIL_API_KEY=EMAIL_API_KEY:latest,EMAIL_FROM=EMAIL_FROM:latest,CRON_KEY=CRON_KEY:latest"

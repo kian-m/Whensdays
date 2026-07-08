@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -20,8 +21,13 @@ type Client struct {
 	http   *http.Client
 }
 
-// New reads config; empty apiKey or from → disabled no-op client.
+// New reads config; empty apiKey or from → disabled no-op client. A bare
+// address (no display name) is wrapped as "Whensdays <addr>" so inboxes show
+// the brand, not the mailbox.
 func New(apiKey, from string, logger *slog.Logger) *Client {
+	if from != "" && !strings.Contains(from, "<") {
+		from = "Whensdays <" + from + ">"
+	}
 	c := &Client{apiKey: apiKey, from: from, url: "https://api.resend.com/emails",
 		logger: logger, http: &http.Client{Timeout: 5 * time.Second}}
 	if !c.Enabled() {
