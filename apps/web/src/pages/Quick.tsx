@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, hostTimezone, sendJSON, useApi } from "../lib";
+import { Event, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
 
 // Quick plan: the 10-second path. Either set a time, or open it up so everyone
 // marks when they're free (a general-availability poll) — you lock it in from
@@ -58,7 +58,7 @@ export function Quick() {
             data-testid="quick-mode-avail" onClick={() => setMode("general")}>Ask when people are free</button>
         </div>
         {mode === "fixed" ? (
-          <input type="datetime-local" className="input" data-testid="quick-when" value={when}
+          <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="quick-when" value={when}
             onChange={(e) => setWhen(e.target.value)} />
         ) : (
           <>

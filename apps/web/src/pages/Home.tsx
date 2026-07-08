@@ -18,7 +18,8 @@ function soonLabel(iso: string): string {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - startOfToday.getTime()) / DAY);
-  if (days <= 0) return "Today";
+  if (days < 0) return ""; // already happened — no urgency pill
+  if (days === 0) return "Today";
   if (days === 1) return "Tomorrow";
   if (days < 7) return `In ${days} days`;
   return "";

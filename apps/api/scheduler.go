@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -90,6 +91,17 @@ func orFree(s string) string {
 
 // dayparts are the coarse time-of-day buckets used by general-availability polls.
 var dayparts = []string{"early_morning", "morning", "noon", "afternoon", "evening", "night"}
+
+// timeInPast rejects event times more than an hour behind now (grace covers
+// clock skew and "starting right now" events). Dev mode is exempt: hermetic
+// E2E deliberately backdates events to simulate history (streaks, Past tab) —
+// same dev-only escape as the rate limiter.
+func timeInPast(ts pgtype.Timestamptz) bool {
+	if os.Getenv("AUTH_MODE") == "dev" {
+		return false
+	}
+	return time.Since(ts.Time) > time.Hour
+}
 
 // hourToDaypart buckets an hour like the web's helper of the same name — keep
 // the two in sync (lib.tsx).
@@ -674,6 +686,10 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "fixed events need a valid starts_at"})
 			return
 		}
+		if timeInPast(ts) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "events can't start in the past"})
+			return
+		}
 		params.StartsAt = ts
 		params.Status = "scheduled"
 	case "poll":
@@ -733,6 +749,10 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			ts, ok := parseTS(raw)
 			if !ok {
 				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid extra date"})
+				return
+			}
+			if timeInPast(ts) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "events can't start in the past"})
 				return
 			}
 			moreStarts = append(moreStarts, ts)
@@ -1238,6 +1258,10 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "valid starts_at required"})
 		return
 	}
+	if timeInPast(ts) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "events can't start in the past"})
+		return
+	}
 	if len(in.MoreStarts) > 11 {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "at most 12 dates"})
 		return
@@ -1247,6 +1271,10 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		ets, ok := parseTS(raw)
 		if !ok {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid extra date"})
+			return
+		}
+		if timeInPast(ets) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "events can't start in the past"})
 			return
 		}
 		extra = append(extra, ets)

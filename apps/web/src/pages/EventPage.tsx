@@ -398,9 +398,18 @@ function WhosIn({ data }: { data: EventDetail }) {
 
 function Rsvp({ eventId, current, reload }: { eventId: string; current?: string; reload: () => void }) {
   const api = useApi();
-  async function set(rsvp: string) {
-    await sendJSON(api, "POST", `/api/events/${eventId}/rsvp`, { rsvp });
-    reload();
+  // OPTIMISTIC: the tap flips the selection instantly — waiting on the POST
+  // plus a full event refetch before showing the choice felt broken (Cloud Run
+  // + Neon round-trips add up). Server sync + reload happen in the background;
+  // a failed POST reverts the flip.
+  const [sel, setSel] = useState<string | undefined>(undefined);
+  const active = sel ?? current;
+  function set(rsvp: string) {
+    const prev = active;
+    setSel(rsvp);
+    sendJSON(api, "POST", `/api/events/${eventId}/rsvp`, { rsvp })
+      .then((res) => { if (!res.ok) setSel(prev); else reload(); })
+      .catch(() => setSel(prev));
   }
   const opts: [string, string][] = [["going", "✅ Going"], ["maybe", "🤔 Maybe"], ["declined", "✕ Can't"]];
   return (
@@ -408,7 +417,7 @@ function Rsvp({ eventId, current, reload }: { eventId: string; current?: string;
       <h3>Are you in?</h3>
       <div className="row wrap">
         {opts.map(([v, label]) => (
-          <button key={v} className={`chip ${current === v ? "on" : ""}`} data-testid={`rsvp-${v}`} onClick={() => set(v)}>
+          <button key={v} className={`chip ${active === v ? "on" : ""}`} data-testid={`rsvp-${v}`} onClick={() => set(v)}>
             {label}
           </button>
         ))}
@@ -876,7 +885,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
       {e.status === "scheduled" && (
         <label className="field">When
-          <input type="datetime-local" className="input" data-testid="edit-time"
+          <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="edit-time"
             value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
         </label>
       )}
@@ -1329,12 +1338,12 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
       <div className="divider" />
       <div className="muted small">Pick the winning date{pickCount > 1 ? "s" : ""} &amp; time{pickCount > 1 ? "s" : ""} from the availability above:</div>
       <div className="row">
-        <input type="datetime-local" className="input" data-testid="general-finalize-time" value={when}
+        <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="general-finalize-time" value={when}
           onChange={(ev) => setWhen(ev.target.value)} />
       </div>
       {moreWhens.map((v, i) => (
         <div key={i} className="row" style={{ gap: 6 }}>
-          <input type="datetime-local" className="input" data-testid={`general-finalize-time-${i + 1}`} value={v}
+          <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid={`general-finalize-time-${i + 1}`} value={v}
             onChange={(ev) => setMoreWhens((m) => m.map((x, j) => (j === i ? ev.target.value : x)))} />
           <button type="button" className="btn ghost sm" data-testid={`general-finalize-remove-${i + 1}`}
             onClick={() => setMoreWhens((m) => m.filter((_, j) => j !== i))}>✕</button>

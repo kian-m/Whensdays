@@ -333,6 +333,10 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !ts.Time.Equal(current.StartsAt.Time) {
+			if timeInPast(ts) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "events can't start in the past"})
+				return
+			}
 			startsAt = ts
 			reminderSent = false
 		}

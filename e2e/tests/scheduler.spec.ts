@@ -919,7 +919,9 @@ test.describe("scheduler", () => {
         await expect(row).toHaveClass(/tile-friend/);
       }
       await fv2.getByText(title).first().click(); // open → RSVP going
+      const fv2Rsvp = fv2.waitForResponse((r) => r.url().includes("/rsvp") && r.ok());
       await fv2.getByTestId("rsvp-going").click();
+      await fv2Rsvp; // optimistic UI: wait for the background POST before navigating
       await fv2.goto("/discover");
       await fv2.getByTestId("scope-friends").click();
       await expect(fv2.getByTestId("feed-event").filter({ hasText: title }).first()).toHaveClass(/tile-going/);
@@ -929,7 +931,9 @@ test.describe("scheduler", () => {
       await page.goto("/");
       await page.getByText(title).first().click();
       await page.getByTestId("preview-toggle").click();
+      const hostRsvp = page.waitForResponse((r) => r.url().includes("/rsvp") && r.ok());
       await page.getByTestId("rsvp-going").click();
+      await hostRsvp; // ensure it landed before the other browser re-checks
       await fv2.reload();
       await fv2.getByTestId("scope-friends").click();
       await expect(
