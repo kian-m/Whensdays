@@ -199,6 +199,108 @@ export function fileToAvatar(file: File, size = 160): Promise<string> {
   });
 }
 
+// Client-rendered 1080x1080 share card (lock celebration, group streaks) -
+// a canvas-composited PNG people can drop straight into stories/group chats.
+// Pure canvas, no deps; the brand look mirrors the OG card.
+export type ShareCardOpts = { kicker: string; emoji?: string; title: string; sub: string; accent?: string };
+export function drawShareCard(o: ShareCardOpts): string {
+  const S = 1080;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  const accent = /^#[0-9a-f]{6}$/i.test(o.accent ?? "") ? o.accent! : "#ee6c4d";
+  // Dusk gradient + an accent glow low in the frame (the sunset-through-glass palette).
+  const bg = ctx.createLinearGradient(0, 0, 0, S);
+  bg.addColorStop(0, "#182338");
+  bg.addColorStop(1, "#0d1322");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, S, S);
+  const glow = ctx.createRadialGradient(S / 2, S * 0.85, 40, S / 2, S * 0.85, S * 0.95);
+  glow.addColorStop(0, accent + "66");
+  glow.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, S, S);
+  const sans = "-apple-system, 'Segoe UI', Roboto, sans-serif";
+  ctx.textAlign = "center";
+  // Kicker: uppercase micro-type, accent (the .pill language).
+  ctx.fillStyle = accent;
+  ctx.font = `800 40px ${sans}`;
+  ctx.fillText(o.kicker.toUpperCase().split("").join("  "), S / 2, 220);
+  if (o.emoji) {
+    ctx.font = `160px ${sans}`;
+    ctx.fillText(o.emoji, S / 2, 430);
+  }
+  // Title: display-weight, wrapped to at most 3 lines.
+  ctx.fillStyle = "#f6f2ec";
+  ctx.font = `800 88px ${sans}`;
+  const words = o.title.split(/\s+/);
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    const probe = line ? `${line} ${w}` : w;
+    if (ctx.measureText(probe).width > S - 160 && line) {
+      lines.push(line);
+      line = w;
+      if (lines.length === 3) break;
+    } else line = probe;
+  }
+  if (lines.length < 3 && line) lines.push(line);
+  const titleTop = o.emoji ? 560 : 460;
+  lines.forEach((l, i) => ctx.fillText(l, S / 2, titleTop + i * 104));
+  // Sub: the date / group line.
+  ctx.fillStyle = "rgba(246, 242, 236, 0.72)";
+  ctx.font = `500 48px ${sans}`;
+  ctx.fillText(o.sub, S / 2, titleTop + lines.length * 104 + 40);
+  // Brand footer.
+  ctx.fillStyle = "rgba(246, 242, 236, 0.55)";
+  ctx.font = `700 38px ${sans}`;
+  ctx.fillText("whensdays.com", S / 2, S - 90);
+  return canvas.toDataURL("image/png");
+}
+
+// Button + preview modal for a share card: tap to render, then native-share
+// (where the Web Share API takes files - iOS/Android), download, or close.
+export function ShareCardButton({ card, label, testid }: {
+  card: () => ShareCardOpts; label: string; testid: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  async function nativeShare() {
+    if (!url) return;
+    try {
+      const blob = await (await fetch(url)).blob();
+      const file = new File([blob], "whensdays.png", { type: "image/png" });
+      const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+      if (nav.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        analytics.capture(EVENTS.shareCardShared, { kind: testid });
+      }
+    } catch { /* user closed the sheet */ }
+  }
+  return (
+    <>
+      <button type="button" className="btn ghost sm" data-testid={testid}
+        onClick={() => { analytics.capture(EVENTS.shareCardOpened, { kind: testid }); setUrl(drawShareCard(card())); }}>{label}</button>
+      {url && createPortal(
+        <div className="crop-overlay" data-testid="share-card-modal">
+          <div className="card stack crop-card">
+            <img src={url} alt="share card preview" data-testid="share-card-img"
+              style={{ width: "100%", borderRadius: 10 }} />
+            <div className="row" style={{ justifyContent: "flex-end" }}>
+              {"share" in navigator && (
+                <button type="button" className="btn sm" data-testid="share-card-share" onClick={nativeShare}>Share</button>
+              )}
+              <a className="btn ghost sm" download="whensdays.png" href={url} data-testid="share-card-download">Download</a>
+              <button type="button" className="btn ghost sm" data-testid="share-card-close" onClick={() => setUrl(null)}>Close</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 // Pan-and-zoom crop dialog for uploaded photos. The square viewport IS the
 // crop area: drag to position, slider to zoom; output is a size x size JPEG
 // data URL (same contract as fileToAvatar). `shape` only changes the preview

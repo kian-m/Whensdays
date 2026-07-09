@@ -368,3 +368,8 @@ WHERE p.user_id IN (
     JOIN event_time_options o ON o.id = tv.option_id
     WHERE o.event_id = $1::uuid
 );
+
+-- name: CountGoing :one
+-- Going-count for one event - rides on the OG unfurl ("4 in so far") so the
+-- link preview in a group chat carries live social pressure.
+SELECT count(*)::int FROM event_attendees WHERE event_id = $1 AND rsvp = 'going';

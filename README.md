@@ -50,7 +50,7 @@ Measure in PostHog: activation (host invites ≥1), invite→participant convers
 |---|---|---|
 | **Add** | One-tap RSVP links in email | Highest-leverage conversion fix left — guests say yes without ever loading the app |
 | **Add** | Nudge non-responders (host, one tap) | Hosts are the engine; this answers the #1 host anxiety ("nobody replied") |
-| **Add** | Finalize celebration + shareable card | The product's peak emotion is currently invisible; make it the screenshot people post |
+| **Add** ✅ | Finalize celebration + shareable card | Shipped: lock-moment banner + a canvas-rendered 1080x1080 card ("It's happening" + title/date in the event's theme accent) on every scheduled event - native share / download; group streaks get the same card ("N months strong"). The invite unfurl now carries **"N in so far"** (og.png + description) so the group chat sees momentum |
 | **Add** | Post-event recap → "plan the next one" | Converts a finished event into the next one — the re-host loop is the real K-factor |
 | **Add** | Group streaks | Loss-aversion retention, purpose-built for recurring groups |
 | **Update** | Invite page as the flagship screen | The most-seen surface by new users: social proof above the fold, RSVP within thumb reach, zero chrome |

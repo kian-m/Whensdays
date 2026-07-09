@@ -16,7 +16,7 @@ func TestComposeOGCardWithCover(t *testing.T) {
 			cover.SetRGBA(x, y, color.RGBA{40, 120, 200, 255})
 		}
 	}
-	card := composeOGCard(cover, "Alex Host", "Dinner")
+	card := composeOGCard(cover, "Alex Host", "Dinner", 4)
 	if got := card.Bounds(); got.Dx() != ogW || got.Dy() != ogH {
 		t.Fatalf("card = %dx%d, want %dx%d", got.Dx(), got.Dy(), ogW, ogH)
 	}
@@ -28,7 +28,7 @@ func TestComposeOGCardWithCover(t *testing.T) {
 }
 
 func TestComposeOGCardFallback(t *testing.T) {
-	card := composeOGCard(nil, "Alex", "Camping weekend")
+	card := composeOGCard(nil, "Alex", "Camping weekend", 0)
 	if got := card.Bounds(); got.Dx() != ogW || got.Dy() != ogH {
 		t.Fatalf("card = %dx%d", got.Dx(), got.Dy())
 	}
@@ -36,6 +36,33 @@ func TestComposeOGCardFallback(t *testing.T) {
 	c := card.RGBAAt(10, ogH-10)
 	if c.B < c.R {
 		t.Fatalf("fallback bottom pixel %v not navy", c)
+	}
+}
+
+func TestComposeOGCardSocialProof(t *testing.T) {
+	// going >= 2 renders the coral "N in so far" line; the exact pixels vary
+	// with the font, so compare against the same card without it.
+	with := composeOGCard(nil, "Alex", "Dinner", 5)
+	without := composeOGCard(nil, "Alex", "Dinner", 0)
+	diff := 0
+	for x := 48; x < 400; x++ {
+		for y := 140; y < 190; y++ {
+			if with.RGBAAt(x, y) != without.RGBAAt(x, y) {
+				diff++
+			}
+		}
+	}
+	if diff == 0 {
+		t.Fatal("social-proof line did not render")
+	}
+	// A lone going (just the host) must NOT render it.
+	lone := composeOGCard(nil, "Alex", "Dinner", 1)
+	for x := 48; x < 400; x++ {
+		for y := 140; y < 190; y++ {
+			if lone.RGBAAt(x, y) != without.RGBAAt(x, y) {
+				t.Fatal("going=1 should not draw social proof")
+			}
+		}
 	}
 }
 

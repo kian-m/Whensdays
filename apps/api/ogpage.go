@@ -18,13 +18,19 @@ func (s *server) handleOGPage(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		if ev, err := s.queries.GetEvent(r.Context(), id); err == nil {
 			title = ev.Title + " · Whensdays"
+			// Live social pressure in the chat preview: "4 in so far". One
+			// going is just the host - only worth surfacing from two up.
+			social := ""
+			if going, cerr := s.queries.CountGoing(r.Context(), id); cerr == nil && going >= 2 && ev.Status != "cancelled" {
+				social = fmt.Sprintf(" %d in so far.", going)
+			}
 			switch {
 			case ev.Status == "cancelled":
 				desc = "This get-together was cancelled."
 			case ev.StartsAt.Valid:
-				desc = "You're invited - " + ev.StartsAt.Time.In(eventLocation(ev)).Format("Mon Jan 2, 3:04 PM MST") + ". Tap to RSVP, no account needed."
+				desc = "You're invited - " + ev.StartsAt.Time.In(eventLocation(ev)).Format("Mon Jan 2, 3:04 PM MST") + "." + social + " Tap to RSVP, no account needed."
 			default:
-				desc = "You're invited - help pick the time. Tap to vote, no account needed."
+				desc = "You're invited - help pick the time." + social + " Tap to vote, no account needed."
 			}
 		}
 	}

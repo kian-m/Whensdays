@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -79,9 +80,13 @@ func (s *server) handleEventOGImage(w http.ResponseWriter, r *http.Request) {
 	if p, perr := s.queries.GetProfile(r.Context(), ev.HostID); perr == nil {
 		hostName = p.DisplayName
 	}
+	going := 0
+	if n, cerr := s.queries.CountGoing(r.Context(), id); cerr == nil {
+		going = int(n)
+	}
 
 	cover := s.loadCover(ev.PhotoUrl)
-	card := composeOGCard(cover, hostName, ev.Title)
+	card := composeOGCard(cover, hostName, ev.Title, going)
 
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, card); err != nil {
@@ -139,7 +144,7 @@ func (s *server) loadCover(u string) image.Image {
 // composeOGCard draws the 1200×630 unfurl tile: cover (center-cropped to fill)
 // or a brand gradient, a legibility scrim, host name top-left, logo top-right,
 // and - on the fallback - the event title.
-func composeOGCard(cover image.Image, hostName, title string) *image.RGBA {
+func composeOGCard(cover image.Image, hostName, title string, going int) *image.RGBA {
 	card := image.NewRGBA(image.Rect(0, 0, ogW, ogH))
 
 	if cover != nil {
@@ -148,8 +153,13 @@ func composeOGCard(cover image.Image, hostName, title string) *image.RGBA {
 		drawBrandGradient(card)
 	}
 
-	// Scrim: darken the top band so white text reads on any cover.
-	drawScrim(card, 0, 170, 0.62)
+	// Scrim: darken the top band so white text reads on any cover (taller when
+	// the social-proof line renders below "invites you").
+	scrimBottom := 170
+	if going >= 2 {
+		scrimBottom = 216
+	}
+	drawScrim(card, 0, scrimBottom, 0.62)
 	if cover == nil && title != "" {
 		drawScrim(card, ogH-200, ogH, 0.35)
 	}
@@ -157,6 +167,11 @@ func composeOGCard(cover image.Image, hostName, title string) *image.RGBA {
 	if hostName != "" {
 		drawText(card, ogBoldFace, truncate(hostName, 28), 48, 84, color.White)
 		drawText(card, ogRegFace, "invites you", 48, 126, color.RGBA{235, 226, 218, 235})
+	}
+	// Social pressure on the card itself: the group chat sees momentum before
+	// anyone taps. One going = just the host, so it starts at two.
+	if going >= 2 {
+		drawText(card, ogBoldFace, fmt.Sprintf("%d in so far", going), 48, 172, color.RGBA{238, 108, 77, 255})
 	}
 	if cover == nil && title != "" {
 		drawText(card, ogBoldFace, truncate(title, 34), 48, ogH-72, color.White)

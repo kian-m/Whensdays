@@ -316,6 +316,13 @@ test.describe("scheduler", () => {
     await page.getByTestId("edit-save").click();
     await expect(page.getByTestId("hero-dates").locator("div")).toHaveCount(2);
     await expect(page.getByTestId("series")).toContainText("1 of 2");
+
+    // Scheduled events offer a shareable celebration card (canvas PNG).
+    await page.getByTestId("share-card-open").click();
+    await expect(page.getByTestId("share-card-img")).toHaveAttribute("src", /^data:image\/png/);
+    await expect(page.getByTestId("share-card-download")).toHaveAttribute("href", /^data:image\/png/);
+    await page.getByTestId("share-card-close").click();
+    await expect(page.getByTestId("share-card-modal")).toHaveCount(0);
   });
 
   test("poll options rank against ALL attendees' availability", async ({ page, browser }) => {
@@ -1429,6 +1436,21 @@ test.describe("scheduler", () => {
     await page.goto(`/e/${id}`);
     await expect(page).toHaveURL(new RegExp(`/ev/${id}`));
     await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Social proof rides the unfurl from two going up ("N in so far").
+    // The viewer hosts this event (no RSVP buttons), so two dev users RSVP
+    // via the API instead.
+    if (DEV_AUTH) {
+      await page.evaluate(async (eid) => {
+        for (const u of ["unfurl2", "unfurl3"]) {
+          const h = { "Content-Type": "application/json", "X-Dev-User": u };
+          await fetch("/api/profile", { method: "PUT", headers: h, body: JSON.stringify({ display_name: `Unfurl ${u}`, handle: u }) });
+          await fetch(`/api/events/${eid}/rsvp`, { method: "POST", headers: h, body: JSON.stringify({ rsvp: "going" }) });
+        }
+      }, id);
+      const social = await request.get(`/e/${id}`);
+      expect(await social.text()).toMatch(/[0-9] in so far/);
+    }
   });
 
   test("people you may know: suggested from a shared event", async ({ browser }) => {

@@ -266,6 +266,19 @@ func (q *Queries) CopyInvites(ctx context.Context, arg CopyInvitesParams) error 
 	return err
 }
 
+const countGoing = `-- name: CountGoing :one
+SELECT count(*)::int FROM event_attendees WHERE event_id = $1 AND rsvp = 'going'
+`
+
+// Going-count for one event - rides on the OG unfurl ("4 in so far") so the
+// link preview in a group chat carries live social pressure.
+func (q *Queries) CountGoing(ctx context.Context, eventID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countGoing, eventID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createEvent = `-- name: CreateEvent :one
 
 INSERT INTO events (

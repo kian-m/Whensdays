@@ -17,7 +17,7 @@ function groupStreak(events: Event[]): number {
   while (months.has(m)) { n++; m--; }
   return n;
 }
-import { Avatar, BackLink, ConfirmButton, GifPicker, Loading, fileToAvatar, useAsync, EventThumb } from "../ui";
+import { Avatar, BackLink, ConfirmButton, GifPicker, Loading, ShareCardButton, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { eventEmoji } from "../scheduler/questions";
 
 // Group icons are an emoji from this palette or an uploaded photo - never free
@@ -162,8 +162,17 @@ export function GroupPage() {
             <span className="stack" style={{ gap: 4, minWidth: 0 }}>
               <h1 data-testid="group-title">{group.name}</h1>
               {groupStreak(events) >= 2 && (
-                <span className="pill polling" data-testid="group-streak" style={{ alignSelf: "flex-start" }}>
-                  🔥 {groupStreak(events)}-month streak
+                <span className="row" style={{ gap: 6, alignSelf: "flex-start" }}>
+                  <span className="pill polling" data-testid="group-streak">
+                    🔥 {groupStreak(events)}-month streak
+                  </span>
+                  {/* Streak flex: an exportable card - people share streaks. */}
+                  <ShareCardButton testid="share-streak" label="Share" card={() => ({
+                    kicker: "Group streak",
+                    emoji: "🔥",
+                    title: `${groupStreak(events)} months strong`,
+                    sub: group.name,
+                  })} />
                 </span>
               )}
             </span>
