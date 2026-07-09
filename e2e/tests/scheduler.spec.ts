@@ -325,6 +325,51 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("share-card-modal")).toHaveCount(0);
   });
 
+  test("capacity: full events waitlist, freed spots auto-promote", async ({ page }) => {
+    test.skip(!DEV_AUTH, "drives extra users via dev headers");
+    await ensureUser(page, "caphost", "Cap Host", "caphost");
+    const title = `Capped ${test.info().testId}-${Date.now()}`;
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-party").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    const d = new Date(Date.now() + 3 * 24 * 3600_000);
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    await page.getByTestId("fixed-time").fill(`${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T19:00`);
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("event-capacity").fill("1");
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const id = page.url().split("/e/")[1];
+
+    // A takes the only spot; B lands on the waitlist; A stepping back promotes B.
+    const states = await page.evaluate(async (eid) => {
+      const rsvp = async (u: string, r: string) => {
+        const h = { "Content-Type": "application/json", "X-Dev-User": u };
+        await fetch("/api/profile", { method: "PUT", headers: h, body: JSON.stringify({ display_name: u, handle: u }) });
+        const res = await fetch(`/api/events/${eid}/rsvp`, { method: "POST", headers: h, body: JSON.stringify({ rsvp: r }) });
+        return (await res.json()).rsvp;
+      };
+      const a1 = await rsvp("capa", "going");
+      const b1 = await rsvp("capb", "going");
+      const a2 = await rsvp("capa", "declined");
+      const detail = await (await fetch(`/api/events/${eid}`, { headers: { "X-Dev-User": "caphost" } })).json();
+      const b2 = detail.attendees.find((x: { user_id: string }) => x.user_id === "capb")?.rsvp;
+      return { a1, b1, a2, b2 };
+    }, id);
+    expect(states.a1).toBe("going");
+    expect(states.b1).toBe("waitlist");   // full -> waitlisted
+    expect(states.a2).toBe("declined");
+    expect(states.b2).toBe("going");      // spot freed -> promoted
+
+    // The promoted guest shows under Going on the guest list.
+    await page.reload();
+    await expect(page.getByTestId("guests")).toContainText("capb");
+  });
+
   test("poll deadline: shows the close date and stops votes after it", async ({ page }) => {
     test.skip(!DEV_AUTH, "backdates the deadline (dev-exempt validation)");
     await ensureUser(page, "dlhost", "Deadline Host", "dlhost");

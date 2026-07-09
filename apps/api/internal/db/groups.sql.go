@@ -158,7 +158,7 @@ func (q *Queries) ListGroupEventMonths(ctx context.Context) ([]ListGroupEventMon
 
 const listGroupEvents = `-- name: ListGroupEvents :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
 FROM events
 WHERE group_id = $1 AND status <> 'cancelled'
 ORDER BY created_at DESC
@@ -204,6 +204,7 @@ func (q *Queries) ListGroupEvents(ctx context.Context, groupID pgtype.UUID) ([]E
 			&i.PollReadySent,
 			&i.VoteReminderSent,
 			&i.QuorumSent,
+			&i.Capacity,
 		); err != nil {
 			return nil, err
 		}

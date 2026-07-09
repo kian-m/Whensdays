@@ -450,6 +450,46 @@ func (s *server) sendPollVelocity(ctx context.Context) (reminded, ready int) {
 	return reminded, ready
 }
 
+// promoteFromWaitlist moves the oldest waitlisted person into a freed going
+// spot and emails them. Called after any RSVP steps back from "going" on a
+// capped event; a no-op when the event is still full or nobody waits.
+func (s *server) promoteFromWaitlist(ctx context.Context, ev db.Event) {
+	going, err := s.queries.CountGoing(ctx, ev.ID)
+	if err != nil || going >= ev.Capacity {
+		return
+	}
+	next, err := s.queries.ListOldestWaitlist(ctx, ev.ID)
+	if err != nil {
+		return // empty waitlist
+	}
+	if err := s.queries.PromoteAttendee(ctx, db.PromoteAttendeeParams{EventID: ev.ID, UserID: next}); err != nil {
+		return
+	}
+	s.analytics.CaptureServer("waitlist_promoted", map[string]any{"event_id": uuidStr(ev.ID)})
+	if !s.notify.Enabled() {
+		return
+	}
+	p, err := s.queries.GetProfile(ctx, next)
+	if err != nil || p.Email == "" {
+		return
+	}
+	if muted, _ := s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: ev.ID, UserID: next}); muted {
+		return
+	}
+	body := renderEmail(emailContent{
+		preheader: "A spot opened up - you're in.",
+		heading:   "You're in 🎉",
+		lines:     []string{"A spot opened up for " + ev.Title + " and you were next on the waitlist - you're now going.", eventWhen(ev)},
+		ctaLabel:  "See the details",
+		ctaURL:    campaignURL(s.eventURL(ev.ID), "waitlist_promoted"),
+		logoURL:   s.logoURL(),
+		unsubURL:  s.muteLink(next, uuidStr(ev.ID)),
+		coverURL:  eventCover(ev),
+		theme:     ev.Theme,
+	})
+	s.notify.Send([]string{p.Email}, "You're in - "+ev.Title, body)
+}
+
 // --- group streak congrats ------------------------------------------------
 
 // streakLen counts consecutive months (ending at cur) present in the set.

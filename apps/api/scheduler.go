@@ -600,6 +600,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		GeneralScope    string   `json:"general_scope"` // general mode: week|month|general (default general)
 		Timezone        string   `json:"timezone"`      // host's IANA tz (e.g. America/Los_Angeles); for server-rendered times
 		PollDeadline    string   `json:"poll_deadline"` // optional RFC3339 close date (poll/general modes)
+		Capacity        int      `json:"capacity"`      // optional max going (0 = unlimited)
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -673,6 +674,11 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		CustomEmoji: in.CustomEmoji, CustomLabel: in.CustomLabel, GeneralScope: in.GeneralScope,
 		Timezone: tz,
 	}
+	if in.Capacity < 0 || in.Capacity > 500 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "capacity must be 0-500"})
+		return
+	}
+	params.Capacity = int32(in.Capacity)
 	// Poll close date: optional, poll/general only, must be in the future
 	// (dev-exempt like every time check so hermetic E2E can backdate).
 	if in.PollDeadline != "" {
@@ -1014,8 +1020,15 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		"role":     role,
 		"status":   ev.Status,
 	})
+	// Host identity for the invite hero ("Hosted by ...").
+	hostName, hostAvatar := "", ""
+	if hp, herr := s.queries.GetProfile(r.Context(), ev.HostID); herr == nil {
+		hostName, hostAvatar = hp.DisplayName, hp.AvatarUrl
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"event":              ev,
+		"host_name":          hostName,
+		"host_avatar":        hostAvatar,
 		"role":               role,
 		"can_manage":         canManage,
 		"viewer_id":          uid,
@@ -1055,6 +1068,18 @@ func (s *server) handleRsvp(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Capacity gate: a "going" beyond the cap becomes a waitlist spot instead
+	// (unless this person already holds a going spot - re-confirming keeps it).
+	waitlisted := false
+	if in.Rsvp == "going" && ev.Capacity > 0 {
+		going, cerr := s.queries.CountGoing(r.Context(), id)
+		if cerr == nil && going >= ev.Capacity {
+			if cur, gerr := s.queries.GetAttendee(r.Context(), db.GetAttendeeParams{EventID: id, UserID: uid}); gerr != nil || cur.Rsvp != "going" {
+				in.Rsvp = "waitlist"
+				waitlisted = true
+			}
+		}
+	}
 	// UpsertRsvp returns no row when the rsvp is unchanged (a re-submit) - treat
 	// that as "nothing happened": don't re-notify the host. Only a genuine change
 	// TO "going" emails the host, so double-clicks/reconfirms can't duplicate it.
@@ -1068,11 +1093,16 @@ func (s *server) handleRsvp(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "rsvp", err)
 		return
 	}
-	s.analytics.Capture(uid, "rsvp_submitted", map[string]any{"event_id": r.PathValue("id"), "rsvp": in.Rsvp})
+	s.analytics.Capture(uid, "rsvp_submitted", map[string]any{"event_id": r.PathValue("id"), "rsvp": in.Rsvp, "waitlisted": waitlisted})
 	if in.Rsvp == "going" && changed && s.notify.Enabled() {
 		if p, err := s.queries.GetProfile(r.Context(), uid); err == nil {
 			s.notifyNewRSVP(r.Context(), ev, uid, p.DisplayName)
 		}
+	}
+	// Someone stepping back from "going" can free a capped spot - promote the
+	// oldest waitlisted person (and tell them).
+	if changed && in.Rsvp != "going" && ev.Capacity > 0 {
+		s.promoteFromWaitlist(r.Context(), ev)
 	}
 	writeJSON(w, http.StatusOK, a)
 }

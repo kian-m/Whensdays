@@ -135,6 +135,7 @@ export function DayGrid({
           <div key={dp.value} className="hd">{dp.short}</div>
         ) : (
           <button key={dp.value} type="button" className="hd gp-head"
+            aria-label={`Fill the whole ${dp.value.replaceAll("_", " ")} column`}
             data-testid={`${idPrefix}-col-${dp.value}`} onClick={() => onToggleCol?.(dp.value)}>{dp.short}</button>
         ),
       )}
@@ -144,16 +145,19 @@ export function DayGrid({
             <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
           ) : (
             <button type="button" className="day gp-head" style={{ textAlign: "left" }}
+              aria-label={`Fill the whole ${d.label} row`}
               data-testid={`${idPrefix}-row-${i}`} onClick={() => onToggleRow?.(d.value)}>{d.label}</button>
           )}
           {cols.map((dp) => {
             const k = key(d.value, dp.value);
             const isLocked = locked?.has(k);
+            const label = `${d.label}, ${dp.value.replaceAll("_", " ")}: ${cellTitle(k)}`;
             return readOnly ? (
-              <div key={dp.value} className={cellClass(k)} title={cellTitle(k)} />
+              <div key={dp.value} className={cellClass(k)} title={cellTitle(k)} role="img" aria-label={label} />
             ) : (
               <button key={dp.value} type="button" data-testid={`${idPrefix}-cell-${i}-${dp.value}`}
                 className={cellClass(k)} disabled={isLocked} title={cellTitle(k)}
+                aria-label={label} aria-pressed={free.has(k)}
                 onClick={() => onToggle?.(d.value, dp.value)} />
             );
           })}

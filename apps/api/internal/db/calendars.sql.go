@@ -95,7 +95,7 @@ func (q *Queries) ListCalendarConnections(ctx context.Context, userID string) ([
 
 const listUserFeedEvents = `-- name: ListUserFeedEvents :many
 SELECT DISTINCT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent, e.capacity
 FROM events e
 LEFT JOIN event_attendees a ON a.event_id = e.id AND a.user_id = $1 AND a.rsvp = 'going'
 LEFT JOIN event_cohosts ch ON ch.event_id = e.id AND ch.user_id = $1
@@ -148,6 +148,7 @@ func (q *Queries) ListUserFeedEvents(ctx context.Context, userID string) ([]Even
 			&i.PollReadySent,
 			&i.VoteReminderSent,
 			&i.QuorumSent,
+			&i.Capacity,
 		); err != nil {
 			return nil, err
 		}

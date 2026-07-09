@@ -72,6 +72,7 @@ type Event struct {
 	PollReadySent    bool               `json:"poll_ready_sent"`
 	VoteReminderSent bool               `json:"vote_reminder_sent"`
 	QuorumSent       bool               `json:"quorum_sent"`
+	Capacity         int32              `json:"capacity"`
 }
 
 type EventAttendee struct {

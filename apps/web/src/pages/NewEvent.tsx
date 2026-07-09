@@ -63,6 +63,7 @@ export function NewEvent() {
   // Irregular series: extra explicit dates (any days - recurring, no pattern).
   const [moreStarts, setMoreStarts] = useState<string[]>([]);
   const [pollDeadline, setPollDeadline] = useState("");
+  const [capacity, setCapacity] = useState("");
   const [options, setOptions] = useState<string[]>([""]);
   const [invitees, setInvitees] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -160,6 +161,7 @@ export function NewEvent() {
     }
     // Optional close date - the cron chases non-voters then hands the host results.
     if (schedulingMode !== "fixed" && pollDeadline) body.poll_deadline = new Date(pollDeadline).toISOString();
+    if (capacity.trim() !== "") body.capacity = Number(capacity);
     const res = await sendJSON(api, "POST", "/api/events", body);
     if (!res.ok) {
       setSaving(false);
@@ -382,6 +384,11 @@ export function NewEvent() {
 
         {step === 3 && (
           <>
+            <div>
+              <label className="field">Max spots <span className="muted small">(optional - beyond it people join a waitlist)</span></label>
+              <input type="number" min={0} max={500} inputMode="numeric" className="input" data-testid="event-capacity"
+                value={capacity} placeholder="Unlimited" onChange={(e) => setCapacity(e.target.value)} />
+            </div>
             <div>
               <label className="field">Invite friends? <span className="muted small">(optional - they'll see it on their dashboard)</span></label>
               {friends.length === 0 && <p className="muted small">No friends yet - add some on the Friends page, or share the invite link after creating.</p>}

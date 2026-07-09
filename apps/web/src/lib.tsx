@@ -30,6 +30,7 @@ export type Event = {
   timezone: string;
   ends_at: string | null;
   poll_deadline: string | null;
+  capacity: number;
   created_at: string;
 };
 
@@ -250,11 +251,13 @@ export type Vote = { id: string; option_id: string; user_id: string; response: "
 // dimension 'month' -> value "YYYY-MM"; dimension 'slot' -> value "<weekday>:<daypart>".
 // dimension: month + slot (general scope), day (month scope), dayslot (week scope).
 export type GeneralVote = { user_id: string; dimension: "month" | "slot" | "day" | "dayslot"; value: string };
-export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined"; display_name: string | null; avatar_url: string | null; handle: string | null };
+export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined" | "waitlist"; display_name: string | null; avatar_url: string | null; handle: string | null };
 export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
 
 export type EventDetail = {
   event: Event;
+  host_name: string;
+  host_avatar: string;
   role: "host" | "cohost" | "guest";
   can_manage: boolean;
   viewer_id: string;
@@ -272,7 +275,7 @@ export type EventDetail = {
   comments: Comment[];
   cohosts: Cohost[];
   series: SeriesItem[] | null;
-  invites: { user_id: string; inviter_id: string; display_name: string | null }[];
+  invites: { user_id: string; inviter_id: string; seen: boolean; display_name: string | null }[];
 };
 
 export type Badges = { invites: number; friend_requests: number };

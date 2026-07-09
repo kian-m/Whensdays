@@ -293,6 +293,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		} `json:"series_times"`
 		AddStarts []string `json:"add_starts"` // optional: add MORE dates - grows a lone event into a series
 		PollDeadline string `json:"poll_deadline"` // optional close date while polling ("" clears)
+		Capacity *int `json:"capacity"` // optional max going (0 = unlimited; nil = keep)
 	}
 	// Covers ride in as data URLs, so this endpoint gets a larger body cap.
 	if !decodeJSONLimit(w, r, &in, coverMaxBody) {
@@ -406,13 +407,21 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			pollDeadline = dts
 		}
 	}
+	capacity := current.Capacity
+	if in.Capacity != nil {
+		if *in.Capacity < 0 || *in.Capacity > 500 {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "capacity must be 0-500"})
+			return
+		}
+		capacity = int32(*in.Capacity)
+	}
 	ev, err := s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
 		ID: id, Title: in.Title, Description: in.Description,
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress,
 		Visibility: in.Visibility, Topic: in.Topic, City: in.City,
 		PhotoUrl: in.PhotoUrl, Theme: in.Theme,
 		StartsAt: startsAt, ReminderSent: reminderSent, EndsAt: endsAt,
-		PollDeadline: pollDeadline,
+		PollDeadline: pollDeadline, Capacity: capacity,
 	})
 	if err != nil {
 		s.internal(w, "update event", err)
@@ -437,7 +446,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 					Visibility: in.Visibility, Topic: in.Topic, City: in.City,
 					PhotoUrl: in.PhotoUrl, Theme: in.Theme,
 					StartsAt: full.StartsAt, ReminderSent: full.ReminderSent, EndsAt: full.EndsAt,
-					PollDeadline: full.PollDeadline,
+					PollDeadline: full.PollDeadline, Capacity: full.Capacity,
 				})
 			}
 		}
@@ -472,7 +481,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			Visibility: sib.Visibility, Topic: sib.Topic, City: sib.City,
 			PhotoUrl: sib.PhotoUrl, Theme: sib.Theme,
 			StartsAt: ts, ReminderSent: false, EndsAt: sibEnd,
-			PollDeadline: sib.PollDeadline,
+			PollDeadline: sib.PollDeadline, Capacity: sib.Capacity,
 		})
 	}
 	// Grow the series: each added date becomes a sibling occurrence carrying
@@ -501,6 +510,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 				Visibility: ev.Visibility, Topic: ev.Topic, City: ev.City,
 				CustomEmoji: ev.CustomEmoji, CustomLabel: ev.CustomLabel,
 				GeneralScope: ev.GeneralScope, Timezone: ev.Timezone, EndsAt: sibEnd,
+				Capacity: ev.Capacity,
 			})
 			if cerr != nil {
 				s.internal(w, "update event: add occurrence", cerr)
@@ -513,6 +523,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 				Visibility: ev.Visibility, Topic: ev.Topic, City: ev.City,
 				PhotoUrl: ev.PhotoUrl, Theme: ev.Theme,
 				StartsAt: ats, ReminderSent: false, EndsAt: sibEnd,
+				Capacity: ev.Capacity,
 			}) // no PollDeadline - siblings are born scheduled
 			_ = s.queries.CopyAttendees(r.Context(), db.CopyAttendeesParams{EventID: id, Column2: sib.ID})
 			_ = s.queries.CopyInvites(r.Context(), db.CopyInvitesParams{EventID: id, Column2: sib.ID})

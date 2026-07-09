@@ -411,7 +411,10 @@ function WhosIn({ data }: { data: EventDetail }) {
     <div className="card stack" style={{ gap: 8 }} data-testid="whos-in">
       <div className="row between">
         <h3 style={{ margin: 0 }}>Who&rsquo;s in</h3>
-        <span className="muted small" data-testid="whos-in-count"><b>{going.length}</b> of {total} in</span>
+        <span className="muted small" data-testid="whos-in-count">
+          <b>{going.length}</b> of {total} in
+          {data.event.capacity > 0 && <> · {Math.max(0, data.event.capacity - going.length)} of {data.event.capacity} spots left</>}
+        </span>
       </div>
       <div className="whosin-bar"><span style={{ width: `${Math.round((going.length / total) * 100)}%` }} /></div>
       {going.length > 0 && (
@@ -438,7 +441,14 @@ function Rsvp({ eventId, current, reload }: { eventId: string; current?: string;
     const prev = active;
     setSel(rsvp);
     sendJSON(api, "POST", `/api/events/${eventId}/rsvp`, { rsvp })
-      .then((res) => { if (!res.ok) setSel(prev); else reload(); })
+      .then(async (res) => {
+        if (!res.ok) return setSel(prev);
+        // The server may convert a "going" on a full event into a waitlist
+        // spot - land on what it actually stored.
+        const a = await res.json().catch(() => null);
+        if (a?.rsvp) setSel(a.rsvp);
+        reload();
+      })
       .catch(() => setSel(prev));
   }
   const opts: [string, string][] = [["going", "✅ Going"], ["maybe", "🤔 Maybe"], ["declined", "✕ Can't"]];
@@ -452,6 +462,11 @@ function Rsvp({ eventId, current, reload }: { eventId: string; current?: string;
           </button>
         ))}
       </div>
+      {active === "waitlist" && (
+        <p className="muted small" style={{ margin: 0 }} data-testid="waitlist-note">
+          ⏳ The event is full - you're on the waitlist. If a spot opens you're bumped in automatically (and emailed).
+        </p>
+      )}
     </div>
   );
 }
@@ -769,7 +784,9 @@ function Nudge({ data }: { data: EventDetail }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const responded = new Set(data.attendees.map((a) => a.user_id));
-  const pending = data.invites.filter((i) => !responded.has(i.user_id)).length;
+  const pendingInvites = data.invites.filter((i) => !responded.has(i.user_id));
+  const pending = pendingInvites.length;
+  const opened = pendingInvites.filter((i) => i.seen).length;
   if (pending === 0 || data.event.status === "cancelled") return null;
   async function nudge() {
     setBusy(true);
@@ -783,6 +800,7 @@ function Nudge({ data }: { data: EventDetail }) {
       <button className="btn soft sm" data-testid="nudge" disabled={busy} onClick={nudge}>
         🔔 Nudge {pending} who haven&rsquo;t replied
       </button>
+      <span className="muted small" data-testid="invite-open-stats">{opened} of {pending} opened the invite</span>
       {msg && <span className="muted small" data-testid="nudge-msg">{msg}</span>}
     </div>
   );
@@ -808,6 +826,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   // (fixed or finalized); a poll still decides its time by voting.
   const [startsAt, setStartsAt] = useState(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
   const [deadline, setDeadline] = useState(e.poll_deadline ? toDatetimeLocal(e.poll_deadline) : "");
+  const [capacity, setCapacity] = useState(e.capacity > 0 ? String(e.capacity) : "");
   const [endsAt, setEndsAt] = useState(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
   // Sibling occurrences (multi-date series): every date is editable from here,
   // one input per occurrence. Keyed by sibling event id.
@@ -831,6 +850,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
     setPhoto(e.photo_url); setTheme(e.theme); setMsg(null);
     setStartsAt(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
     setDeadline(e.poll_deadline ? toDatetimeLocal(e.poll_deadline) : "");
+    setCapacity(e.capacity > 0 ? String(e.capacity) : "");
     setEndsAt(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
     setSibTimes({});
     setAddStarts([]);
@@ -859,6 +879,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         .map((x) => ({ id: x.id, starts_at: new Date(sibTimes[x.id]).toISOString() })),
       add_starts: addStarts.filter((d) => d.trim() !== "").map((d) => new Date(d).toISOString()),
       poll_deadline: deadline ? new Date(deadline).toISOString() : "",
+      capacity: capacity.trim() === "" ? 0 : Number(capacity),
     });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
@@ -883,7 +904,13 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 data-testid="event-title">{e.title}</h1>
-            <p className="muted">{eventLabel(e)}</p>
+            <p className="muted" style={{ margin: 0 }}>{eventLabel(e)}</p>
+            {data.host_name && (
+              <span className="row" style={{ gap: 6, marginTop: 4 }} data-testid="hosted-by">
+                <Avatar url={data.host_avatar || null} name={data.host_name} size={20} />
+                <span className="muted small">Hosted by <strong>{data.host_name}</strong></span>
+              </span>
+            )}
           </div>
           <span className="stack" style={{ alignItems: "flex-end", gap: 6, flex: "none" }}>
             {e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
@@ -968,6 +995,10 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       <GifPicker onPick={(url) => setPhoto(url)} />
       <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
       <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
+      <label className="field">Max spots <span className="muted small">(optional - beyond it people join a waitlist)</span>
+        <input type="number" min={0} max={500} inputMode="numeric" className="input" data-testid="edit-capacity"
+          value={capacity} placeholder="Unlimited" onChange={(ev) => setCapacity(ev.target.value)} />
+      </label>
       {e.status === "polling" && (
         <label className="field">Poll closes <span className="muted small">(optional - "" removes it)</span>
           <input type="datetime-local" className="input" min={MIN_DT} data-testid="edit-deadline"
@@ -1678,6 +1709,7 @@ function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: stri
 
   const GROUPS: { key: Attendee["rsvp"]; label: string }[] = [
     { key: "going", label: "Going" },
+    { key: "waitlist", label: "Waitlist" },
     { key: "maybe", label: "Maybe" },
     { key: "declined", label: "Can't go" },
   ];
