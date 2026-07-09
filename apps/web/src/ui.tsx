@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import qrcode from "qrcode-generator";
 import { Link } from "react-router-dom";
-import { ApiFn, DAYPARTS, getJSON, useApi } from "./lib";
+import { ApiFn, DAYPARTS, deferredInstall, getJSON, isIOS, useApi } from "./lib";
 import { EVENTS, analytics } from "./analytics";
 
 // Small data-loading hook with STALE-WHILE-REVALIDATE: the last successful
@@ -296,62 +296,74 @@ export function drawQR(url: string, color: string, style: QRStyle): string {
   return canvas.toDataURL("image/png");
 }
 
-const QR_SWATCHES = ["#1b1a22", "#d3572f", "#0f766e", "#5b21b6", "#0c4a6e"];
+// One-time "add Whensdays to your home screen" prompt, shown right after a
+// user creates their FIRST event on this device (the moment they became a
+// host - peak motivation). Small screens only (a home screen is a phone
+// concept; also keeps desktop E2E flows untouched), never when already
+// installed. Android taps through to the NATIVE install dialog when the
+// browser offered one; iOS gets the share-sheet steps.
+export function HomescreenPrompt({ onClose }: { onClose: () => void }) {
+  const native = deferredInstall;
+  return createPortal(
+    <div className="crop-overlay" data-testid="a2hs-modal">
+      <div className="card stack crop-card">
+        <div style={{ fontSize: "2rem" }}>📲</div>
+        <strong>Keep Whensdays one tap away</strong>
+        <p className="muted small" style={{ margin: 0 }}>
+          Your plans, RSVPs, and polls on your home screen - it opens like an app.
+        </p>
+        {!native && isIOS() && (
+          <p className="small" style={{ margin: 0 }}>
+            Tap the <strong>Share</strong> button below, then <strong>"Add to Home Screen"</strong>.
+          </p>
+        )}
+        {!native && !isIOS() && (
+          <p className="small" style={{ margin: 0 }}>
+            Open your browser menu and choose <strong>"Add to Home screen"</strong>.
+          </p>
+        )}
+        <div className="row" style={{ justifyContent: "flex-end" }}>
+          {native && (
+            <button type="button" className="btn sm" data-testid="a2hs-add"
+              onClick={async () => { try { await native.prompt(); } catch { /* dismissed */ } onClose(); }}>
+              Add to Home Screen
+            </button>
+          )}
+          <button type="button" className="btn ghost sm" data-testid="a2hs-close" onClick={onClose}>
+            {native ? "Maybe later" : "Got it"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
-// Button + modal: live-styled QR for a URL. Color swatches + a free color
-// picker + three module styles; share (Web Share API, files) or download.
-export function QRButton({ url, testid = "qr-open", label = "QR code" }: {
-  url: string; testid?: string; label?: string;
+// Button + modal: a big theme-matched QR for the invite link - built for the
+// in-person moment ("scan this") rather than export. One tap to show, big and
+// high-contrast; the module color follows the event theme's accent (darkened
+// for scanability), no customizer, no download ceremony.
+export function QRButton({ url, accent, testid = "qr-open", label = "QR code" }: {
+  url: string; accent?: string; testid?: string; label?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [color, setColor] = useState(QR_SWATCHES[0]);
-  const [style, setStyle] = useState<QRStyle>("rounded");
-  const dataUrl = open ? drawQR(url, color, style) : "";
-  async function nativeShare() {
-    try {
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], "whensdays-qr.png", { type: "image/png" });
-      const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-      if (nav.canShare?.({ files: [file] })) await navigator.share({ files: [file] });
-    } catch { /* sheet closed */ }
-  }
+  // Darken the accent toward ink: scanners want dark-on-light contrast.
+  const color = (() => {
+    const a = accent && /^#[0-9a-f]{6}$/i.test(accent) ? accent : "#1b1a22";
+    const ch = (i: number) => Math.round(parseInt(a.slice(i, i + 2), 16) * 0.6);
+    return `#${[1, 3, 5].map((i) => ch(i).toString(16).padStart(2, "0")).join("")}`;
+  })();
   return (
     <>
       <button type="button" className="btn ghost sm" data-testid={testid}
         onClick={() => { analytics.capture(EVENTS.qrOpened); setOpen(true); }}>{label}</button>
       {open && createPortal(
-        <div className="crop-overlay" data-testid="qr-modal">
-          <div className="card stack crop-card">
+        <div className="crop-overlay" data-testid="qr-modal" onClick={() => setOpen(false)}>
+          <div className="card stack crop-card" onClick={(e) => e.stopPropagation()}>
             <strong>Scan to open the invite</strong>
-            <img src={dataUrl} alt="QR code for the invite link" data-testid="qr-img"
+            <img src={drawQR(url, color, "rounded")} alt="QR code for the invite link" data-testid="qr-img"
               style={{ width: "100%", borderRadius: 10 }} />
-            <div className="row wrap" style={{ gap: 6 }}>
-              {(["rounded", "dots", "squares"] as const).map((v) => (
-                <button key={v} type="button" className={`chip sm ${style === v ? "on" : ""}`}
-                  data-testid={`qr-style-${v}`} onClick={() => setStyle(v)}>
-                  {v[0].toUpperCase() + v.slice(1)}
-                </button>
-              ))}
-            </div>
-            <div className="row wrap" style={{ gap: 6, alignItems: "center" }}>
-              {QR_SWATCHES.map((c) => (
-                <button key={c} type="button" data-testid={`qr-color-${c.slice(1)}`}
-                  aria-label={`QR color ${c}`}
-                  style={{ width: 26, height: 26, borderRadius: 8, background: c, border: color === c ? "2px solid var(--ink)" : "2px solid transparent", cursor: "pointer" }}
-                  onClick={() => setColor(c)} />
-              ))}
-              <input type="color" data-testid="qr-color-custom" value={color} aria-label="Custom QR color"
-                style={{ width: 34, height: 30, border: "none", background: "none", cursor: "pointer" }}
-                onChange={(e) => setColor(e.target.value)} />
-              <span className="muted small">darker scans best</span>
-            </div>
-            <div className="row" style={{ justifyContent: "flex-end" }}>
-              {"share" in navigator && (
-                <button type="button" className="btn sm" data-testid="qr-share" onClick={nativeShare}>Share</button>
-              )}
-              <a className="btn ghost sm" download="whensdays-qr.png" href={dataUrl} data-testid="qr-download">Download</a>
-              <button type="button" className="btn ghost sm" data-testid="qr-close" onClick={() => setOpen(false)}>Close</button>
-            </div>
+            <button type="button" className="btn ghost sm" data-testid="qr-close" onClick={() => setOpen(false)}>Close</button>
           </div>
         </div>,
         document.body

@@ -317,16 +317,9 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("hero-dates").locator("div")).toHaveCount(2);
     await expect(page.getByTestId("series")).toContainText("1 of 2");
 
-    // The invite card offers a styled QR code: restyle + recolor live.
+    // The invite card offers a one-tap QR for the in-person "scan this" moment.
     await page.getByTestId("qr-open").click();
     await expect(page.getByTestId("qr-img")).toHaveAttribute("src", /^data:image\/png/);
-    const before = await page.getByTestId("qr-img").getAttribute("src");
-    await page.getByTestId("qr-style-dots").click();
-    await page.getByTestId("qr-color-d3572f").click();
-    const after = await page.getByTestId("qr-img").getAttribute("src");
-    expect(after).toMatch(/^data:image\/png/);
-    expect(after).not.toBe(before); // restyle actually redrew it
-    await expect(page.getByTestId("qr-download")).toHaveAttribute("href", /^data:image\/png/);
     await page.getByTestId("qr-close").click();
     await expect(page.getByTestId("qr-modal")).toHaveCount(0);
   });
@@ -378,6 +371,27 @@ test.describe("scheduler", () => {
     }, { eid: id, d });
     expect(synced).toContain("evening:free");
     expect(synced).toContain("night:free");
+  });
+
+  test("first event created suggests add-to-homescreen (phones, once)", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for an isolated user");
+    await page.setViewportSize({ width: 390, height: 844 }); // the prompt is phone-only
+    await ensureUser(page, "a2hs", "A2 HS", "a2hs");
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(`First ${test.info().testId}-${Date.now()}`);
+    await page.getByTestId("quick-mode-avail").click();
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("a2hs-modal")).toBeVisible();
+    await page.getByTestId("a2hs-close").click();
+    await expect(page.getByTestId("a2hs-modal")).toHaveCount(0);
+
+    // Once only: the second create never re-prompts (localStorage gate).
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(`Second ${test.info().testId}-${Date.now()}`);
+    await page.getByTestId("quick-mode-avail").click();
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("event-title")).toBeVisible();
+    await expect(page.getByTestId("a2hs-modal")).toHaveCount(0);
   });
 
   test("capacity: full events waitlist, freed spots auto-promote", async ({ page }) => {
@@ -609,6 +623,38 @@ test.describe("scheduler", () => {
     await page.reload();
     await expect(page.getByTestId("responder-dots")).toBeVisible();
     await expect(page.getByTestId("responder-vn2")).toHaveAttribute("title", "Norah NoRsvp");
+  });
+
+  test("an event whose end time passed goes straight to Past as Attended", async ({ page }) => {
+    test.skip(!DEV_AUTH, "backdates times (dev-exempt validation)");
+    await ensureUser(page, "ender", "End Er", "ender");
+    const title = `Ended ${test.info().testId}-${Date.now()}`;
+    const at = (hoursFromNow: number) => {
+      const d = new Date(Date.now() + hoursFromNow * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:00`;
+    };
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-drinks").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill(at(-4)); // started 4h ago...
+    await page.getByTestId("fixed-end").fill(at(-2));  // ...ended 2h ago
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Ended -> not in All, lives under Past with the Attended pill (host).
+    await page.goto("/");
+    await page.getByTestId("filter-all").click();
+    await expect(page.getByTestId("event-list").getByText(title)).toHaveCount(0);
+    await page.getByTestId("filter-past").click();
+    const row = page.getByTestId("event-row").filter({ hasText: title }).first();
+    await expect(row).toBeVisible();
+    await expect(row.getByText("Attended")).toBeVisible();
   });
 
   test("past events leave All and live under the Past filter", async ({ page }) => {

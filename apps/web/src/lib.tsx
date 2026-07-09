@@ -153,6 +153,24 @@ const TZ_CITY: Record<string, string> = {
   "Pacific/Auckland": "Auckland", "Africa/Johannesburg": "Johannesburg",
   "Africa/Lagos": "Lagos", "Africa/Cairo": "Cairo"
 };
+// --- add-to-homescreen (PWA install) ---
+// Chrome/Android fire beforeinstallprompt once, early - capture it at module
+// load so the post-first-event prompt can trigger the NATIVE install dialog.
+// iOS has no API (instructions instead); desktop gets nothing (the prompt is
+// gated to small screens - a home screen is a phone concept).
+type InstallPromptEvent = { preventDefault(): void; prompt: () => Promise<void> };
+export let deferredInstall: InstallPromptEvent | null = null;
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstall = e as unknown as InstallPromptEvent;
+  });
+}
+export const isStandalone = () =>
+  typeof window !== "undefined" && window.matchMedia("(display-mode: standalone)").matches;
+export const isIOS = () =>
+  /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && navigator.maxTouchPoints > 1);
+
 // --- theme (dark default, light opt-in; persisted) ---
 export type Theme = "dark" | "light";
 export function getTheme(): Theme {

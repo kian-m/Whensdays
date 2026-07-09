@@ -1280,6 +1280,37 @@ func (q *Queries) ListInvitedNonVoterContacts(ctx context.Context, eventID pgtyp
 	return items, nil
 }
 
+const listMyRsvps = `-- name: ListMyRsvps :many
+SELECT event_id, rsvp FROM event_attendees WHERE user_id = $1
+`
+
+type ListMyRsvpsRow struct {
+	EventID pgtype.UUID `json:"event_id"`
+	Rsvp    string      `json:"rsvp"`
+}
+
+// The viewer's own rsvp per event - dashboard tiles use it to render
+// Attended vs Passed on past events.
+func (q *Queries) ListMyRsvps(ctx context.Context, userID string) ([]ListMyRsvpsRow, error) {
+	rows, err := q.db.Query(ctx, listMyRsvps, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMyRsvpsRow{}
+	for rows.Next() {
+		var i ListMyRsvpsRow
+		if err := rows.Scan(&i.EventID, &i.Rsvp); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOldestWaitlist = `-- name: ListOldestWaitlist :one
 SELECT user_id FROM event_attendees
 WHERE event_id = $1 AND rsvp = 'waitlist'

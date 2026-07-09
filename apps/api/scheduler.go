@@ -547,7 +547,14 @@ func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 			faces[k].Going = row.GoingCount
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending, "unseen": unseen, "faces": faces})
+	// The viewer's own rsvp per event: past tiles render Attended vs Passed.
+	myRsvps := map[string]string{}
+	if rows, err := s.queries.ListMyRsvps(r.Context(), uid); err == nil {
+		for _, row := range rows {
+			myRsvps[uuidStr(row.EventID)] = row.Rsvp
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending, "unseen": unseen, "faces": faces, "my_rsvps": myRsvps})
 }
 
 // pollClosed reports whether a poll's optional close date has passed - votes

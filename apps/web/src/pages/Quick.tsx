@@ -46,6 +46,11 @@ export function Quick() {
       return setErr(b.error || "could not create");
     }
     const ev: Event = await res.json();
+    // First event ever created on this device -> suggest add-to-homescreen
+    // once (the event page shows it; localStorage is the once-gate).
+    try {
+      if (!localStorage.getItem("whensdays.a2hs")) sessionStorage.setItem("whensdays.a2hs-pending", "1");
+    } catch { /* private mode */ }
     nav(`/e/${ev.id}`);
   }
 

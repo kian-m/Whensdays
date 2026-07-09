@@ -25,13 +25,14 @@ import {
   mapsUrl,
   appleMapsUrl,
   openGoogleMaps,
+  isStandalone,
   nextMonths,
   sendJSON,
   timeAgo,
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, Loading, Pill, QRButton, fileToPhoto, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, HomescreenPrompt, Loading, Pill, QRButton, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH } from "../App";
 
@@ -57,6 +58,19 @@ export function EventPage() {
   // transition here (rather than in each finalize button) covers every path.
   const prevStatus = useRef<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
+  // One-time add-to-homescreen prompt: fires on the event page right after
+  // this device's FIRST event creation (see the create flows), phones only.
+  const [showA2HS, setShowA2HS] = useState(false);
+  useEffect(() => {
+    try {
+      if (
+        sessionStorage.getItem("whensdays.a2hs-pending") &&
+        !localStorage.getItem("whensdays.a2hs") &&
+        window.matchMedia("(max-width: 640px)").matches &&
+        !isStandalone()
+      ) setShowA2HS(true);
+    } catch { /* private mode */ }
+  }, []);
   useEffect(() => {
     if (!data) return;
     const prev = prevStatus.current;
@@ -78,6 +92,7 @@ export function EventPage() {
   return (
     <div className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
       {celebrate && <div className="fx-locked" data-testid="locked-banner">It&rsquo;s locked in 🎉</div>}
+      {showA2HS && <HomescreenPrompt onClose={() => { setShowA2HS(false); try { localStorage.setItem("whensdays.a2hs", "1"); sessionStorage.removeItem("whensdays.a2hs-pending"); } catch { /* private mode */ } }} />}
       <BackLink />
       <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} />
 
@@ -1241,6 +1256,13 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
   );
 }
 
+// The live theme accent (the .event-theme wrapper overrides --accent) so the
+// QR matches the event's look; empty = brand default.
+function pageAccent(): string {
+  const el = document.querySelector(".event-theme");
+  return el ? getComputedStyle(el).getPropertyValue("--accent").trim() : "";
+}
+
 function ShareLink({ eventId, title }: { eventId: string; title?: string }) {
   const url = `${location.origin}/e/${eventId}`;
   const [copied, setCopied] = useState(false);
@@ -1261,9 +1283,9 @@ function ShareLink({ eventId, title }: { eventId: string; title?: string }) {
             Share…
           </button>
         )}
-        {/* Styled QR (color + module shape) - stories, flyers, a screen at
-            the venue: scan lands straight on RSVP. */}
-        <QRButton url={url} />
+        {/* Theme-matched QR for the in-person moment: hold your phone up,
+            everyone scans, they land on RSVP. */}
+        <QRButton url={url} accent={pageAccent()} />
       </div>
       <div className="row" style={{ gap: 12 }}>
         <a className="accent small" data-testid="share-whatsapp" target="_blank" rel="noopener noreferrer"

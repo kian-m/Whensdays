@@ -8,7 +8,7 @@ import { Avatar, EventThumb, Loading, Pill, useAsync } from "../ui";
 // with photos → initials-only) + the total going count per event.
 type Face = { name: string; avatar_url: string; is_friend: boolean };
 type Pile = { faces: Face[]; going: number };
-type EventsResp = { hosting: Event[]; attending: Event[]; unseen: string[]; faces?: Record<string, Pile> };
+type EventsResp = { hosting: Event[]; attending: Event[]; unseen: string[]; faces?: Record<string, Pile>; my_rsvps?: Record<string, string> };
 type Filter = "all" | "upcoming" | "hosting" | "attending" | "past";
 
 const DAY = 86_400_000;
@@ -43,11 +43,17 @@ export function Home() {
   const attending = data?.attending ?? [];
   const unseen = new Set(data?.unseen ?? []);
   const now = Date.now();
-  // An event is PAST from the day after it happens: its date is before today's
-  // midnight. Past events leave every active view and live only under "Past".
+  // An event is PAST from the day after it happens (its date is before today's
+  // midnight) - OR the moment its explicit end time passes. Past events leave
+  // every active view and live only under "Past".
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const isPast = (e: Event) => !!e.starts_at && new Date(e.starts_at).getTime() < startOfToday.getTime();
+  const isPast = (e: Event) =>
+    (!!e.ends_at && new Date(e.ends_at).getTime() < now) ||
+    (!!e.starts_at && new Date(e.starts_at).getTime() < startOfToday.getTime());
+  // Past tiles say what happened for YOU: hosted it or RSVP'd going = Attended.
+  const hostingIds = new Set(hosting.map((e) => e.id));
+  const attended = (e: Event) => hostingIds.has(e.id) || data?.my_rsvps?.[e.id] === "going";
 
   // De-duped union for "all" / "upcoming" / "past".
   const byId = new Map<string, Event>();
@@ -124,7 +130,8 @@ export function Home() {
         <div className="stack" data-testid="event-list">
           {shown.map((e) => (
             <EventRow key={e.id} e={e} pile={data?.faces?.[e.id]} isNew={unseen.has(e.id)}
-              soon={e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
+              past={isPast(e)} attended={attended(e)}
+              soon={!isPast(e) && e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
           ))}
         </div>
       )}
@@ -132,8 +139,9 @@ export function Home() {
   );
 }
 
-function EventRow({ e, pile, onClick, isNew, soon }: {
+function EventRow({ e, pile, onClick, isNew, soon, past, attended }: {
   e: Event; pile?: Pile; onClick: () => void; isNew?: boolean; soon?: string;
+  past?: boolean; attended?: boolean;
 }) {
   const color = TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other;
   // Fit the row: show up to 5 faces, fold the rest into "+N more".
@@ -152,7 +160,8 @@ function EventRow({ e, pile, onClick, isNew, soon }: {
             {isNew && <span className="dot-badge" data-testid="event-new" title="You haven't opened this yet">NEW</span>}
           </span>
           <span style={{ flex: "none" }}>
-            {soon ? <Pill kind="scheduled">{soon}</Pill>
+            {past ? (attended ? <Pill kind="scheduled">Attended</Pill> : <Pill kind="">Passed</Pill>)
+              : soon ? <Pill kind="scheduled">{soon}</Pill>
               : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
               : <Pill kind="scheduled">Set</Pill>}
           </span>

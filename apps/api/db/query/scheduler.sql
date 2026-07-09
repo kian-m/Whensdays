@@ -468,3 +468,8 @@ UPDATE event_attendees SET rsvp = 'going' WHERE event_id = $1 AND user_id = $2 A
 INSERT INTO availability_days (user_id, day, daypart, status)
 VALUES ($1, $2, $3, 'free')
 ON CONFLICT (user_id, day, daypart) DO UPDATE SET status = 'free';
+
+-- name: ListMyRsvps :many
+-- The viewer's own rsvp per event - dashboard tiles use it to render
+-- Attended vs Passed on past events.
+SELECT event_id, rsvp FROM event_attendees WHERE user_id = $1;

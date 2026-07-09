@@ -169,6 +169,11 @@ export function NewEvent() {
       return setError(b.error || "could not create event");
     }
     const ev: Event = await res.json();
+    // First event ever created on this device -> suggest add-to-homescreen
+    // once (the event page shows it; localStorage is the once-gate).
+    try {
+      if (!localStorage.getItem("whensdays.a2hs")) sessionStorage.setItem("whensdays.a2hs-pending", "1");
+    } catch { /* private mode */ }
     // Fire the wizard-selected invites (best-effort; the event page can retry).
     for (const friendId of invitees) {
       await sendJSON(api, "POST", `/api/events/${ev.id}/invites`, { friend_id: friendId }).catch(() => {});
