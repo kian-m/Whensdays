@@ -301,6 +301,27 @@ export function ShareCardButton({ card, label, testid }: {
   );
 }
 
+// Downscale an image File preserving aspect (max side maxDim) to a JPEG data
+// URL - comment photo attachments (square-cropping chat photos would butcher
+// them, so no CropModal here).
+export function fileToPhoto(file: File, maxDim = 640): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("no canvas"));
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => reject(new Error("bad image"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 // Pan-and-zoom crop dialog for uploaded photos. The square viewport IS the
 // crop area: drag to position, slider to zoom; output is a size x size JPEG
 // data URL (same contract as fileToAvatar). `shape` only changes the preview

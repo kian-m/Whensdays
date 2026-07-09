@@ -37,6 +37,19 @@ test.describe("calendars (import)", () => {
     await gotoCalendars(page, "calempty");
     await expect(page.getByTestId("connect-google")).toBeVisible();
     await expect(page.getByTestId("connect-apple-open")).toBeVisible();
+    // The personal feed card offers webcal subscribe + a copyable https URL.
+    await expect(page.getByTestId("feed-card")).toBeVisible();
+    const webcal = await page.getByTestId("feed-subscribe").getAttribute("href");
+    expect(webcal).toMatch(/^webcal:\/\//);
+    expect(webcal).toContain("/api/feed.ics?token=");
+    // The feed itself: signed token -> VCALENDAR; garbage token -> 401.
+    // (Relative fetch - the e2e origin differs from the baked APP_ORIGIN.)
+    const token = webcal!.split("token=")[1];
+    const feed = await page.request.get(`/api/feed.ics?token=${token}`);
+    expect(feed.status()).toBe(200);
+    expect(await feed.text()).toContain("BEGIN:VCALENDAR");
+    const bad = await page.request.get("/api/feed.ics?token=garbage");
+    expect(bad.status()).toBe(401);
     await expect(page.getByTestId("calendar-connections")).toHaveScreenshot("calendar-connections.png");
   });
 

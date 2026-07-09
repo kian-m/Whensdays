@@ -67,29 +67,80 @@ func (s *server) handleEventICS(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(ics))
 }
 
-// buildICS renders a one-event VCALENDAR. now stamps DTSTAMP (passed in so the
-// output is deterministic in tests). link (the event's invite URL) rides in
-// URL: and at the end of DESCRIPTION so every calendar app keeps a way back.
-func buildICS(ev db.Event, now time.Time, link string) string {
-	start := ev.StartsAt.Time.UTC()
-	end := start.Add(exportDuration)
-	if ev.EndsAt.Valid {
-		end = ev.EndsAt.Time.UTC()
+// handleFeedURL (authed) hands the signed-in user their personal feed URLs -
+// webcal:// for one-tap subscribe plus the https twin for manual setups.
+func (s *server) handleFeedURL(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	origin := s.appOrigin
+	if origin == "" {
+		origin = "https://" + r.Host
 	}
+	feedURL := origin + "/api/feed.ics?token=" + s.guests.signFeed(uid)
+	webcal := strings.Replace(feedURL, "https://", "webcal://", 1)
+	webcal = strings.Replace(webcal, "http://", "webcal://", 1) // dev/e2e origins
+	writeJSON(w, http.StatusOK, map[string]string{"url": feedURL, "webcal": webcal})
+}
 
-	location := ev.LocationAddress
-	if ev.LocationMode == "find_venue" {
-		location = "Venue to be decided"
-	} else if location == "" {
-		location = "Address to come"
+// handleICSFeed serves the personal calendar feed. Unauthenticated by design -
+// calendar apps poll without headers - identity rides in the HMAC token.
+func (s *server) handleICSFeed(w http.ResponseWriter, r *http.Request) {
+	uid, ok := s.guests.verifyFeed(r.URL.Query().Get("token"))
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "bad token"})
+		return
 	}
-
+	events, err := s.queries.ListUserFeedEvents(r.Context(), uid)
+	if err != nil {
+		s.internal(w, "ics feed", err)
+		return
+	}
 	var b strings.Builder
 	b.WriteString("BEGIN:VCALENDAR\r\n")
 	b.WriteString("VERSION:2.0\r\n")
 	b.WriteString("PRODID:-//Whensdays//scheduler//EN\r\n")
 	b.WriteString("CALSCALE:GREGORIAN\r\n")
 	b.WriteString("METHOD:PUBLISH\r\n")
+	b.WriteString("X-WR-CALNAME:Whensdays\r\n")
+	now := time.Now()
+	for _, ev := range events {
+		writeVEVENT(&b, ev, now, s.eventURL(ev.ID))
+	}
+	b.WriteString("END:VCALENDAR\r\n")
+	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(b.String()))
+}
+
+// buildICS renders a one-event VCALENDAR. now stamps DTSTAMP (passed in so the
+// output is deterministic in tests). link (the event's invite URL) rides in
+// URL: and at the end of DESCRIPTION so every calendar app keeps a way back.
+func buildICS(ev db.Event, now time.Time, link string) string {
+	var b strings.Builder
+	b.WriteString("BEGIN:VCALENDAR\r\n")
+	b.WriteString("VERSION:2.0\r\n")
+	b.WriteString("PRODID:-//Whensdays//scheduler//EN\r\n")
+	b.WriteString("CALSCALE:GREGORIAN\r\n")
+	b.WriteString("METHOD:PUBLISH\r\n")
+	writeVEVENT(&b, ev, now, link)
+	b.WriteString("END:VCALENDAR\r\n")
+	return b.String()
+}
+
+// writeVEVENT appends one VEVENT block - shared by the single-event export
+// and the personal feed.
+func writeVEVENT(b *strings.Builder, ev db.Event, now time.Time, link string) {
+	start := ev.StartsAt.Time.UTC()
+	end := start.Add(exportDuration)
+	if ev.EndsAt.Valid {
+		end = ev.EndsAt.Time.UTC()
+	}
+	location := ev.LocationAddress
+	if ev.LocationMode == "find_venue" {
+		location = "Venue to be decided"
+	} else if location == "" {
+		location = "Address to come"
+	}
 	b.WriteString("BEGIN:VEVENT\r\n")
 	b.WriteString("UID:" + uuidStr(ev.ID) + "@whensdays\r\n")
 	b.WriteString("DTSTAMP:" + now.UTC().Format(icsTimeFmt) + "\r\n")
@@ -111,8 +162,6 @@ func buildICS(ev db.Event, now time.Time, link string) string {
 	}
 	b.WriteString("LOCATION:" + icsEscape(location) + "\r\n")
 	b.WriteString("END:VEVENT\r\n")
-	b.WriteString("END:VCALENDAR\r\n")
-	return b.String()
 }
 
 // icsEscape escapes a text value per RFC 5545 §3.3.11 (backslash, comma,

@@ -93,6 +93,72 @@ func (q *Queries) ListCalendarConnections(ctx context.Context, userID string) ([
 	return items, nil
 }
 
+const listUserFeedEvents = `-- name: ListUserFeedEvents :many
+SELECT DISTINCT e.id, e.host_id, e.title, e.event_type, e.description,
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent
+FROM events e
+LEFT JOIN event_attendees a ON a.event_id = e.id AND a.user_id = $1 AND a.rsvp = 'going'
+LEFT JOIN event_cohosts ch ON ch.event_id = e.id AND ch.user_id = $1
+WHERE e.status = 'scheduled' AND e.starts_at IS NOT NULL
+  AND e.starts_at >= now() - interval '1 day'
+  AND (e.host_id = $1 OR a.user_id IS NOT NULL OR ch.user_id IS NOT NULL)
+ORDER BY e.starts_at
+`
+
+// Everything on the personal .ics feed: upcoming scheduled events the user
+// hosts, cohosts, or is going to (deduped), plus yesterday's (calendar apps
+// like a little trailing context).
+func (q *Queries) ListUserFeedEvents(ctx context.Context, userID string) ([]Event, error) {
+	rows, err := q.db.Query(ctx, listUserFeedEvents, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Event{}
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.HostID,
+			&i.Title,
+			&i.EventType,
+			&i.Description,
+			&i.LocationMode,
+			&i.LocationAddress,
+			&i.SchedulingMode,
+			&i.StartsAt,
+			&i.Status,
+			&i.CreatedAt,
+			&i.CommentsEnabled,
+			&i.GroupID,
+			&i.SeriesID,
+			&i.Recurrence,
+			&i.ReminderSent,
+			&i.Visibility,
+			&i.Topic,
+			&i.City,
+			&i.CustomEmoji,
+			&i.CustomLabel,
+			&i.GeneralScope,
+			&i.PhotoUrl,
+			&i.Theme,
+			&i.Timezone,
+			&i.EndsAt,
+			&i.PollDeadline,
+			&i.PollReadySent,
+			&i.VoteReminderSent,
+			&i.QuorumSent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateCalendarTokens = `-- name: UpdateCalendarTokens :exec
 UPDATE calendar_connections
 SET access_token = $3, refresh_token = $4, token_expiry = $5

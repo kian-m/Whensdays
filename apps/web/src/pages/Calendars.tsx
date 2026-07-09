@@ -200,8 +200,33 @@ type CalendarResp = { connections: CalendarConnection[]; events: ImportedEvent[]
 
 const PROVIDER_LABEL: Record<CalendarProvider, string> = {
   google: "Google Calendar",
-  apple_ical: "Apple Calendar",
+  apple_ical: "Apple / Outlook (published link)",
 };
+
+// Subscribe-once personal feed: every event you're going to (or hosting)
+// flows into the subscriber's calendar app forever - webcal one-tap on
+// Apple/Outlook, copy the https URL for Google ("From URL").
+function FeedCard() {
+  const { data } = useAsync<{ url: string; webcal: string }>((a) => getJSON(a, "/api/calendar/feed-url"));
+  const [copied, setCopied] = useState(false);
+  if (!data) return null;
+  return (
+    <div className="card stack" data-testid="feed-card">
+      <div>
+        <h3>Your Whensdays feed</h3>
+        <p className="muted small">Subscribe once - every event you're going to appears in your calendar automatically and stays up to date.</p>
+      </div>
+      <div className="row">
+        <a className="btn sm" data-testid="feed-subscribe" href={data.webcal}>Subscribe (Apple / Outlook)</a>
+        <button className="btn ghost sm" data-testid="feed-copy"
+          onClick={() => { navigator.clipboard?.writeText(data.url); setCopied(true); }}>
+          {copied ? "Copied" : "Copy URL for Google"}
+        </button>
+      </div>
+      <p className="muted small" style={{ margin: 0 }}>Google Calendar: Other calendars → + → From URL → paste. Treat the URL like a password - anyone with it sees your events.</p>
+    </div>
+  );
+}
 
 export function CalendarConnections() {
   const api = useApi();
@@ -249,6 +274,7 @@ export function CalendarConnections() {
       <AppleRow connected={has("apple_ical")} label={connections.find((c) => c.provider === "apple_ical")?.account_label}
         onConnected={reload} onDisconnect={() => disconnect("apple_ical")} />
       {msg && <p className="muted small" data-testid="calendar-msg">{msg}</p>}
+      <FeedCard />
     </div>
   );
 }
@@ -295,7 +321,7 @@ function AppleRow({ connected, label, onConnected, onDisconnect }: {
       {open && (
         <form className="stack" style={{ gap: 8 }} onSubmit={submit}>
           <p className="muted small" style={{ margin: 0 }}>
-            In iCloud Calendar, share a calendar as <strong>Public</strong> and paste its link (starts with <code>webcal://</code>).
+            iCloud Calendar: share a calendar as <strong>Public</strong> and paste its link (starts with <code>webcal://</code>). Outlook: Settings → Shared calendars → Publish → paste the ICS link.
           </p>
           <div className="row">
             <input className="input" data-testid="apple-url" value={url} onChange={(e) => setUrl(e.target.value)}

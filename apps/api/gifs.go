@@ -39,6 +39,11 @@ func validGifURL(u string) bool {
 	if u == "" {
 		return true
 	}
+	// Comment images: a Klipy CDN gif, the E2E stub, or an uploaded photo as a
+	// data URL (client-downscaled; the request body cap bounds its size).
+	if strings.HasPrefix(u, "data:image/") {
+		return true
+	}
 	return (strings.HasPrefix(u, "https://static.klipy.com/") || strings.HasPrefix(u, "/gif-stub/")) && len(u) <= 500
 }
 

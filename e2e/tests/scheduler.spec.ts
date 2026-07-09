@@ -349,6 +349,12 @@ test.describe("scheduler", () => {
     // The hero advertises the close date while the poll is open.
     await expect(page.getByText(/poll closes/i)).toBeVisible();
 
+    // Prefilled chat shares carry the title + invite link.
+    const wa = await page.getByTestId("share-whatsapp").getAttribute("href");
+    expect(wa).toContain("wa.me");
+    expect(wa).toContain(encodeURIComponent(`/e/${id}`));
+    await expect(page.getByTestId("share-sms")).toHaveAttribute("href", /^sms:/);
+
     // Host moves the deadline into the past (dev-exempt) - the poll closes.
     await page.getByTestId("edit-event-open").click();
     await page.getByTestId("edit-deadline").fill(dt(-1));
@@ -699,6 +705,16 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("comment-gif-preview")).toBeVisible();
     await page.getByTestId("comment-post").click();
     await expect(page.getByTestId("comment").last().getByTestId("comment-gif")).toHaveAttribute("src", /gif-stub/);
+
+    // Photos attach too: uploaded, client-downscaled, riding the same slot.
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    await page.getByTestId("comment-photo-file").setInputFiles({
+      name: "pic.png", mimeType: "image/png", buffer: Buffer.from(png, "base64"),
+    });
+    await expect(page.getByTestId("comment-gif-preview")).toHaveAttribute("src", /^data:image\//);
+    await page.getByTestId("comment-post").click();
+    await expect(page.getByTestId("comment").last().getByTestId("comment-gif")).toHaveAttribute("src", /^data:image\//);
   });
 
   test("comments: post, delete, and the host can disable them", async ({ page }) => {

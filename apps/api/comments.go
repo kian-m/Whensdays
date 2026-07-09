@@ -71,12 +71,14 @@ func (s *server) handlePostComment(w http.ResponseWriter, r *http.Request) {
 		Body   string `json:"body"`
 		GifUrl string `json:"gif_url"`
 	}
-	if !decodeJSON(w, r, &in) {
+	// Photo attachments ride gif_url as data URLs, so this endpoint takes the
+	// same larger body cap as covers.
+	if !decodeJSONLimit(w, r, &in, coverMaxBody) {
 		return
 	}
 	in.Body = strings.TrimSpace(in.Body)
 	if !validGifURL(in.GifUrl) {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "gif must come from the picker"})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "attach a picker GIF or an uploaded photo"})
 		return
 	}
 	if in.Body == "" && in.GifUrl == "" {

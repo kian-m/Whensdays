@@ -31,7 +31,7 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, Loading, Pill, ShareCardButton, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, Loading, Pill, ShareCardButton, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH } from "../App";
 
@@ -747,7 +747,7 @@ function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
   const e = data.event;
   return (
     <div className="stack">
-      <ShareLink eventId={e.id} />
+      <ShareLink eventId={e.id} title={e.title} />
       <Nudge data={data} />
       {e.scheduling_mode === "poll" && e.status === "polling" && (
         <PollResults data={data} reload={reload} />
@@ -1140,8 +1140,9 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
   const api = useApi();
   const e = data.event;
   const [body, setBody] = useState("");
-  const [gif, setGif] = useState("");      // a picked Klipy gif riding on the next post
+  const [gif, setGif] = useState("");      // a picked Klipy gif OR an uploaded photo riding on the next post
   const [picking, setPicking] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
 
   async function post() {
     if (!body.trim() && !gif) return;
@@ -1204,6 +1205,16 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
               onChange={(ev) => setBody(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && post()} />
             <button type="button" className="btn ghost sm" data-testid="comment-gif-open"
               onClick={() => setPicking((p) => !p)}>GIF</button>
+            <button type="button" className="btn ghost sm" data-testid="comment-photo-open"
+              onClick={() => photoRef.current?.click()} title="Attach a photo">📷</button>
+            <input ref={photoRef} type="file" accept="image/*" data-testid="comment-photo-file"
+              style={{ display: "none" }}
+              onChange={async (ev) => {
+                const f = ev.target.files?.[0];
+                ev.target.value = "";
+                if (!f) return;
+                try { setGif(await fileToPhoto(f)); setPicking(false); } catch { /* unreadable image */ }
+              }} />
             <button className="btn sm" data-testid="comment-post" onClick={post} disabled={!body.trim() && !gif}>Post</button>
           </div>
           {picking && <GifPicker onPick={(url) => { setGif(url); setPicking(false); }} />}
@@ -1215,9 +1226,11 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
   );
 }
 
-function ShareLink({ eventId }: { eventId: string }) {
+function ShareLink({ eventId, title }: { eventId: string; title?: string }) {
   const url = `${location.origin}/e/${eventId}`;
   const [copied, setCopied] = useState(false);
+  // Invites live in group chats - prefilled deep-links beat copy-paste there.
+  const msg = encodeURIComponent(`You're invited${title ? ` to ${title}` : ""} - RSVP here: ${url}`);
   return (
     <div className="card stack">
       <h3>Invite people</h3>
@@ -1233,6 +1246,14 @@ function ShareLink({ eventId }: { eventId: string }) {
             Share…
           </button>
         )}
+      </div>
+      <div className="row" style={{ gap: 12 }}>
+        <a className="accent small" data-testid="share-whatsapp" target="_blank" rel="noopener noreferrer"
+          href={`https://wa.me/?text=${msg}`}
+          onClick={() => analytics.capture(EVENTS.shareLinkCopied, { via: "whatsapp" })}>WhatsApp ↗</a>
+        <a className="accent small" data-testid="share-sms"
+          href={`sms:?&body=${msg}`}
+          onClick={() => analytics.capture(EVENTS.shareLinkCopied, { via: "sms" })}>Text message ↗</a>
       </div>
     </div>
   );

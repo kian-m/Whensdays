@@ -171,6 +171,10 @@ func main() {
 	// OG unfurl already serves), and a bare <a href> can't attach a bearer -
 	// this is what lets iOS open the invite directly in Calendar.
 	mux.Handle("GET /api/events/{id}/calendar.ics", readLimit(http.HandlerFunc(s.handleEventICS)))
+	// Personal live calendar feed: subscribe once, every event flows in.
+	// Unauthenticated (calendar apps poll bare) - identity rides an HMAC token.
+	mux.Handle("GET /api/feed.ics", readLimit(http.HandlerFunc(s.handleICSFeed)))
+	mux.Handle("GET /api/calendar/feed-url", auth(http.HandlerFunc(s.handleFeedURL)))
 	// Unauthenticated for the same reason: og:image is fetched by link
 	// scrapers (iMessage, Slack, …) that can't send a bearer.
 	mux.Handle("GET /api/events/{id}/og.png", readLimit(http.HandlerFunc(s.handleEventOGImage)))

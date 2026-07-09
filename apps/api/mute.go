@@ -25,6 +25,25 @@ import (
 // affects the token's own user and is fully reversible, so the capability is
 // low-risk. Tokens don't expire - an unsubscribe link must keep working.
 
+// signFeed/verifyFeed: the personal .ics feed URL token. No expiry - a feed
+// subscription must keep working; the URL itself is the secret (like the
+// event-id capability), and it's revoked by rotating GUEST_TOKEN_KEY.
+func (g guestSigner) signFeed(userID string) string {
+	return hmacSeal(g.key, "icsfeed|"+userID)
+}
+
+func (g guestSigner) verifyFeed(token string) (userID string, ok bool) {
+	payload, ok := hmacOpen(g.key, token)
+	if !ok {
+		return "", false
+	}
+	parts := strings.SplitN(string(payload), "|", 2)
+	if len(parts) != 2 || parts[0] != "icsfeed" || parts[1] == "" {
+		return "", false
+	}
+	return parts[1], true
+}
+
 func (g guestSigner) signMute(userID, eventID string) string {
 	return hmacSeal(g.key, "mute|"+userID+"|"+eventID)
 }
