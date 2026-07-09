@@ -291,8 +291,14 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
         </div>
         <div>
           <label className="field" htmlFor="hd">Handle</label>
-          <input id="hd" className="input" data-testid="profile-handle" value={handle}
-            onChange={(e) => setHandle(e.target.value)} />
+          {profile?.user_id.startsWith("guest_") ? (
+            <p className="muted small" data-testid="handle-locked" style={{ margin: 0 }}>
+              @{handle || "…"} - <strong>sign up</strong> to claim your own handle.
+            </p>
+          ) : (
+            <input id="hd" className="input" data-testid="profile-handle" value={handle}
+              onChange={(e) => setHandle(e.target.value)} />
+          )}
         </div>
         {error && <p className="err">{error}</p>}
         <div className="row">

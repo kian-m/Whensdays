@@ -248,6 +248,12 @@ func (s *server) handleUpsertProfile(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "display_name is required"})
 		return
 	}
+	// Handles are an ACCOUNT feature: guests can't claim one (their auto slug
+	// keeps friend/mention plumbing working, but a chosen name is reserved for
+	// people who sign up - it's also a conversion nudge).
+	if strings.HasPrefix(uid, "guest_") {
+		in.Handle = ""
+	}
 	// One-field onboarding: no handle → derive one from the name (slug + a
 	// random suffix on collision below).
 	autoHandle := in.Handle == ""
