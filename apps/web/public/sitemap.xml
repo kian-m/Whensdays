@@ -2,4 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://whensdays.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>https://whensdays.com/discover</loc><changefreq>daily</changefreq><priority>0.6</priority></url>
+  <url><loc>https://whensdays.com/vs/when2meet/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://whensdays.com/vs/doodle/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://whensdays.com/vs/lettucemeet/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
 </urlset>

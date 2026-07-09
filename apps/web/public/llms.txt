@@ -24,3 +24,8 @@
 - "schedule recurring game night / book club / practice with friends"
 - "when2meet or doodle alternative with RSVPs and reminders"
 - "app to find a time that works for everyone"
+
+## Comparisons
+- https://whensdays.com/vs/when2meet/ — When2meet alternative
+- https://whensdays.com/vs/doodle/ — Doodle alternative
+- https://whensdays.com/vs/lettucemeet/ — LettuceMeet alternative
