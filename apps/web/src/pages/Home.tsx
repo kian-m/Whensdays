@@ -156,7 +156,7 @@ function EventRow({ e, pile, onClick, isNew, soon }: {
           {eventLabel(e)} · {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
         </div>
         <div className="muted small">
-          {e.location_mode === "find_venue" ? "📍 Venue TBD" : `📍 ${e.location_address || "Host's place"}`}
+          {e.location_mode === "find_venue" ? "📍 Location TBD" : `📍 ${e.location_address || "Host's place"}`}
         </div>
         {faces.length > 0 && (
           <div className="facepile" data-testid="facepile">

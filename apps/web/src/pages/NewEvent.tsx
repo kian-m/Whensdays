@@ -280,7 +280,7 @@ export function NewEvent() {
               <button type="button" className={`chip ${locationMode === "host_place" ? "on" : ""}`}
                 data-testid="loc-host" onClick={() => setLocationMode("host_place")}>📍 I’ll set the address</button>
               <button type="button" className={`chip ${locationMode === "find_venue" ? "on" : ""}`}
-                data-testid="loc-venue" onClick={() => setLocationMode("find_venue")}>📍 Help me find a venue</button>
+                data-testid="loc-venue" onClick={() => setLocationMode("find_venue")}>📍 Set location later</button>
             </div>
             {locationMode === "host_place" ? (
               <div style={{ marginTop: 8 }}>
@@ -426,7 +426,7 @@ export function NewEvent() {
 
         <div className="row between">
           <button type="button" className="btn ghost sm" data-testid="wiz-back"
-            disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>← Back</button>
+            onClick={() => (step === 0 ? nav("/") : setStep((s) => s - 1))}>← Back</button>
           {step < STEPS.length - 1 ? (
             <button type="button" className="btn" data-testid="wiz-next"
               disabled={!stepValid(step)} onClick={() => setStep((s) => s + 1)}>Next →</button>

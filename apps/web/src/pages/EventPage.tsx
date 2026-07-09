@@ -233,7 +233,7 @@ function gcalStamp(d: Date): string {
 function googleCalendarUrl(e: EventDetail["event"]): string {
   const start = new Date(e.starts_at!);
   const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
-  const location = e.location_mode === "find_venue" ? "Venue to be decided" : e.location_address || "Address to come";
+  const location = e.location_mode === "find_venue" ? "Location to be decided" : e.location_address || "Address to come";
   const link = `${window.location.origin}/e/${e.id}`;
   const p = new URLSearchParams({
     action: "TEMPLATE",
@@ -886,7 +886,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           </div>
         )}
         <div className="muted small">
-          {e.location_mode === "find_venue" ? "📍 Venue to be decided"
+          {e.location_mode === "find_venue" ? "📍 Location to be decided"
             : e.location_address ? (
               <span className="stack" style={{ gap: 2 }}>
                 <span>📍 {e.location_address}</span>
@@ -941,7 +941,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
           data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>
         <button type="button" className={locMode === "find_venue" ? "btn sm" : "btn ghost sm"}
-          data-testid="edit-loc-venue" onClick={() => setLocMode("find_venue")}>Find a venue</button>
+          data-testid="edit-loc-venue" onClick={() => setLocMode("find_venue")}>Set location later</button>
       </div>
       {locMode === "host_place" && (
         <AddressInput value={locAddr} onChange={setLocAddr} placeholder="Start typing an address…" testid="edit-address" />
@@ -1357,7 +1357,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
             <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-week-heat">
               <div />
               {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
-              {weekDates.map((d) => (
+              {weekDates.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
                 <Fragment key={d.value}>
                   <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
                   {DAYPARTS.map((dp) => {
@@ -1395,7 +1395,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
             <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-month-heat">
               <div />
               {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
-              {monthDates28.map((d) => (
+              {monthDates28.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
                 <Fragment key={d.value}>
                   <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
                   {DAYPARTS.map((dp) => {
@@ -1448,7 +1448,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
             <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }}>
               <div />
               {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
-              {WEEKDAYS.map((d, wd) => (
+              {WEEKDAYS.map((d, wd) => ({ d, wd })).filter(({ wd }) => slotCounts.size === 0 || DAYPARTS.some((dp) => (slotCounts.get(slotKey(wd, dp.value)) ?? 0) > 0)).map(({ d, wd }) => (
                 <Fragment key={wd}>
                   <div className="day" style={{ textAlign: "left" }}>{d}</div>
                   {DAYPARTS.map((dp) => {

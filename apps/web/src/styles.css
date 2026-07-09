@@ -186,6 +186,9 @@ a { color: inherit; text-decoration: none; }
   .row { flex-wrap: wrap; }
   .row.between { flex-wrap: nowrap; }
   .row.between > * { min-width: 0; }
+  /* action clusters inside header rows (e.g. Quick + New event) stay one line
+     pinned right; the heading shrinks instead */
+  .row.between > .row { flex-wrap: nowrap; flex: none; }
 }
 
 /* cards - the frosted-glass panel every feature sits in */
@@ -284,6 +287,8 @@ input.input[type="datetime-local"], input.input[type="date"], input.input[type="
   box-shadow: inset 0 1px 0 var(--glass-glint), 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 textarea.input { resize: vertical; min-height: 64px; }
+/* placeholder examples read as hints, not content */
+.input::placeholder { color: var(--muted); opacity: 0.45; }
 
 /* chips / pills - crisp and typographic. A selected chip fills with the accent
    gradient and glows. Status pills read as editorial state labels: uppercase
