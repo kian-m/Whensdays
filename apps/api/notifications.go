@@ -195,6 +195,7 @@ func (s *server) sendReminders(ctx context.Context, events []db.Event) int {
 				when:    eventWhen(ev),
 				url:     campaignURL(s.eventURL(ev.ID), "reminder"),
 				muteURL: s.muteLink(userID, uuidStr(ev.ID)),
+				cover:   eventCover(ev),
 			})
 		}
 		body := renderEmail(emailContent{
@@ -325,10 +326,14 @@ func (s *server) enqueueActivity(ctx context.Context, ev db.Event, kind, actorID
 	})
 }
 
-// digestLine is one collapsed update inside a digest.
+// digestLine is one collapsed update inside a digest — kind/actor/body are
+// kept so a lone update can be sent as the classic single email instead.
 type digestLine struct {
-	eventID pgtype.UUID
-	text    string
+	eventID   pgtype.UUID
+	text      string
+	kind      string
+	actorName string
+	body      string
 }
 
 // collapseActivity turns raw queue rows into per-recipient digest lines:
@@ -345,7 +350,7 @@ func collapseActivity(rows []db.DrainDueNotificationsRow) map[string][]digestLin
 				continue
 			}
 			seenRsvp[k] = true
-			out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, "✅ " + r.ActorName + " is going"})
+			out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, "✅ " + r.ActorName + " is going", "rsvp", r.ActorName, ""})
 			continue
 		}
 		text := r.Body
@@ -355,7 +360,7 @@ func collapseActivity(rows []db.DrainDueNotificationsRow) map[string][]digestLin
 		if text == "" {
 			text = "sent a GIF"
 		}
-		out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, "💬 " + r.ActorName + ": " + text})
+		out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, "💬 " + r.ActorName + ": " + text, "comment", r.ActorName, text})
 	}
 	// walking backwards reversed the order — restore oldest-first per recipient
 	for k := range out {
@@ -397,6 +402,42 @@ func (s *server) flushActivityDigests(ctx context.Context) {
 		if perr != nil || prof.Email == "" {
 			continue
 		}
+		// A single update doesn't need digest framing — send the classic
+		// "<name> is going to <event>" / comment email (cover + theme intact).
+		if len(lines) == 1 {
+			ln := lines[0]
+			if muted, _ := s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: ln.eventID, UserID: recipient}); muted {
+				continue
+			}
+			ev, gerr := s.queries.GetEvent(ctx, ln.eventID)
+			if gerr != nil || ev.Status == "cancelled" {
+				continue
+			}
+			subject := fmt.Sprintf("✅ %s is going to %s", ln.actorName, ev.Title)
+			heading := ln.actorName + " is going to " + ev.Title
+			bodyLines := []string{ln.actorName + " just RSVP'd — they're going. 🎉"}
+			campaign := "rsvp"
+			if ln.kind == "comment" {
+				subject = fmt.Sprintf("💬 %s commented on %s", ln.actorName, ev.Title)
+				heading = ln.actorName + " commented on " + ev.Title
+				bodyLines = []string{ln.actorName + " left a comment:"}
+				campaign = "comment"
+			}
+			body := renderEmail(emailContent{
+				preheader: heading,
+				heading:   heading,
+				lines:     bodyLines,
+				quote:     ln.body,
+				ctaLabel:  "Open your event →",
+				ctaURL:    campaignURL(s.eventURL(ev.ID), campaign),
+				logoURL:   s.logoURL(),
+				unsubURL:  s.muteLink(recipient, uuidStr(ev.ID)),
+				coverURL:  eventCover(ev),
+				theme:     ev.Theme,
+			})
+			s.notify.Send([]string{prof.Email}, subject, body)
+			continue
+		}
 		byEvent := map[string][]string{}
 		muted := map[string]bool{}
 		eventOrder := []pgtype.UUID{}
@@ -434,6 +475,7 @@ func (s *server) flushActivityDigests(ctx context.Context) {
 				when:    summary,
 				url:     campaignURL(s.eventURL(ev.ID), "activity"),
 				muteURL: s.muteLink(recipient, uuidStr(ev.ID)),
+				cover:   eventCover(ev),
 			})
 			total += len(byEvent[k])
 		}

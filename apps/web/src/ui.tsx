@@ -3,17 +3,29 @@ import { Link } from "react-router-dom";
 import { ApiFn, DAYPARTS, getJSON, useApi } from "./lib";
 import { EVENTS, analytics } from "./analytics";
 
-// Small data-loading hook: runs `fn` on mount and exposes a reload().
+// Small data-loading hook with STALE-WHILE-REVALIDATE: the last successful
+// result for each call site is kept in a session-lived cache, so returning to a
+// page renders instantly from cache while a background refetch updates it in
+// place. Every mount still refetches — nothing is served stale-only, so no
+// invalidation bookkeeping is needed; a full page load starts fresh.
+// Cache key = the fetcher's source + deps (closure source is stable per call
+// site; deps carry the ids that vary, e.g. the event id).
+const swrCache = new Map<string, unknown>();
+
 export function useAsync<T>(fn: (api: ApiFn) => Promise<T>, deps: unknown[] = []) {
   const api = useApi();
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const key = fn.toString() + "|" + JSON.stringify(deps);
+  const cached = swrCache.get(key) as T | undefined;
+  const [data, setData] = useState<T | null>(cached ?? null);
+  // Only show a loading state when there's nothing cached to render.
+  const [loading, setLoading] = useState(cached === undefined);
   const [error, setError] = useState<string | null>(null);
 
   const run = useCallback(() => {
-    setLoading(true);
+    if (swrCache.get(key) === undefined) setLoading(true);
     fn(api)
       .then((d) => {
+        swrCache.set(key, d);
         setData(d);
         setError(null);
       })
@@ -22,7 +34,16 @@ export function useAsync<T>(fn: (api: ApiFn) => Promise<T>, deps: unknown[] = []
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  useEffect(run, [run]);
+  // Route changes remount with different deps/key: swap to that key's cache
+  // (or null) immediately, then revalidate.
+  useEffect(() => {
+    const c = swrCache.get(key) as T | undefined;
+    setData(c ?? null);
+    setLoading(c === undefined);
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run]);
+
   return { data, loading, error, reload: run };
 }
 

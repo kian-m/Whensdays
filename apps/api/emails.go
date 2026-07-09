@@ -45,9 +45,9 @@ func campaignURL(base, campaign string) string {
 type emailMetaRow struct{ label, value string }
 
 // emailItem is one row of a digest list (e.g. "your events tomorrow"): a title
-// with its own links.
+// with its own links and (optionally) the event's cover/GIF as a thumbnail.
 type emailItem struct {
-	title, when, url, muteURL string
+	title, when, url, muteURL, cover string
 }
 
 // themeAccent maps an event theme to its accent gradient pair — mirrors the
@@ -140,10 +140,15 @@ func renderEmail(c emailContent) string {
 			emailBG, accent, emailInk, esc(c.quote))
 	}
 
-	// Digest list: one bordered row per event, each with its own links.
+	// Digest list: one bordered row per event — cover thumbnail (when https)
+	// on the left, title/summary/links on the right.
 	for _, it := range c.items {
-		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:0 0 10px"><tr><td style="padding:12px 16px;background:%s;border:1px solid %s;border-radius:10px"><span style="font-size:15px;font-weight:700;color:%s">%s</span><br><span style="font-size:13px;color:%s">%s</span><br><a href="%s" style="font-size:13px;color:%s;font-weight:600;text-decoration:none">View →</a>&nbsp;&nbsp;<a href="%s" style="font-size:12px;color:%s;text-decoration:underline">mute</a></td></tr></table>`,
-			emailBG, emailLine, emailInk, esc(it.title), emailMuted, esc(it.when), esc(it.url), accent, esc(it.muteURL), emailMuted)
+		thumb := ""
+		if it.cover != "" {
+			thumb = fmt.Sprintf(`<td style="width:68px;vertical-align:top;padding:10px 0 10px 12px"><img src="%s" width="56" height="56" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;display:block"></td>`, esc(it.cover))
+		}
+		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:0 0 10px;background:%s;border:1px solid %s;border-radius:10px"><tr>%s<td style="padding:12px 16px"><span style="font-size:15px;font-weight:700;color:%s">%s</span><br><span style="font-size:13px;color:%s">%s</span><br><a href="%s" style="font-size:13px;color:%s;font-weight:600;text-decoration:none">View →</a>&nbsp;&nbsp;<a href="%s" style="font-size:12px;color:%s;text-decoration:underline">mute</a></td></tr></table>`,
+			emailBG, emailLine, thumb, emailInk, esc(it.title), emailMuted, esc(it.when), esc(it.url), accent, esc(it.muteURL), emailMuted)
 	}
 
 	if len(c.meta) > 0 {
