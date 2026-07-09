@@ -387,6 +387,38 @@ test.describe("scheduler", () => {
     await expect(page.getByText(/– 11:00 PM/)).toBeVisible();
   });
 
+  test("pure availability voters (no RSVP) show their real name", async ({ page, browser }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    await ensureUser(page, "vn1", "Voter Host", "vn1");
+    const title = `Voters ${test.info().testId}-${Date.now()}`;
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-mode-avail").click();
+    await page.getByTestId("quick-create").click();
+    await page.getByTestId("event-title").waitFor();
+    const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
+
+    // Second user fills availability WITHOUT ever RSVPing.
+    const ctx = await browser.newContext();
+    try {
+      const g = await ctx.newPage();
+      await ensureUser(g, "vn2", "Norah NoRsvp", "vn2");
+      await g.goto(`/e/${id}`);
+      await g.getByTestId("gpw-cell-1-evening").click();
+      const saved = g.waitForResponse((r) => r.url().includes("general-votes") && r.ok());
+      await g.getByTestId("save-general").click();
+      await saved;
+    } finally {
+      await ctx.close();
+    }
+
+    // Host sees the responder's real name on the dot, not "Guest".
+    await page.reload();
+    await expect(page.getByTestId("responder-dots")).toBeVisible();
+    const dot = page.locator('[data-testid^="responder-"]').first();
+    await expect(dot).toHaveAttribute("title", /Norah NoRsvp/);
+  });
+
   test("past events leave All and live under the Past filter", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
     await ensureUser(page, "past1", "Past One", "past1");
@@ -1279,6 +1311,12 @@ test.describe("scheduler", () => {
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
     await page.getByTestId("preview-toggle").click();
+
+    // The manually-typed time can be CLEARED again (the old bug: with a cell
+    // pick present, the typed date had no way out).
+    await page.getByTestId("general-finalize-time").fill(dt(4));
+    await page.getByTestId("general-finalize-clear").click();
+    await expect(page.getByTestId("general-finalize-time")).toHaveValue("");
 
     // Host can target a specific MONTH: pick next month, tap a weekday cell —
     // the resolved date lands in that month (shown as a removable chip).

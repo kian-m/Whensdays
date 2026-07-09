@@ -947,6 +947,10 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 
 	muted, _ := s.queries.IsEventMuted(r.Context(), db.IsEventMutedParams{EventID: id, UserID: uid})
 
+	// Names for poll responders — a pure voter (availability filled, no RSVP)
+	// has no attendee row, so the web can't label them from attendees alone.
+	voterProfiles, _ := s.queries.ListVoterProfiles(r.Context(), id)
+
 	// Best-time ranking input: for specific-time polls, score every option
 	// against ALL attendees' saved availability (free/busy for that option's
 	// day+daypart in the event's timezone) — not just the viewer's calendar.
@@ -991,6 +995,7 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		"can_manage":         canManage,
 		"viewer_id":          uid,
 		"muted":              muted,
+		"voters":             voterProfiles,
 		"option_fit":         optionFit,
 		"time_options":       options,
 		"votes":              votes,

@@ -1284,6 +1284,47 @@ func (q *Queries) ListUpcomingCommitments(ctx context.Context, userID string) ([
 	return items, nil
 }
 
+const listVoterProfiles = `-- name: ListVoterProfiles :many
+SELECT DISTINCT p.user_id, p.display_name, p.avatar_url
+FROM profiles p
+WHERE p.user_id IN (
+    SELECT gv.user_id FROM event_general_votes gv WHERE gv.event_id = $1::uuid
+    UNION
+    SELECT tv.user_id FROM event_time_votes tv
+    JOIN event_time_options o ON o.id = tv.option_id
+    WHERE o.event_id = $1::uuid
+)
+`
+
+type ListVoterProfilesRow struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+	AvatarUrl   string `json:"avatar_url"`
+}
+
+// Names/avatars for everyone who responded to a poll (general votes or
+// specific-time votes) — a pure voter has no attendee row, so the responder
+// dots can't rely on the attendee list alone.
+func (q *Queries) ListVoterProfiles(ctx context.Context, dollar_1 pgtype.UUID) ([]ListVoterProfilesRow, error) {
+	rows, err := q.db.Query(ctx, listVoterProfiles, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListVoterProfilesRow{}
+	for rows.Next() {
+		var i ListVoterProfilesRow
+		if err := rows.Scan(&i.UserID, &i.DisplayName, &i.AvatarUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVotesForEvent = `-- name: ListVotesForEvent :many
 SELECT v.id, v.option_id, v.user_id, v.response
 FROM event_time_votes v

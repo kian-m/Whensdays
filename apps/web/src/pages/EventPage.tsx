@@ -1226,8 +1226,9 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
   // overlaid on the aggregate. Names/photos come from the attendee list.
   const [sel, setSel] = useState<string | null>(null);
   const responders = [...new Set(data.general_votes.map((v) => v.user_id))].map((uid) => {
+    const v = data.voters?.find((x) => x.user_id === uid);
     const a = data.attendees.find((x) => x.user_id === uid);
-    return { id: uid, name: a?.display_name || "Guest", avatar: a?.avatar_url ?? null };
+    return { id: uid, name: v?.display_name || a?.display_name || "Guest", avatar: v?.avatar_url || a?.avatar_url || null };
   });
   const selVals = new Set(sel ? data.general_votes.filter((v) => v.user_id === sel).map((v) => v.value) : []);
   // With a responder selected, make their availability unmistakable: their
@@ -1502,9 +1503,13 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
           ))}
         </div>
       )}
-      <div className="row">
+      <div className="row" style={{ gap: 6 }}>
         <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="general-finalize-time" value={when}
           onChange={(ev) => setWhen(ev.target.value)} />
+        {when !== "" && (
+          <button type="button" className="btn ghost sm" data-testid="general-finalize-clear"
+            onClick={() => setWhen("")} title="Clear this time">✕</button>
+        )}
       </div>
       {moreWhens.map((v, i) => (
         <div key={i} className="row" style={{ gap: 6 }}>

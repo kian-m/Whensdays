@@ -179,8 +179,13 @@ a { color: inherit; text-decoration: none; }
   /* keep content clear of the fixed bar */
   .app { padding-bottom: calc(58px + env(safe-area-inset-bottom) + 1rem); }
   /* mobile-first: rows wrap rather than overflow. Buttons are nowrap, so a row
-     that can't fit folds to the next line instead of pushing off-screen. */
+     that can't fit folds to the next line instead of pushing off-screen.
+     EXCEPT .between header rows (title left, actions right): folding drops the
+     action button under the title (the wandering ✎ Edit) — they keep one line
+     and their children shrink instead. */
   .row { flex-wrap: wrap; }
+  .row.between { flex-wrap: nowrap; }
+  .row.between > * { min-width: 0; }
 }
 
 /* cards — the frosted-glass panel every feature sits in */

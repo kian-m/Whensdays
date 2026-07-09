@@ -354,3 +354,17 @@ ON CONFLICT DO NOTHING;
 INSERT INTO event_invites (event_id, user_id, inviter_id)
 SELECT $2::uuid, src.user_id, src.inviter_id FROM event_invites src WHERE src.event_id = $1
 ON CONFLICT DO NOTHING;
+
+-- name: ListVoterProfiles :many
+-- Names/avatars for everyone who responded to a poll (general votes or
+-- specific-time votes) — a pure voter has no attendee row, so the responder
+-- dots can't rely on the attendee list alone.
+SELECT DISTINCT p.user_id, p.display_name, p.avatar_url
+FROM profiles p
+WHERE p.user_id IN (
+    SELECT gv.user_id FROM event_general_votes gv WHERE gv.event_id = $1::uuid
+    UNION
+    SELECT tv.user_id FROM event_time_votes tv
+    JOIN event_time_options o ON o.id = tv.option_id
+    WHERE o.event_id = $1::uuid
+);
