@@ -317,12 +317,18 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("hero-dates").locator("div")).toHaveCount(2);
     await expect(page.getByTestId("series")).toContainText("1 of 2");
 
-    // Scheduled events offer a shareable celebration card (canvas PNG).
-    await page.getByTestId("share-card-open").click();
-    await expect(page.getByTestId("share-card-img")).toHaveAttribute("src", /^data:image\/png/);
-    await expect(page.getByTestId("share-card-download")).toHaveAttribute("href", /^data:image\/png/);
-    await page.getByTestId("share-card-close").click();
-    await expect(page.getByTestId("share-card-modal")).toHaveCount(0);
+    // The invite card offers a styled QR code: restyle + recolor live.
+    await page.getByTestId("qr-open").click();
+    await expect(page.getByTestId("qr-img")).toHaveAttribute("src", /^data:image\/png/);
+    const before = await page.getByTestId("qr-img").getAttribute("src");
+    await page.getByTestId("qr-style-dots").click();
+    await page.getByTestId("qr-color-d3572f").click();
+    const after = await page.getByTestId("qr-img").getAttribute("src");
+    expect(after).toMatch(/^data:image\/png/);
+    expect(after).not.toBe(before); // restyle actually redrew it
+    await expect(page.getByTestId("qr-download")).toHaveAttribute("href", /^data:image\/png/);
+    await page.getByTestId("qr-close").click();
+    await expect(page.getByTestId("qr-modal")).toHaveCount(0);
   });
 
   test("slide-to-paint availability; poll picks sync to main availability", async ({ page }) => {

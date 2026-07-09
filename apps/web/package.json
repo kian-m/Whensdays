@@ -12,6 +12,7 @@
   "dependencies": {
     "@clerk/clerk-react": "^5.0.0",
     "posthog-js": "^1.395.0",
+    "qrcode-generator": "^2.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.18.0"

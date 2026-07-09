@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import qrcode from "qrcode-generator";
 import { Link } from "react-router-dom";
 import { ApiFn, DAYPARTS, getJSON, useApi } from "./lib";
 import { EVENTS, analytics } from "./analytics";
@@ -247,99 +248,109 @@ export function fileToAvatar(file: File, size = 160): Promise<string> {
   });
 }
 
-// Client-rendered 1080x1080 share card (lock celebration, group streaks) -
-// a canvas-composited PNG people can drop straight into stories/group chats.
-// Pure canvas, no deps; the brand look mirrors the OG card.
-export type ShareCardOpts = { kicker: string; emoji?: string; title: string; sub: string; accent?: string };
-export function drawShareCard(o: ShareCardOpts): string {
-  const S = 1080;
+// Styled QR code for the invite link - the one image share that isn't a dead
+// end: stories/flyers/screens get scanned straight into the RSVP page. The
+// matrix comes from qrcode-generator (Reed-Solomon is not something to
+// hand-roll); the styling - color + module shape - is ours, drawn on canvas.
+// Error correction Q leaves headroom for the styling.
+export type QRStyle = "squares" | "rounded" | "dots";
+export function drawQR(url: string, color: string, style: QRStyle): string {
+  const qr = qrcode(0, "Q");
+  qr.addData(url);
+  qr.make();
+  const n = qr.getModuleCount();
+  const quiet = 4;                 // standard quiet zone, in modules
+  const scale = 24;                // big modules -> crisp exports
+  const S = (n + quiet * 2) * scale;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = S;
   const ctx = canvas.getContext("2d");
   if (!ctx) return "";
-  const accent = /^#[0-9a-f]{6}$/i.test(o.accent ?? "") ? o.accent! : "#ee6c4d";
-  // Dusk gradient + an accent glow low in the frame (the sunset-through-glass palette).
-  const bg = ctx.createLinearGradient(0, 0, 0, S);
-  bg.addColorStop(0, "#182338");
-  bg.addColorStop(1, "#0d1322");
-  ctx.fillStyle = bg;
+  ctx.fillStyle = "#ffffff";       // solid light background - scanability
   ctx.fillRect(0, 0, S, S);
-  const glow = ctx.createRadialGradient(S / 2, S * 0.85, 40, S / 2, S * 0.85, S * 0.95);
-  glow.addColorStop(0, accent + "66");
-  glow.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, S, S);
-  const sans = "-apple-system, 'Segoe UI', Roboto, sans-serif";
-  ctx.textAlign = "center";
-  // Kicker: uppercase micro-type, accent (the .pill language).
-  ctx.fillStyle = accent;
-  ctx.font = `800 40px ${sans}`;
-  ctx.fillText(o.kicker.toUpperCase().split("").join("  "), S / 2, 220);
-  if (o.emoji) {
-    ctx.font = `160px ${sans}`;
-    ctx.fillText(o.emoji, S / 2, 430);
+  ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(color) ? color : "#1b1a22";
+  // The three 7x7 finder squares stay near-solid regardless of style - they
+  // are what scanners lock onto; data modules carry the chosen look.
+  const inFinder = (r: number, c: number) =>
+    (r < 7 && c < 7) || (r < 7 && c >= n - 7) || (r >= n - 7 && c < 7);
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (!qr.isDark(r, c)) continue;
+      const x = (c + quiet) * scale;
+      const y = (r + quiet) * scale;
+      if (style === "squares" || inFinder(r, c)) {
+        ctx.beginPath();
+        ctx.roundRect(x, y, scale, scale, inFinder(r, c) && style !== "squares" ? scale * 0.22 : 0);
+        ctx.fill();
+      } else if (style === "dots") {
+        ctx.beginPath();
+        ctx.arc(x + scale / 2, y + scale / 2, scale * 0.44, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.roundRect(x + 1, y + 1, scale - 2, scale - 2, scale * 0.34);
+        ctx.fill();
+      }
+    }
   }
-  // Title: display-weight, wrapped to at most 3 lines.
-  ctx.fillStyle = "#f6f2ec";
-  ctx.font = `800 88px ${sans}`;
-  const words = o.title.split(/\s+/);
-  const lines: string[] = [];
-  let line = "";
-  for (const w of words) {
-    const probe = line ? `${line} ${w}` : w;
-    if (ctx.measureText(probe).width > S - 160 && line) {
-      lines.push(line);
-      line = w;
-      if (lines.length === 3) break;
-    } else line = probe;
-  }
-  if (lines.length < 3 && line) lines.push(line);
-  const titleTop = o.emoji ? 560 : 460;
-  lines.forEach((l, i) => ctx.fillText(l, S / 2, titleTop + i * 104));
-  // Sub: the date / group line.
-  ctx.fillStyle = "rgba(246, 242, 236, 0.72)";
-  ctx.font = `500 48px ${sans}`;
-  ctx.fillText(o.sub, S / 2, titleTop + lines.length * 104 + 40);
-  // Brand footer.
-  ctx.fillStyle = "rgba(246, 242, 236, 0.55)";
-  ctx.font = `700 38px ${sans}`;
-  ctx.fillText("whensdays.com", S / 2, S - 90);
   return canvas.toDataURL("image/png");
 }
 
-// Button + preview modal for a share card: tap to render, then native-share
-// (where the Web Share API takes files - iOS/Android), download, or close.
-export function ShareCardButton({ card, label, testid }: {
-  card: () => ShareCardOpts; label: string; testid: string;
+const QR_SWATCHES = ["#1b1a22", "#d3572f", "#0f766e", "#5b21b6", "#0c4a6e"];
+
+// Button + modal: live-styled QR for a URL. Color swatches + a free color
+// picker + three module styles; share (Web Share API, files) or download.
+export function QRButton({ url, testid = "qr-open", label = "QR code" }: {
+  url: string; testid?: string; label?: string;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [color, setColor] = useState(QR_SWATCHES[0]);
+  const [style, setStyle] = useState<QRStyle>("rounded");
+  const dataUrl = open ? drawQR(url, color, style) : "";
   async function nativeShare() {
-    if (!url) return;
     try {
-      const blob = await (await fetch(url)).blob();
-      const file = new File([blob], "whensdays.png", { type: "image/png" });
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], "whensdays-qr.png", { type: "image/png" });
       const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-      if (nav.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file] });
-        analytics.capture(EVENTS.shareCardShared, { kind: testid });
-      }
-    } catch { /* user closed the sheet */ }
+      if (nav.canShare?.({ files: [file] })) await navigator.share({ files: [file] });
+    } catch { /* sheet closed */ }
   }
   return (
     <>
       <button type="button" className="btn ghost sm" data-testid={testid}
-        onClick={() => { analytics.capture(EVENTS.shareCardOpened, { kind: testid }); setUrl(drawShareCard(card())); }}>{label}</button>
-      {url && createPortal(
-        <div className="crop-overlay" data-testid="share-card-modal">
+        onClick={() => { analytics.capture(EVENTS.qrOpened); setOpen(true); }}>{label}</button>
+      {open && createPortal(
+        <div className="crop-overlay" data-testid="qr-modal">
           <div className="card stack crop-card">
-            <img src={url} alt="share card preview" data-testid="share-card-img"
+            <strong>Scan to open the invite</strong>
+            <img src={dataUrl} alt="QR code for the invite link" data-testid="qr-img"
               style={{ width: "100%", borderRadius: 10 }} />
+            <div className="row wrap" style={{ gap: 6 }}>
+              {(["rounded", "dots", "squares"] as const).map((v) => (
+                <button key={v} type="button" className={`chip sm ${style === v ? "on" : ""}`}
+                  data-testid={`qr-style-${v}`} onClick={() => setStyle(v)}>
+                  {v[0].toUpperCase() + v.slice(1)}
+                </button>
+              ))}
+            </div>
+            <div className="row wrap" style={{ gap: 6, alignItems: "center" }}>
+              {QR_SWATCHES.map((c) => (
+                <button key={c} type="button" data-testid={`qr-color-${c.slice(1)}`}
+                  aria-label={`QR color ${c}`}
+                  style={{ width: 26, height: 26, borderRadius: 8, background: c, border: color === c ? "2px solid var(--ink)" : "2px solid transparent", cursor: "pointer" }}
+                  onClick={() => setColor(c)} />
+              ))}
+              <input type="color" data-testid="qr-color-custom" value={color} aria-label="Custom QR color"
+                style={{ width: 34, height: 30, border: "none", background: "none", cursor: "pointer" }}
+                onChange={(e) => setColor(e.target.value)} />
+              <span className="muted small">darker scans best</span>
+            </div>
             <div className="row" style={{ justifyContent: "flex-end" }}>
               {"share" in navigator && (
-                <button type="button" className="btn sm" data-testid="share-card-share" onClick={nativeShare}>Share</button>
+                <button type="button" className="btn sm" data-testid="qr-share" onClick={nativeShare}>Share</button>
               )}
-              <a className="btn ghost sm" download="whensdays.png" href={url} data-testid="share-card-download">Download</a>
-              <button type="button" className="btn ghost sm" data-testid="share-card-close" onClick={() => setUrl(null)}>Close</button>
+              <a className="btn ghost sm" download="whensdays-qr.png" href={dataUrl} data-testid="qr-download">Download</a>
+              <button type="button" className="btn ghost sm" data-testid="qr-close" onClick={() => setOpen(false)}>Close</button>
             </div>
           </div>
         </div>,

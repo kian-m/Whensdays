@@ -31,20 +31,13 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, Loading, Pill, ShareCardButton, fileToPhoto, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, Loading, Pill, QRButton, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH } from "../App";
 
 // A poll with a close date stops taking votes after it (server-enforced too).
 function pollClosed(e: { status: string; poll_deadline: string | null }): boolean {
   return e.status === "polling" && !!e.poll_deadline && new Date(e.poll_deadline).getTime() < Date.now();
-}
-
-// The active theme's accent (the .event-theme wrapper overrides --accent) so
-// share cards match the page; empty = the brand coral default.
-function pageAccent(): string {
-  const el = document.querySelector(".event-theme");
-  return el ? getComputedStyle(el).getPropertyValue("--accent").trim() : "";
 }
 
 // Native min-validation would block dev/E2E backdating - server enforces the
@@ -962,19 +955,6 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
               </span>
             ) : "📍 Address to come"}
         </div>
-        {/* Shareable celebration card: a story/chat-ready PNG for anyone on
-            the event once it's locked - organic distribution. */}
-        {e.status === "scheduled" && e.starts_at && (
-          <div>
-            <ShareCardButton testid="share-card-open" label="✨ Share a card" card={() => ({
-              kicker: "It's happening",
-              emoji: eventEmoji(e),
-              title: e.title,
-              sub: fmtDate(e.starts_at, e.timezone),
-              accent: pageAccent(),
-            })} />
-          </div>
-        )}
       </div>
     );
   }
@@ -1281,6 +1261,9 @@ function ShareLink({ eventId, title }: { eventId: string; title?: string }) {
             Share…
           </button>
         )}
+        {/* Styled QR (color + module shape) - stories, flyers, a screen at
+            the venue: scan lands straight on RSVP. */}
+        <QRButton url={url} />
       </div>
       <div className="row" style={{ gap: 12 }}>
         <a className="accent small" data-testid="share-whatsapp" target="_blank" rel="noopener noreferrer"

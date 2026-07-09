@@ -27,8 +27,7 @@ export const EVENTS = {
   followed: "followed",
   gifPicked: "gif_picked",
   guestSignupClicked: "guest_signup_clicked",
-  shareCardOpened: "share_card_opened",
-  shareCardShared: "share_card_shared",
+  qrOpened: "qr_code_opened",
 } as const;
 
 // posthog-js is ~fifty KB gzipped - keep it OUT of the critical bundle. The
