@@ -1,0 +1,19 @@
+# Whensdays — all crawlers welcome, including AI assistants' bots.
+User-agent: *
+Allow: /
+
+# AI crawlers, explicitly (absence of a block is not always enough)
+User-agent: GPTBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-Web
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: CCBot
+Allow: /
+
+Sitemap: https://whensdays.com/sitemap.xml
