@@ -357,6 +357,25 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 /* event tile thumbnail (cover photo/gif as the tile's main visual) */
 .thumb { border-radius: 10px; object-fit: cover; flex: none; display: block; box-shadow: var(--shadow); }
+/* comment thread: chat-style bubbles (avatar + glass bubble; own = accent tint) */
+.comment-row { display: flex; gap: 8px; align-items: flex-start; }
+.comment-bubble {
+  flex: 1; min-width: 0; padding: 0.5rem 0.7rem;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-sm);
+  border-top-left-radius: 4px; /* chat tail toward the avatar */
+}
+.comment-bubble.own {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--glass-line));
+}
+.comment-meta { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; min-height: 22px; }
+.comment-meta .muted { font-size: 0.72rem; }
+.comment-meta .btn { padding: 1px 7px; font-size: 0.72rem; line-height: 1.4; }
+.comment-body { margin-top: 2px; overflow-wrap: anywhere; }
+.comment-body + .comment-gif, .comment-meta + .comment-gif { margin-top: 6px; }
+
 /* a gif attached to a comment */
 .comment-gif { max-width: 180px; border-radius: var(--radius-sm); display: block; }
 /* klipy gif results */

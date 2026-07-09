@@ -260,7 +260,7 @@ function Landing() {
         <h1 className="land-title">Make plans that actually happen.</h1>
         <p className="land-sub">
           The group chat says “we should hang out.” Whensdays turns that into a
-          real plan. Pick a time or let everyone weigh in, drop one link. Its that easy.
+          real plan: poll everyone on when they're free, lock the best time, drop one link. Its that easy.
         </p>
         <div className="land-cta">
           <a href="/start" className="btn" data-testid="start-plan">Start a plan - no account needed</a>

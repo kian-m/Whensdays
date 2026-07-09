@@ -674,6 +674,9 @@ test.describe("scheduler", () => {
     await page.getByTestId("comment-input").fill("Looking forward to it!");
     await page.getByTestId("comment-post").click();
     await expect(page.getByText("Looking forward to it!")).toBeVisible();
+    // Delete is two-tap like every destructive action (arm, then confirm).
+    await page.getByTestId("comment-delete-0").click();
+    await expect(page.getByTestId("comment-delete-0")).toHaveText("Delete?");
     await page.getByTestId("comment-delete-0").click();
     await expect(page.getByText("Looking forward to it!")).toHaveCount(0);
 
@@ -736,7 +739,8 @@ test.describe("scheduler", () => {
       await co.getByTestId("edit-title").fill(`${title} (edited)`);
       await co.getByTestId("edit-save").click();
       await expect(co.getByTestId("event-title")).toHaveText(`${title} (edited)`);
-      // Cohost moderates the guest's comment.
+      // Cohost moderates the guest's comment (two-tap confirm).
+      await co.getByTestId("comment-delete-0").click();
       await co.getByTestId("comment-delete-0").click();
       await expect(co.getByText("Can I bring a friend?")).toHaveCount(0);
 

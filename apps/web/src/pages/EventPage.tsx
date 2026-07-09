@@ -27,6 +27,7 @@ import {
   openGoogleMaps,
   nextMonths,
   sendJSON,
+  timeAgo,
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
@@ -1116,23 +1117,37 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
 
   return (
     <div className="card stack" data-testid="comments">
-      <h3 style={{ margin: 0 }}>Comments</h3>
-      {data.comments.length === 0 && <p className="muted small">No comments yet.</p>}
-      {data.comments.map((c, i) => (
-        <div key={c.id} className="row between" data-testid="comment">
-          <span className="row" style={{ gap: 8, alignItems: "flex-start" }}>
-            <Avatar url={c.avatar_url} name={c.display_name} size={28} />
-            <span className="stack" style={{ gap: 1 }}>
-              <strong className="small">{c.display_name || "Someone"}</strong>
-              {c.body && <span>{c.body}</span>}
-              {c.gif_url && <img className="comment-gif" data-testid="comment-gif" src={c.gif_url} alt="gif" loading="lazy" />}
-            </span>
-          </span>
-          {(c.user_id === data.viewer_id || data.can_manage) && (
-            <button className="btn ghost sm" data-testid={`comment-delete-${i}`} onClick={() => del(c.id)}>Delete</button>
-          )}
+      <div className="row" style={{ gap: 8 }}>
+        <h3 style={{ margin: 0 }}>Comments</h3>
+        {data.comments.length > 0 && <span className="pill polling" style={{ padding: "2px 8px" }}>{data.comments.length}</span>}
+      </div>
+      {data.comments.length === 0 && <p className="muted small">Nothing here yet - say hi 👋</p>}
+      {data.comments.length > 0 && (
+        <div className="stack" style={{ gap: 10 }}>
+          {data.comments.map((c, i) => {
+            const own = c.user_id === data.viewer_id;
+            return (
+              <div key={c.id} className="comment-row" data-testid="comment">
+                <Avatar url={c.avatar_url} name={c.display_name} size={30} />
+                <div className={`comment-bubble ${own ? "own" : ""}`}>
+                  <div className="comment-meta">
+                    <strong>{own ? "You" : c.display_name || "Someone"}</strong>
+                    <span className="muted" title={new Date(c.created_at).toLocaleString()}>{timeAgo(c.created_at)}</span>
+                    {(own || data.can_manage) && (
+                      <span style={{ marginLeft: "auto" }}>
+                        <ConfirmButton label="✕" confirmLabel="Delete?" testid={`comment-delete-${i}`}
+                          onConfirm={() => del(c.id)} />
+                      </span>
+                    )}
+                  </div>
+                  {c.body && <div className="comment-body">{c.body}</div>}
+                  {c.gif_url && <img className="comment-gif" data-testid="comment-gif" src={c.gif_url} alt="gif" loading="lazy" />}
+                </div>
+              </div>
+            );
+          })}
         </div>
-      ))}
+      )}
       {e.comments_enabled ? (
         <div className="stack" style={{ gap: 6 }}>
           {gif && (
@@ -1142,11 +1157,11 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
             </span>
           )}
           <div className="row">
-            <input className="input" data-testid="comment-input" value={body} placeholder="Add a comment…"
+            <input className="input" data-testid="comment-input" value={body} placeholder="Say something…"
               onChange={(ev) => setBody(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && post()} />
             <button type="button" className="btn ghost sm" data-testid="comment-gif-open"
               onClick={() => setPicking((p) => !p)}>GIF</button>
-            <button className="btn sm" data-testid="comment-post" onClick={post}>Post</button>
+            <button className="btn sm" data-testid="comment-post" onClick={post} disabled={!body.trim() && !gif}>Post</button>
           </div>
           {picking && <GifPicker onPick={(url) => { setGif(url); setPicking(false); }} />}
         </div>

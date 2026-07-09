@@ -30,7 +30,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   <div class="brand"><span class="dot"></span> Whensdays</div>
   <div>
     <h1>You're <b>invited.</b></h1>
-    <div class="sub">Pick a time, drop one link — no account needed to join.</div>
+    <div class="sub">Poll the group, lock the best time - one link, no account needed.</div>
   </div>
   <div class="row">
     <span class="chip">🍽️ Dinner</span><span class="chip">🎬 Movie night</span>
