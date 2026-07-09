@@ -50,6 +50,8 @@ type calendarConfig struct {
 	mode         string // "stub" bypasses real providers for hermetic E2E
 	googleID     string
 	googleSecret string
+	msID         string
+	msSecret     string
 	appOrigin    string // e.g. https://app.example.com; redirect + post-auth target
 	key          []byte // 32-byte AES-GCM / HMAC key, or nil in dev/stub
 }
@@ -59,6 +61,8 @@ func loadCalendarConfig(logger *slog.Logger) calendarConfig {
 		mode:         os.Getenv("CALENDAR_MODE"),
 		googleID:     os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
 		googleSecret: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+		msID:         os.Getenv("MS_OAUTH_CLIENT_ID"),
+		msSecret:     os.Getenv("MS_OAUTH_CLIENT_SECRET"),
 		appOrigin:    strings.TrimRight(os.Getenv("APP_ORIGIN"), "/"),
 	}
 	if raw := os.Getenv("CALENDAR_TOKEN_KEY"); raw != "" {
@@ -83,6 +87,10 @@ func (c calendarConfig) returnURL(provider string) string {
 
 func (c calendarConfig) redirectURI() string {
 	return c.appOrigin + "/api/calendar/google/callback"
+}
+
+func (c calendarConfig) outlookRedirectURI() string {
+	return c.appOrigin + "/api/calendar/outlook/callback"
 }
 
 // --- token encryption (AES-256-GCM, stdlib) ---
@@ -316,7 +324,7 @@ func (s *server) handleAppleConnect(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleDisconnectCalendar(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	provider := r.PathValue("provider")
-	if !oneOf(provider, "google", "apple_ical") {
+	if !oneOf(provider, "google", "apple_ical", "apple_caldav", "outlook") {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown provider"})
 		return
 	}
@@ -358,7 +366,11 @@ func (s *server) handleCalendarEvents(w http.ResponseWriter, r *http.Request) {
 	if events == nil {
 		events = []importedEvent{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"connections": connectionViews(conns), "events": events})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"connections":     connectionViews(conns),
+		"events":          events,
+		"outlook_enabled": s.calendar.msID != "" || s.calendar.stub(),
+	})
 }
 
 func (s *server) fetchConnectionEvents(ctx context.Context, c db.CalendarConnection, from, to time.Time) ([]importedEvent, error) {
@@ -367,6 +379,10 @@ func (s *server) fetchConnectionEvents(ctx context.Context, c db.CalendarConnect
 		return s.fetchGoogleEvents(ctx, c, from, to)
 	case "apple_ical":
 		return fetchICalEvents(ctx, c.IcalUrl, from, to)
+	case "apple_caldav":
+		return s.fetchAppleCalDAVEvents(ctx, c, from, to)
+	case "outlook":
+		return s.fetchOutlookEvents(ctx, c, from, to)
 	default:
 		return nil, fmt.Errorf("unknown provider %q", c.Provider)
 	}
@@ -712,6 +728,8 @@ func stubImportedEvents(conns []db.CalendarConnection) []importedEvent {
 		{Provider: "google", Title: "Dentist appointment", StartsAt: at("2026-08-03T09:00:00Z"), Location: "Downtown Dental"},
 		{Provider: "google", Title: "Team standup", StartsAt: at("2026-08-04T15:00:00Z")},
 		{Provider: "apple_ical", Title: "Book club", StartsAt: at("2026-08-05T19:30:00Z"), Location: "Maya's place"},
+		{Provider: "apple_caldav", Title: "Yoga class", StartsAt: at("2026-08-06T07:30:00Z"), Location: "Riverside studio"},
+		{Provider: "outlook", Title: "1:1 with Sam", StartsAt: at("2026-08-06T17:00:00Z")},
 	}
 	out := make([]importedEvent, 0, len(all))
 	for _, e := range all {

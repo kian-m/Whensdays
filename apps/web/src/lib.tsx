@@ -287,7 +287,7 @@ export type Friend = { id: string; friend_id: string; display_name: string; hand
 export type FriendRequest = { id: string; requester_id?: string; addressee_id?: string; display_name: string; handle: string };
 export type Commitment = { id: string; title: string; starts_at: string };
 
-export type CalendarProvider = "google" | "apple_ical";
+export type CalendarProvider = "google" | "apple_ical" | "apple_caldav" | "outlook";
 export type CalendarConnection = { provider: CalendarProvider; account_label: string; created_at: string };
 export type ImportedEvent = {
   provider: CalendarProvider;

@@ -196,16 +196,15 @@ function DayList({ cursor, byDay, onOpen }: {
 // Connection management - rendered on the PROFILE page.
 // ---------------------------------------------------------------------------
 
-type CalendarResp = { connections: CalendarConnection[]; events: ImportedEvent[] };
+type CalendarResp = { connections: CalendarConnection[]; events: ImportedEvent[]; outlook_enabled: boolean };
 
 const PROVIDER_LABEL: Record<CalendarProvider, string> = {
   google: "Google Calendar",
-  apple_ical: "Apple / Outlook (published link)",
+  apple_caldav: "Apple Calendar",
+  outlook: "Outlook",
+  apple_ical: "Published link (any calendar)",
 };
 
-// Subscribe-once personal feed: every event you're going to (or hosting)
-// flows into the subscriber's calendar app forever - webcal one-tap on
-// Apple/Outlook, copy the https URL for Google ("From URL").
 function FeedCard() {
   const { data } = useAsync<{ url: string; webcal: string }>((a) => getJSON(a, "/api/calendar/feed-url"));
   const [copied, setCopied] = useState(false);
@@ -228,17 +227,74 @@ function FeedCard() {
   );
 }
 
+// One connections row. The label side shrinks (long provider names / account
+// emails must never push the buttons off screen); buttons stay intrinsic.
+function ProviderRow({ icon, label, connectedLabel, connectTestid, disconnectTestid, onConnect, onDisconnect, children }: {
+  icon: string; label: string; connectedLabel?: string;
+  connectTestid: string; disconnectTestid: string;
+  onConnect: () => void; onDisconnect: () => void; children?: React.ReactNode;
+}) {
+  const connected = connectedLabel !== undefined;
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div className="row between">
+        <span className="row" style={{ gap: 8, flex: "1 1 auto", minWidth: 0 }}>
+          <span style={{ flex: "none" }}>{icon}</span>
+          <span style={{ minWidth: 0 }}>{label}</span>
+        </span>
+        {connected ? (
+          <span className="row" style={{ gap: 10, flex: "0 1 auto", minWidth: 0, justifyContent: "flex-end" }}>
+            <span className="muted small" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{connectedLabel}</span>
+            <button className="btn ghost sm" style={{ flex: "none" }} data-testid={disconnectTestid} onClick={onDisconnect}>Disconnect</button>
+          </span>
+        ) : (
+          <button className="btn sm" style={{ flex: "none" }} data-testid={connectTestid} onClick={onConnect}>Connect</button>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function CalendarConnections() {
   const api = useApi();
   const { data, loading, reload } = useAsync<CalendarResp>((a) => getJSON(a, "/api/calendar/events"));
   const [msg, setMsg] = useState<string | null>(null);
+  const [openForm, setOpenForm] = useState<"" | "caldav" | "ical">("");
+  const [appleId, setAppleId] = useState("");
+  const [appPw, setAppPw] = useState("");
+  const [icalUrl, setIcalUrl] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  async function connectGoogle() {
-    analytics.capture(EVENTS.calendarConnectStarted, { provider: "google" });
-    const res = await api("/api/calendar/google/connect");
-    if (!res.ok) return setMsg("Google Calendar isn't available right now.");
+  async function oauthConnect(provider: "google" | "outlook") {
+    analytics.capture(EVENTS.calendarConnectStarted, { provider });
+    const res = await api(`/api/calendar/${provider}/connect`);
+    if (!res.ok) return setMsg(`${PROVIDER_LABEL[provider]} isn't available right now.`);
     const { auth_url } = await res.json();
     window.location.href = auth_url;
+  }
+  async function connectCalDAV(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    setBusy(true);
+    const res = await sendJSON(api, "POST", "/api/calendar/apple-caldav", { apple_id: appleId.trim(), app_password: appPw });
+    setBusy(false);
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setErr(b.error || "could not connect");
+    }
+    setAppleId(""); setAppPw(""); setOpenForm("");
+    analytics.capture(EVENTS.calendarConnectStarted, { provider: "apple_caldav" });
+    reload();
+  }
+  async function connectICal(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    const res = await sendJSON(api, "POST", "/api/calendar/apple", { ical_url: icalUrl });
+    if (!res.ok) return setErr("That doesn't look like a valid calendar URL.");
+    setIcalUrl(""); setOpenForm("");
+    reload();
   }
   async function disconnect(provider: CalendarProvider) {
     await api(`/api/calendar/connections/${provider}`, { method: "DELETE" });
@@ -247,90 +303,64 @@ export function CalendarConnections() {
 
   if (loading && !data) return null;
   const connections = data?.connections ?? [];
-  const has = (p: CalendarProvider) => connections.some((c) => c.provider === p);
+  const labelOf = (p: CalendarProvider) => connections.find((c) => c.provider === p)?.account_label;
 
   return (
     <div className="card stack" data-testid="calendar-connections">
       <div>
         <h3>Connected calendars</h3>
-        <p className="muted small">Read-only: your busy times grey out availability and flag conflicts. See everything on the Calendars tab.</p>
+        <p className="muted small">Read-only and private: your busy times grey out availability and flag conflicts. Nothing is shared or published.</p>
       </div>
-      <div className="row between">
-        <span className="row" style={{ gap: 8 }}>📅 {PROVIDER_LABEL.google}</span>
-        {has("google") ? (
-          // flex:0 1 auto overrides the mobile .row.between > .row flex:none
-          // rule so a long account email ellipsizes instead of pushing the
-          // Disconnect button off screen.
-          <span className="row" style={{ gap: 10, flex: "0 1 auto", minWidth: 0, justifyContent: "flex-end" }}>
-            <span className="muted small" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {connections.find((c) => c.provider === "google")?.account_label}
-            </span>
-            <button className="btn ghost sm" style={{ flex: "none" }} data-testid="disconnect-google" onClick={() => disconnect("google")}>Disconnect</button>
-          </span>
-        ) : (
-          <button className="btn sm" data-testid="connect-google" onClick={connectGoogle}>Connect</button>
+      <ProviderRow icon="📅" label={PROVIDER_LABEL.google} connectedLabel={labelOf("google")}
+        connectTestid="connect-google" disconnectTestid="disconnect-google"
+        onConnect={() => oauthConnect("google")} onDisconnect={() => disconnect("google")} />
+      <ProviderRow icon="🍎" label={PROVIDER_LABEL.apple_caldav} connectedLabel={labelOf("apple_caldav")}
+        connectTestid="connect-apple-caldav-open" disconnectTestid="disconnect-apple-caldav"
+        onConnect={() => { setErr(null); setOpenForm(openForm === "caldav" ? "" : "caldav"); }}
+        onDisconnect={() => disconnect("apple_caldav")}>
+        {openForm === "caldav" && (
+          <form className="stack" style={{ gap: 8 }} onSubmit={connectCalDAV}>
+            <p className="muted small" style={{ margin: 0 }}>
+              Private - no publishing. Generate an <strong>app-specific password</strong> at{" "}
+              <a href="https://account.apple.com/account/manage" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline" }}>account.apple.com</a>{" "}
+              (Sign-In &amp; Security → App-Specific Passwords). We store it encrypted and only ever read.
+            </p>
+            <input className="input" data-testid="apple-caldav-id" value={appleId} autoComplete="username"
+              placeholder="Apple ID (email)" onChange={(e) => setAppleId(e.target.value)} />
+            <input className="input" type="password" data-testid="apple-caldav-password" value={appPw} autoComplete="off"
+              placeholder="App-specific password (xxxx-xxxx-xxxx-xxxx)" onChange={(e) => setAppPw(e.target.value)} />
+            <div className="row">
+              <button className="btn sm" data-testid="connect-apple-caldav" disabled={busy}>{busy ? "Checking…" : "Connect"}</button>
+            </div>
+            {err && <p className="muted small" style={{ color: "var(--no)" }}>{err}</p>}
+          </form>
         )}
-      </div>
-      <AppleRow connected={has("apple_ical")} label={connections.find((c) => c.provider === "apple_ical")?.account_label}
-        onConnected={reload} onDisconnect={() => disconnect("apple_ical")} />
+      </ProviderRow>
+      {data?.outlook_enabled && (
+        <ProviderRow icon="📆" label={PROVIDER_LABEL.outlook} connectedLabel={labelOf("outlook")}
+          connectTestid="connect-outlook" disconnectTestid="disconnect-outlook"
+          onConnect={() => oauthConnect("outlook")} onDisconnect={() => disconnect("outlook")} />
+      )}
+      <ProviderRow icon="🔗" label={PROVIDER_LABEL.apple_ical} connectedLabel={labelOf("apple_ical")}
+        connectTestid="connect-apple-open" disconnectTestid="disconnect-apple"
+        onConnect={() => { setErr(null); setOpenForm(openForm === "ical" ? "" : "ical"); }}
+        onDisconnect={() => disconnect("apple_ical")}>
+        {openForm === "ical" && (
+          <form className="stack" style={{ gap: 8 }} onSubmit={connectICal}>
+            <p className="muted small" style={{ margin: 0 }}>
+              Fallback for any calendar that can publish a link. iCloud: share a calendar as <strong>Public</strong> (the URL is unguessable but anyone holding it can read that calendar). Outlook: Settings → Shared calendars → Publish.
+            </p>
+            <div className="row">
+              <input className="input" data-testid="apple-url" value={icalUrl} onChange={(e) => setIcalUrl(e.target.value)}
+                placeholder="webcal://p01.icloud.com/published/…" />
+              <button className="btn sm" data-testid="connect-apple" style={{ flex: "none" }}>Add</button>
+            </div>
+            {err && <p className="muted small" style={{ color: "var(--no)" }}>{err}</p>}
+          </form>
+        )}
+      </ProviderRow>
       {msg && <p className="muted small" data-testid="calendar-msg">{msg}</p>}
       <FeedCard />
-    </div>
-  );
-}
-
-function AppleRow({ connected, label, onConnected, onDisconnect }: {
-  connected: boolean;
-  label?: string;
-  onConnected: () => void;
-  onDisconnect: () => void;
-}) {
-  const api = useApi();
-  const [open, setOpen] = useState(false);
-  const [url, setUrl] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-    const res = await sendJSON(api, "POST", "/api/calendar/apple", { ical_url: url });
-    if (!res.ok) return setErr("That doesn't look like a valid calendar URL.");
-    setUrl("");
-    setOpen(false);
-    onConnected();
-  }
-
-  if (connected) {
-    return (
-      <div className="row between">
-        <span className="row" style={{ gap: 8 }}>🍎 {PROVIDER_LABEL.apple_ical}</span>
-        {/* same shrink+ellipsis treatment as the Google row */}
-        <span className="row" style={{ gap: 10, flex: "0 1 auto", minWidth: 0, justifyContent: "flex-end" }}>
-          <span className="muted small" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-          <button className="btn ghost sm" style={{ flex: "none" }} data-testid="disconnect-apple" onClick={onDisconnect}>Disconnect</button>
-        </span>
-      </div>
-    );
-  }
-  return (
-    <div className="stack" style={{ gap: 8 }}>
-      <div className="row between">
-        <span className="row" style={{ gap: 8 }}>🍎 {PROVIDER_LABEL.apple_ical}</span>
-        <button className="btn sm" data-testid="connect-apple-open" onClick={() => setOpen((o) => !o)}>Connect</button>
-      </div>
-      {open && (
-        <form className="stack" style={{ gap: 8 }} onSubmit={submit}>
-          <p className="muted small" style={{ margin: 0 }}>
-            iCloud Calendar: share a calendar as <strong>Public</strong> and paste its link (starts with <code>webcal://</code>). Outlook: Settings → Shared calendars → Publish → paste the ICS link.
-          </p>
-          <div className="row">
-            <input className="input" data-testid="apple-url" value={url} onChange={(e) => setUrl(e.target.value)}
-              placeholder="webcal://p01.icloud.com/published/…" />
-            <button className="btn sm" data-testid="connect-apple">Add</button>
-          </div>
-          {err && <p className="muted small" style={{ color: "var(--no)" }}>{err}</p>}
-        </form>
-      )}
     </div>
   );
 }
