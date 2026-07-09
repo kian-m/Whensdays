@@ -233,9 +233,14 @@ export function CalendarConnections() {
       <div className="row between">
         <span className="row" style={{ gap: 8 }}>📅 {PROVIDER_LABEL.google}</span>
         {has("google") ? (
-          <span className="row" style={{ gap: 10 }}>
-            <span className="muted small">{connections.find((c) => c.provider === "google")?.account_label}</span>
-            <button className="btn ghost sm" data-testid="disconnect-google" onClick={() => disconnect("google")}>Disconnect</button>
+          // flex:0 1 auto overrides the mobile .row.between > .row flex:none
+          // rule so a long account email ellipsizes instead of pushing the
+          // Disconnect button off screen.
+          <span className="row" style={{ gap: 10, flex: "0 1 auto", minWidth: 0, justifyContent: "flex-end" }}>
+            <span className="muted small" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {connections.find((c) => c.provider === "google")?.account_label}
+            </span>
+            <button className="btn ghost sm" style={{ flex: "none" }} data-testid="disconnect-google" onClick={() => disconnect("google")}>Disconnect</button>
           </span>
         ) : (
           <button className="btn sm" data-testid="connect-google" onClick={connectGoogle}>Connect</button>
@@ -273,9 +278,10 @@ function AppleRow({ connected, label, onConnected, onDisconnect }: {
     return (
       <div className="row between">
         <span className="row" style={{ gap: 8 }}>🍎 {PROVIDER_LABEL.apple_ical}</span>
-        <span className="row" style={{ gap: 10 }}>
-          <span className="muted small">{label}</span>
-          <button className="btn ghost sm" data-testid="disconnect-apple" onClick={onDisconnect}>Disconnect</button>
+        {/* same shrink+ellipsis treatment as the Google row */}
+        <span className="row" style={{ gap: 10, flex: "0 1 auto", minWidth: 0, justifyContent: "flex-end" }}>
+          <span className="muted small" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+          <button className="btn ghost sm" style={{ flex: "none" }} data-testid="disconnect-apple" onClick={onDisconnect}>Disconnect</button>
         </span>
       </div>
     );

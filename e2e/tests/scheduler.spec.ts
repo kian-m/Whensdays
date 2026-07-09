@@ -162,6 +162,10 @@ test.describe("scheduler", () => {
     await page.getByTestId("cover-file").setInputFiles({
       name: "cover.png", mimeType: "image/png", buffer: Buffer.from(png, "base64"),
     });
+    // The crop dialog lets the host pick which square of the photo to use.
+    await expect(page.getByTestId("crop-modal")).toBeVisible();
+    await page.getByTestId("crop-save").click();
+    await expect(page.getByTestId("crop-modal")).toHaveCount(0);
     await expect(page.getByTestId("event-cover")).toHaveAttribute("src", /^data:image\//);
     // Pick a backdrop theme - the WHOLE page reflects it live, before saving.
     await page.getByTestId("theme-party").click();
@@ -281,6 +285,37 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("wiz-next").click();
     await expect(page.getByTestId("sched-poll")).toHaveClass(/on/);
+  });
+
+  test("edit grows a lone event into a series by adding dates", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as for an isolated user");
+    await ensureUser(page, "grower", "Grow Er", "grower");
+    const title = `Growable ${test.info().testId}-${Date.now()}`;
+    const dt = (days: number) => {
+      const d = new Date(Date.now() + days * 24 * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T19:00`;
+    };
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill(dt(3));
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    await expect(page.getByTestId("hero-dates")).toHaveCount(0); // one date - no series list
+
+    // "+ Add another date" in the edit form turns it into a 2-date series.
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-add-date").click();
+    await page.getByTestId("edit-add-date-0").fill(dt(6));
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("hero-dates").locator("div")).toHaveCount(2);
+    await expect(page.getByTestId("series")).toContainText("1 of 2");
   });
 
   test("poll options rank against ALL attendees' availability", async ({ page, browser }) => {
@@ -841,11 +876,16 @@ test.describe("scheduler", () => {
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-09-01T20:00");
     await page.getByTestId("wiz-next").click();
-    await page.getByTestId("vis-public").click();
-    await page.getByTestId("cat-streams").click();
-    await page.getByTestId("event-city").fill("Portland");
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+    // Creation no longer asks visibility (Discover is out of the nav) - the
+    // host publishes from the event page's Edit form.
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-vis-public").click();
+    await page.getByTestId("edit-cat-streams").click();
+    await page.getByTestId("edit-city").fill("Portland");
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
 
     // Another user finds it on Discover, filters by topic, follows the host.
     const fanCtx = await browser.newContext();
@@ -961,9 +1001,13 @@ test.describe("scheduler", () => {
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-09-05T19:00");
     await page.getByTestId("wiz-next").click();
-    await page.getByTestId("vis-friends").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+    // Visibility moved off the wizard - set it from the edit form.
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-vis-friends").click();
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
 
     const otherCtx = await browser.newContext();
     try {
@@ -1059,10 +1103,14 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-general").click(); // polling: no time yet
     await page.getByTestId("wiz-next").click();
-    await page.getByTestId("vis-public").click();
-    await page.getByTestId("cat-social").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+    // Publish via the edit form (visibility moved off the wizard).
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-vis-public").click();
+    await page.getByTestId("edit-cat-social").click();
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
 
     // The Discover filter starts EMPTY (no timezone prefill hiding results)
     // and time-less polls are listed.
@@ -1083,11 +1131,15 @@ test.describe("scheduler", () => {
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-09-15T18:00");
     await page.getByTestId("wiz-next").click();
-    await page.getByTestId("vis-public").click();
-    await page.getByTestId("cat-tech").click();
-    await page.getByTestId("event-city").fill("Oakland");
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+    // Publish via the edit form (visibility moved off the wizard).
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-vis-public").click();
+    await page.getByTestId("edit-cat-tech").click();
+    await page.getByTestId("edit-city").fill("Oakland");
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
 
     // Filtering by the metro region finds the member-city event.
     await page.goto("/discover");
@@ -1757,6 +1809,11 @@ test.describe("scheduler", () => {
       mimeType: "image/png",
       buffer: Buffer.from(png, "base64"),
     });
+    // The circle-crop dialog opens first: avatars display as circles, so the
+    // user picks which circle of their photo to keep.
+    await expect(page.getByTestId("crop-modal")).toBeVisible();
+    await expect(page.locator(".crop-circle")).toBeVisible();
+    await page.getByTestId("crop-save").click();
     await expect(page.getByText("Photo updated ✓")).toBeVisible();
     await expect(page.getByTestId("avatar-img").first()).toHaveAttribute("src", /^data:image\//);
   });

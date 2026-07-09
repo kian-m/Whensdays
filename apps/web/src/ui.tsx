@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { ApiFn, DAYPARTS, getJSON, useApi } from "./lib";
 import { EVENTS, analytics } from "./analytics";
@@ -177,9 +178,10 @@ export function AvailLegend({ hasCalendar }: { hasCalendar?: boolean }) {
   );
 }
 
-// Resize an image File to a small square JPEG data URL (cover crop), client-side
-// - keeps images tiny so they can live as data URLs in the DB (no object store).
-// Used for profile avatars and group icons.
+// Resize an image File to a small square JPEG data URL (auto center-crop),
+// client-side - keeps images tiny so they can live as data URLs in the DB (no
+// object store). Used for group icons; avatars and event covers go through
+// CropModal so the user picks the crop themselves.
 export function fileToAvatar(file: File, size = 160): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -195,6 +197,93 @@ export function fileToAvatar(file: File, size = 160): Promise<string> {
     img.onerror = () => reject(new Error("bad image"));
     img.src = URL.createObjectURL(file);
   });
+}
+
+// Pan-and-zoom crop dialog for uploaded photos. The square viewport IS the
+// crop area: drag to position, slider to zoom; output is a size x size JPEG
+// data URL (same contract as fileToAvatar). `shape` only changes the preview
+// mask - avatars render as circles in the app, event covers as squares - the
+// exported image is always the full square.
+export function CropModal({ file, shape, size, onDone, onCancel }: {
+  file: File; shape: "circle" | "square"; size: number;
+  onDone: (dataUrl: string) => void; onCancel: () => void;
+}) {
+  const VIEW = 280;
+  const [src, setSrc] = useState<string | null>(null);
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [off, setOff] = useState({ x: 0, y: 0 });
+  const drag = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { setDims({ w: img.width, h: img.height }); setSrc(url); };
+    img.onerror = () => onCancel();
+    img.src = url;
+    return () => URL.revokeObjectURL(url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file]);
+
+  if (!src || !dims) return null;
+
+  // Baseline scale = "cover" (short side fills the viewport); zoom multiplies
+  // it, and the pan offset is clamped so the image always covers the crop.
+  const scale = (VIEW / Math.min(dims.w, dims.h)) * zoom;
+  const dw = dims.w * scale, dh = dims.h * scale;
+  const clampOff = (v: number, span: number) =>
+    Math.min(Math.max(v, -(span - VIEW) / 2), (span - VIEW) / 2);
+  const ox = clampOff(off.x, dw), oy = clampOff(off.y, dh);
+  const left = (VIEW - dw) / 2 + ox, top = (VIEW - dh) / 2 + oy;
+
+  function exportCrop() {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx || !imgRef.current) return onCancel();
+    ctx.drawImage(imgRef.current, -left / scale, -top / scale, VIEW / scale, VIEW / scale, 0, 0, size, size);
+    onDone(canvas.toDataURL("image/jpeg", 0.85));
+  }
+
+  // Portal to <body>: .card's backdrop-filter makes it the containing block
+  // for position:fixed descendants, so rendered in place the overlay would be
+  // trapped inside (and painted under) sibling cards.
+  return createPortal(
+    <div className="crop-overlay" data-testid="crop-modal">
+      <div className="card stack crop-card">
+        <strong>{shape === "circle" ? "Position your photo" : "Crop your cover"}</strong>
+        <span className="muted small">Drag to move · slide to zoom</span>
+        <div
+          className={`crop-viewport ${shape === "circle" ? "crop-circle" : ""}`}
+          data-testid="crop-viewport"
+          style={{ width: VIEW, height: VIEW }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            (e.currentTarget as Element).setPointerCapture(e.pointerId);
+            drag.current = { px: e.clientX, py: e.clientY, ox, oy };
+          }}
+          onPointerMove={(e) => {
+            if (!drag.current) return;
+            setOff({ x: drag.current.ox + e.clientX - drag.current.px, y: drag.current.oy + e.clientY - drag.current.py });
+          }}
+          onPointerUp={() => { drag.current = null; }}
+          onPointerCancel={() => { drag.current = null; }}
+        >
+          <img ref={imgRef} className="crop-img" src={src} alt="" draggable={false}
+            style={{ left, top, width: dw, height: dh }} />
+          {shape === "circle" && <div className="crop-mask" aria-hidden />}
+        </div>
+        <input type="range" data-testid="crop-zoom" aria-label="Zoom" min={1} max={4} step={0.01}
+          value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
+        <div className="row" style={{ justifyContent: "flex-end" }}>
+          <button type="button" className="btn ghost sm" data-testid="crop-cancel" onClick={onCancel}>Cancel</button>
+          <button type="button" className="btn sm" data-testid="crop-save" onClick={exportCrop}>Use photo</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
 }
 
 // Auto-dismissing confirmation toast (prominent + mobile-visible). Renders

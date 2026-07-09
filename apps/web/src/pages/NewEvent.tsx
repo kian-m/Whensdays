@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CATEGORIES, CITY_OPTIONS, Event, EventType, Friend, getJSON, guessCity, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
+import { Event, EventType, Friend, getJSON, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
 // (custom types: saved per user, offered as chips next to the presets)
 import { EVENT_TYPES } from "../scheduler/questions";
 import { AddressInput, Avatar, useAsync } from "../ui";
@@ -12,7 +12,7 @@ const MIN_DT = DEV_AUTH ? undefined : toDatetimeLocal(new Date().toISOString());
 import { EVENTS, analytics } from "../analytics";
 
 // Event creation is a one-step-at-a-time wizard (à la Airtable forms): What →
-// Where → When → Who, with Back/Next. The Who step covers visibility AND lets
+// Where → When → Who, with Back/Next. The Who step lets
 // the host invite friends before the event even exists.
 const STEPS = ["What", "Where", "When", "Who"] as const;
 
@@ -62,9 +62,6 @@ export function NewEvent() {
   const [repeatCount, setRepeatCount] = useState(4);
   // Irregular series: extra explicit dates (any days - recurring, no pattern).
   const [moreStarts, setMoreStarts] = useState<string[]>([]);
-  const [visibility, setVisibility] = useState<"private" | "friends" | "public">("private");
-  const [topic, setTopic] = useState("");
-  const [city, setCity] = useState(guessCity());
   const [options, setOptions] = useState<string[]>([""]);
   const [invitees, setInvitees] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -138,11 +135,10 @@ export function NewEvent() {
       body.custom_emoji = custom.emoji;
       body.custom_label = custom.label;
     }
-    body.visibility = visibility;
-    if (visibility === "public") {
-      body.topic = topic; // a preset category slug (or empty)
-      body.city = city.trim();
-    }
+    // Visibility isn't asked at creation (Discover/feed are out of nav until
+    // group density exists - see README); events start invite-only and the
+    // host can open them up later from the event page's Edit form.
+    body.visibility = "private";
     if (schedulingMode === "fixed") {
       body.starts_at = startsAt ? new Date(startsAt).toISOString() : "";
       if (endsAt) body.ends_at = new Date(endsAt).toISOString();
@@ -377,33 +373,6 @@ export function NewEvent() {
 
         {step === 3 && (
           <>
-            <div>
-              <label className="field">Who can find it?</label>
-              <div className="row wrap">
-                <button type="button" className={`chip ${visibility === "private" ? "on" : ""}`}
-                  data-testid="vis-private" onClick={() => setVisibility("private")}>🔒 Invite-only</button>
-                <button type="button" className={`chip ${visibility === "friends" ? "on" : ""}`}
-                  data-testid="vis-friends" onClick={() => setVisibility("friends")}>🤝 Friends</button>
-                <button type="button" className={`chip ${visibility === "public" ? "on" : ""}`}
-                  data-testid="vis-public" onClick={() => setVisibility("public")}>🌎 Public (on Discover)</button>
-              </div>
-              {visibility === "public" && (
-                <div className="stack" style={{ marginTop: 8, gap: 8 }}>
-                  <div className="row wrap" style={{ gap: 4 }}>
-                    {CATEGORIES.map((c) => (
-                      <button key={c.slug} type="button" className={`chip sm ${topic === c.slug ? "on" : ""}`}
-                        data-testid={`cat-${c.slug}`}
-                        onClick={() => setTopic(topic === c.slug ? "" : c.slug)}>{c.emoji} {c.label}</button>
-                    ))}
-                  </div>
-                  <input className="input" data-testid="event-city" list="city-list" value={city}
-                    placeholder="city (optional)" onChange={(e) => setCity(e.target.value)} />
-                  <datalist id="city-list">
-                    {CITY_OPTIONS.map((c) => <option key={c} value={c} />)}
-                  </datalist>
-                </div>
-              )}
-            </div>
             <div>
               <label className="field">Invite friends? <span className="muted small">(optional - they'll see it on their dashboard)</span></label>
               {friends.length === 0 && <p className="muted small">No friends yet - add some on the Friends page, or share the invite link after creating.</p>}

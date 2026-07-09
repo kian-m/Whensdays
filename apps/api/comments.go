@@ -289,6 +289,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			ID       string `json:"id"`
 			StartsAt string `json:"starts_at"`
 		} `json:"series_times"`
+		AddStarts []string `json:"add_starts"` // optional: add MORE dates - grows a lone event into a series
 	}
 	// Covers ride in as data URLs, so this endpoint gets a larger body cap.
 	if !decodeJSONLimit(w, r, &in, coverMaxBody) {
@@ -358,6 +359,32 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		}
 		endsAt = ets
 	}
+	// Added occurrences: parse/validate BEFORE any write so a bad date can't
+	// half-apply the edit. Only an event with a concrete time can grow into a
+	// series - a poll still decides its time by voting.
+	var addStarts []pgtype.Timestamptz
+	if len(in.AddStarts) > 0 {
+		if len(in.AddStarts) > 11 {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "at most 12 added dates"})
+			return
+		}
+		if current.Status != "scheduled" || !current.StartsAt.Valid {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "dates can be added once the event is scheduled"})
+			return
+		}
+		for _, raw := range in.AddStarts {
+			ats, aok := parseTS(raw)
+			if !aok {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid added date"})
+				return
+			}
+			if timeInPast(ats) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "events can't start in the past"})
+				return
+			}
+			addStarts = append(addStarts, ats)
+		}
+	}
 	ev, err := s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
 		ID: id, Title: in.Title, Description: in.Description,
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress,
@@ -424,6 +451,49 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			StartsAt: ts, ReminderSent: false, EndsAt: sibEnd,
 		})
 	}
-	s.analytics.Capture(uid, "event_edited", map[string]any{"event_id": r.PathValue("id"), "role": role, "series": in.ApplySeries})
+	// Grow the series: each added date becomes a sibling occurrence carrying
+	// this event's (just-updated) content - cover/theme included - and everyone
+	// on it, RSVPs intact (same machinery as multi-date finalize). A lone event
+	// gets a fresh series id first; an existing series keeps its own.
+	if len(addStarts) > 0 {
+		series := current.SeriesID
+		if !series.Valid {
+			series = newUUID()
+			if serr := s.queries.SetSeries(r.Context(), db.SetSeriesParams{ID: id, SeriesID: series, Recurrence: "custom"}); serr != nil {
+				s.internal(w, "update event: set series", serr)
+				return
+			}
+		}
+		for _, ats := range addStarts {
+			sibEnd := pgtype.Timestamptz{}
+			if ev.EndsAt.Valid && ev.StartsAt.Valid {
+				sibEnd = pgtype.Timestamptz{Time: ats.Time.Add(ev.EndsAt.Time.Sub(ev.StartsAt.Time)), Valid: true}
+			}
+			sib, cerr := s.queries.CreateEvent(r.Context(), db.CreateEventParams{
+				HostID: ev.HostID, Title: ev.Title, EventType: ev.EventType, Description: ev.Description,
+				LocationMode: ev.LocationMode, LocationAddress: ev.LocationAddress,
+				SchedulingMode: "fixed", StartsAt: ats, Status: "scheduled",
+				GroupID: ev.GroupID, SeriesID: series, Recurrence: "custom",
+				Visibility: ev.Visibility, Topic: ev.Topic, City: ev.City,
+				CustomEmoji: ev.CustomEmoji, CustomLabel: ev.CustomLabel,
+				GeneralScope: ev.GeneralScope, Timezone: ev.Timezone, EndsAt: sibEnd,
+			})
+			if cerr != nil {
+				s.internal(w, "update event: add occurrence", cerr)
+				return
+			}
+			// CreateEvent has no cover/theme columns - carry them separately.
+			_, _ = s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
+				ID: sib.ID, Title: ev.Title, Description: ev.Description,
+				LocationMode: ev.LocationMode, LocationAddress: ev.LocationAddress,
+				Visibility: ev.Visibility, Topic: ev.Topic, City: ev.City,
+				PhotoUrl: ev.PhotoUrl, Theme: ev.Theme,
+				StartsAt: ats, ReminderSent: false, EndsAt: sibEnd,
+			})
+			_ = s.queries.CopyAttendees(r.Context(), db.CopyAttendeesParams{EventID: id, Column2: sib.ID})
+			_ = s.queries.CopyInvites(r.Context(), db.CopyInvitesParams{EventID: id, Column2: sib.ID})
+		}
+	}
+	s.analytics.Capture(uid, "event_edited", map[string]any{"event_id": r.PathValue("id"), "role": role, "series": in.ApplySeries, "added_dates": len(addStarts)})
 	writeJSON(w, http.StatusOK, ev)
 }

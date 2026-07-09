@@ -185,6 +185,23 @@ export function appleMapsUrl(address: string): string {
   return `https://maps.apple.com/?q=${encodeURIComponent(address)}`;
 }
 
+// iOS never hands an https://google.com/maps link to the Google Maps app the
+// way Android app-links do - it opens the web page. So on iPhone/iPad the
+// Google Maps link tries the app's URL scheme first and falls back to the web
+// URL only if the app isn't installed (the page never went hidden). Android
+// and desktop keep the plain href.
+export function openGoogleMaps(ev: { preventDefault(): void }, address: string) {
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (ua.includes("Mac") && navigator.maxTouchPoints > 1);
+  if (!isIOS) return;
+  ev.preventDefault();
+  const t = setTimeout(() => { window.location.href = mapsUrl(address); }, 1200);
+  const cancel = () => clearTimeout(t);
+  window.addEventListener("pagehide", cancel, { once: true });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) cancel(); }, { once: true });
+  window.location.href = `comgooglemaps://?q=${encodeURIComponent(address)}`;
+}
+
 export function guessCity(): string {
   try {
     return TZ_CITY[Intl.DateTimeFormat().resolvedOptions().timeZone] ?? "";

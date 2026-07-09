@@ -24,12 +24,13 @@ import {
   importedBusy,
   mapsUrl,
   appleMapsUrl,
+  openGoogleMaps,
   nextMonths,
   sendJSON,
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { AddressInput, Avatar, BackLink, ConfirmButton, DayGrid, GifPicker, Loading, Pill, fileToAvatar, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, Loading, Pill, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH } from "../App";
 
@@ -794,10 +795,13 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   const sibs = (data.series ?? []).filter((x) => x.id !== e.id && x.starts_at);
   const [sibTimes, setSibTimes] = useState<Record<string, string>>({});
   const sibValue = (id: string, iso: string) => sibTimes[id] ?? toDatetimeLocal(iso);
+  // Extra dates the host adds while editing - each becomes a new occurrence.
+  const [addStarts, setAddStarts] = useState<string[]>([]);
   // Series editing: apply content edits (title/details/cover/theme…) to every
   // occurrence - each keeps its own date.
   const [applySeries, setApplySeries] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function openEdit() {
@@ -809,17 +813,15 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
     setStartsAt(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
     setEndsAt(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
     setSibTimes({});
+    setAddStarts([]);
     setEditing(true);
   }
 
-  async function onPickPhoto(ev: React.ChangeEvent<HTMLInputElement>) {
+  function onPickPhoto(ev: React.ChangeEvent<HTMLInputElement>) {
     const file = ev.target.files?.[0];
+    ev.target.value = ""; // allow re-picking the same file
     if (!file) return;
-    try {
-      setPhoto(await fileToAvatar(file, 420)); // square cover, client-resized
-    } catch {
-      setMsg("could not read image");
-    }
+    setCropFile(file); // CropModal takes it from here (square cover crop)
   }
 
   async function save(ev: React.FormEvent) {
@@ -835,6 +837,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       series_times: sibs
         .filter((x) => sibTimes[x.id] && sibTimes[x.id] !== toDatetimeLocal(x.starts_at!))
         .map((x) => ({ id: x.id, starts_at: new Date(sibTimes[x.id]).toISOString() })),
+      add_starts: addStarts.filter((d) => d.trim() !== "").map((d) => new Date(d).toISOString()),
     });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
@@ -895,6 +898,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
                 <span>📍 {e.location_address}</span>
                 <span className="row" style={{ gap: 12 }}>
                   <a href={mapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
+                    onClick={(ev) => openGoogleMaps(ev, e.location_address)}
                     className="accent" data-testid="directions-link">Google Maps ↗</a>
                   <a href={appleMapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
                     className="accent" data-testid="directions-apple">Apple Maps ↗</a>
@@ -917,6 +921,11 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         )}
         <input ref={fileRef} type="file" accept="image/*" data-testid="cover-file"
           style={{ display: "none" }} onChange={onPickPhoto} />
+        {cropFile && (
+          <CropModal file={cropFile} shape="square" size={420}
+            onDone={(url) => { setPhoto(url); setCropFile(null); }}
+            onCancel={() => setCropFile(null)} />
+        )}
       </div>
       <GifPicker onPick={(url) => setPhoto(url)} />
       <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
@@ -940,6 +949,28 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
             onChange={(ev) => setSibTimes((m) => ({ ...m, [occ.id]: ev.target.value }))} />
         </label>
       ))}
+      {/* Grow the series after the fact: each added date becomes a sibling
+          occurrence with the same content and everyone carried over (a lone
+          event turns into a series). */}
+      {e.status === "scheduled" && (
+        <>
+          {addStarts.map((d, i) => (
+            <div key={i} className="row" style={{ gap: 6 }}>
+              <input type="datetime-local" className="input" min={MIN_DT} data-testid={`edit-add-date-${i}`}
+                value={d} onChange={(ev) => setAddStarts((m) => m.map((x, j) => (j === i ? ev.target.value : x)))} />
+              <button type="button" className="btn ghost sm" data-testid={`edit-add-date-remove-${i}`}
+                onClick={() => setAddStarts((m) => m.filter((_, j) => j !== i))}>✕</button>
+            </div>
+          ))}
+          <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
+            data-testid="edit-add-date" onClick={() => setAddStarts((m) => [...m, ""])}>
+            + Add another date
+          </button>
+          {addStarts.length > 0 && (
+            <p className="muted small">New dates join this event as one series - everyone on it is carried over and RSVPs per date.</p>
+          )}
+        </>
+      )}
       <div className="row" style={{ gap: 6 }}>
         <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
           data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>

@@ -20,7 +20,7 @@ import {
   useProfile,
 } from "../lib";
 import { useSearchParams } from "react-router-dom";
-import { AvailLegend, Avatar, DayGrid, Loading, Toast, fileToAvatar, useAsync } from "../ui";
+import { AvailLegend, Avatar, CropModal, DayGrid, Loading, Toast, useAsync } from "../ui";
 import { DEV_AUTH } from "../App";
 import { ClerkAccountCard } from "../ClerkAccount";
 import { CalendarConnections } from "./Calendars";
@@ -55,6 +55,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   }, []);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [avatar, setAvatar] = useState(profile?.avatar_url ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -158,24 +159,25 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   const toggleWeekRow = (wd: string) => paintLine(weekGrid, WEEK_PARTS.map((p) => `${wd}:${p.value}`));
   const toggleWeekCol = (dp: string) => paintLine(weekGrid, WEEK_ROWS.map((r) => `${r.value}:${dp}`));
 
-  async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+  function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
     if (!file) return;
     setError(null);
-    try {
-      const dataUrl = await fileToAvatar(file);
-      const res = await sendJSON(api, "PUT", "/api/profile/avatar", { avatar_url: dataUrl });
-      if (!res.ok) {
-        const b = await res.json().catch(() => ({}));
-        return setError(b.error || "could not save photo");
-      }
-      const p: Profile = await res.json();
-      setAvatar(p.avatar_url);
-      onUpdated(p);
-      setSavedMsg("Photo updated ✓");
-    } catch {
-      setError("could not read image");
+    setCropFile(file); // CropModal takes it from here (circle preview)
+  }
+
+  async function saveAvatar(dataUrl: string) {
+    setCropFile(null);
+    const res = await sendJSON(api, "PUT", "/api/profile/avatar", { avatar_url: dataUrl });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setError(b.error || "could not save photo");
     }
+    const p: Profile = await res.json();
+    setAvatar(p.avatar_url);
+    onUpdated(p);
+    setSavedMsg("Photo updated ✓");
   }
 
   async function saveProfile(e: React.FormEvent) {
@@ -260,6 +262,10 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
           </div>
           <input ref={fileRef} type="file" accept="image/*" data-testid="avatar-file"
             style={{ display: "none" }} onChange={onPickPhoto} />
+          {cropFile && (
+            <CropModal file={cropFile} shape="circle" size={160}
+              onDone={saveAvatar} onCancel={() => setCropFile(null)} />
+          )}
         </div>
         <div>
           <label className="field" htmlFor="dn">Name</label>
