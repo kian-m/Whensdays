@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -294,6 +295,159 @@ func (s *server) notifySeriesEnded(ctx context.Context, ev db.Event) {
 		theme:     ev.Theme,
 	})
 	s.notify.Send([]string{host.Email}, "Plan the next "+ev.Title+"?", body)
+}
+
+// --- poll velocity ----------------------------------------------------------
+
+// maybeNotifyQuorum emails the host ONCE when every invited person has voted
+// on a poll - "everyone's in, lock it" is the fastest path to a locked plan.
+// Fires from the vote handlers; ClaimQuorumSent is the atomic once-gate.
+func (s *server) maybeNotifyQuorum(ctx context.Context, ev db.Event) {
+	if !s.notify.Enabled() || ev.Status != "polling" || ev.QuorumSent {
+		return
+	}
+	invites, err := s.queries.CountEventInvites(ctx, ev.ID)
+	if err != nil || invites == 0 {
+		return
+	}
+	waiting, err := s.queries.CountInvitedNonVoters(ctx, ev.ID)
+	if err != nil || waiting > 0 {
+		return
+	}
+	if _, err := s.queries.ClaimQuorumSent(ctx, ev.ID); err != nil {
+		return // already claimed (or transient error - next vote retries)
+	}
+	host, err := s.queries.GetProfile(ctx, ev.HostID)
+	if err != nil || host.Email == "" {
+		return
+	}
+	body := renderEmail(emailContent{
+		preheader: "Everyone you invited has voted.",
+		heading:   "Everyone's voted 🎉",
+		lines:     []string{fmt.Sprintf("All %d invitees have answered the %s poll. The results are waiting - pick the winning time and lock it in.", invites, ev.Title)},
+		ctaLabel:  "See results & lock it in",
+		ctaURL:    campaignURL(s.appOrigin+"/e/"+uuidStr(ev.ID), "quorum"),
+		logoURL:   s.logoURL(),
+		unsubURL:  s.muteLink(ev.HostID, uuidStr(ev.ID)),
+		coverURL:  eventCover(ev),
+		theme:     ev.Theme,
+	})
+	s.notify.Send([]string{host.Email}, "Everyone's voted - "+ev.Title, body)
+}
+
+// pollWinners renders the top options for the poll-ready email - times for a
+// specific-time poll, cells ("Sat Jan 4 · evening") for a general poll.
+func (s *server) pollWinners(ctx context.Context, ev db.Event) []string {
+	loc := eventLocation(ev)
+	var out []string
+	if ev.SchedulingMode == "poll" {
+		rows, err := s.queries.ListOptionYesCounts(ctx, ev.ID)
+		if err != nil {
+			return nil
+		}
+		for _, r := range rows {
+			if !r.StartsAt.Valid {
+				continue
+			}
+			out = append(out, fmt.Sprintf("%s - %d yes", r.StartsAt.Time.In(loc).Format("Mon Jan 2, 3:04 PM"), r.Yes))
+		}
+		return out
+	}
+	rows, err := s.queries.ListGeneralTopCells(ctx, ev.ID)
+	if err != nil {
+		return nil
+	}
+	for _, r := range rows {
+		out = append(out, fmt.Sprintf("%s - %d votes", generalCellLabel(r.Value), r.Votes))
+	}
+	return out
+}
+
+// generalCellLabel humanizes a general-vote cell value: "2026-08-08:evening"
+// (dayslot), "5:evening" (weekday slot), or a bare date/month.
+func generalCellLabel(v string) string {
+	parts := strings.SplitN(v, ":", 2)
+	dayNames := []string{"Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"}
+	head := parts[0]
+	if t, err := time.Parse("2006-01-02", head); err == nil {
+		head = t.Format("Mon Jan 2")
+	} else if wd, err := strconv.Atoi(head); err == nil && wd >= 0 && wd <= 6 {
+		head = dayNames[wd]
+	}
+	if len(parts) == 2 {
+		return head + " · " + strings.ReplaceAll(parts[1], "_", " ")
+	}
+	return head
+}
+
+// sendPollVelocity rides the daily cron: last-chance emails to invited
+// non-voters on polls closing within a day, then a poll-ready email to the
+// host once the close date passes (each once-only via marker columns).
+func (s *server) sendPollVelocity(ctx context.Context) (reminded, ready int) {
+	if !s.notify.Enabled() {
+		return 0, 0
+	}
+	if polls, err := s.queries.ListPollsNeedingVoteReminder(ctx); err == nil {
+		for _, ev := range polls {
+			contacts, cerr := s.queries.ListInvitedNonVoterContacts(ctx, ev.ID)
+			if cerr != nil {
+				continue
+			}
+			closes := ev.PollDeadline.Time.In(eventLocation(ev)).Format("Mon Jan 2, 3:04 PM MST")
+			for _, c := range contacts {
+				if muted, _ := s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: ev.ID, UserID: c.UserID}); muted {
+					continue
+				}
+				body := renderEmail(emailContent{
+					preheader: "The poll closes " + closes + ".",
+					heading:   "Last chance to vote ⏳",
+					lines:     []string{fmt.Sprintf("The poll for %s closes %s and your availability isn't in yet. It takes a few taps.", ev.Title, closes)},
+					ctaLabel:  "Vote now",
+					ctaURL:    campaignURL(s.appOrigin+"/e/"+uuidStr(ev.ID), "vote_reminder"),
+					logoURL:   s.logoURL(),
+					unsubURL:  s.muteLink(c.UserID, uuidStr(ev.ID)),
+					coverURL:  eventCover(ev),
+					theme:     ev.Theme,
+				})
+				s.notify.Send([]string{c.Email}, "Last chance to vote - "+ev.Title, body)
+			}
+			if err := s.queries.MarkVoteReminded(ctx, ev.ID); err == nil {
+				reminded++
+			}
+		}
+	}
+	if polls, err := s.queries.ListPollsPastDeadline(ctx); err == nil {
+		for _, ev := range polls {
+			host, herr := s.queries.GetProfile(ctx, ev.HostID)
+			if herr == nil && host.Email != "" {
+				lines := []string{"The poll for " + ev.Title + " has closed. Here's how the group voted:"}
+				winners := s.pollWinners(ctx, ev)
+				if len(winners) == 0 {
+					lines = []string{"The poll for " + ev.Title + " has closed without any votes - nudge the group or pick a time yourself."}
+				}
+				for _, wl := range winners {
+					lines = append(lines, "🏆 "+wl)
+				}
+				lines = append(lines, "Pick the winner (or several dates) and everyone gets the locked-in email.")
+				body := renderEmail(emailContent{
+					preheader: "Your poll closed - time to lock it in.",
+					heading:   "Your poll is ready to lock 🗳️",
+					lines:     lines,
+					ctaLabel:  "Lock in the time",
+					ctaURL:    campaignURL(s.appOrigin+"/e/"+uuidStr(ev.ID), "poll_ready"),
+					logoURL:   s.logoURL(),
+					unsubURL:  s.muteLink(ev.HostID, uuidStr(ev.ID)),
+					coverURL:  eventCover(ev),
+					theme:     ev.Theme,
+				})
+				s.notify.Send([]string{host.Email}, "Poll closed - lock in "+ev.Title, body)
+			}
+			if err := s.queries.MarkPollReady(ctx, ev.ID); err == nil {
+				ready++
+			}
+		}
+	}
+	return reminded, ready
 }
 
 // --- group streak congrats ------------------------------------------------

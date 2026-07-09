@@ -35,6 +35,11 @@ import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifP
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH } from "../App";
 
+// A poll with a close date stops taking votes after it (server-enforced too).
+function pollClosed(e: { status: string; poll_deadline: string | null }): boolean {
+  return e.status === "polling" && !!e.poll_deadline && new Date(e.poll_deadline).getTime() < Date.now();
+}
+
 // The active theme's accent (the .event-theme wrapper overrides --accent) so
 // share cards match the page; empty = the brand coral default.
 function pageAccent(): string {
@@ -368,10 +373,15 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
     <div className="stack">
       <WhosIn data={data} />
       <Rsvp eventId={e.id} current={myRsvp} reload={reload} />
-      {e.scheduling_mode === "poll" && e.status === "polling" && (
+      {pollClosed(e) && (
+        <div className="card" data-testid="poll-closed">
+          <span className="muted small">🗳️ This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
+        </div>
+      )}
+      {e.scheduling_mode === "poll" && e.status === "polling" && !pollClosed(e) && (
         <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} reload={reload} />
       )}
-      {e.scheduling_mode === "general" && e.status === "polling" && (
+      {e.scheduling_mode === "general" && e.status === "polling" && !pollClosed(e) && (
         <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id} reload={reload} />
       )}
       {/* Preferences sit OFF the critical path (roadmap): collapsed unless the
@@ -797,6 +807,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   // Editable start time - only meaningful once the event has a concrete time
   // (fixed or finalized); a poll still decides its time by voting.
   const [startsAt, setStartsAt] = useState(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
+  const [deadline, setDeadline] = useState(e.poll_deadline ? toDatetimeLocal(e.poll_deadline) : "");
   const [endsAt, setEndsAt] = useState(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
   // Sibling occurrences (multi-date series): every date is editable from here,
   // one input per occurrence. Keyed by sibling event id.
@@ -819,6 +830,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
     setTopic(e.topic); setCity(e.city || guessCity());
     setPhoto(e.photo_url); setTheme(e.theme); setMsg(null);
     setStartsAt(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
+    setDeadline(e.poll_deadline ? toDatetimeLocal(e.poll_deadline) : "");
     setEndsAt(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
     setSibTimes({});
     setAddStarts([]);
@@ -846,6 +858,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         .filter((x) => sibTimes[x.id] && sibTimes[x.id] !== toDatetimeLocal(x.starts_at!))
         .map((x) => ({ id: x.id, starts_at: new Date(sibTimes[x.id]).toISOString() })),
       add_starts: addStarts.filter((d) => d.trim() !== "").map((d) => new Date(d).toISOString()),
+      poll_deadline: deadline ? new Date(deadline).toISOString() : "",
     });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
@@ -894,7 +907,11 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           </div>
         ) : (
           <div className="muted small">
-            🗓️ {e.status === "polling" ? "Time being decided" : fmtDate(e.starts_at, e.timezone)}
+            🗓️ {e.status === "polling"
+            ? (e.poll_deadline
+              ? (pollClosed(e) ? "Poll closed - time coming soon" : `Time being decided · poll closes ${fmtDateTime(e.poll_deadline, e.timezone)}`)
+              : "Time being decided")
+            : fmtDate(e.starts_at, e.timezone)}
             {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
             {e.status !== "polling" && e.ends_at ? ` – ${fmtDateTime(e.ends_at, e.timezone).split(", ").pop()}` : ""}
           </div>
@@ -951,6 +968,12 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       <GifPicker onPick={(url) => setPhoto(url)} />
       <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
       <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
+      {e.status === "polling" && (
+        <label className="field">Poll closes <span className="muted small">(optional - "" removes it)</span>
+          <input type="datetime-local" className="input" min={MIN_DT} data-testid="edit-deadline"
+            value={deadline} onChange={(ev) => setDeadline(ev.target.value)} />
+        </label>
+      )}
       {e.status === "scheduled" && (
         <>
           <label className="field">{sibs.length > 0 ? "This date" : "When"}

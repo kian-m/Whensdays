@@ -325,6 +325,46 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("share-card-modal")).toHaveCount(0);
   });
 
+  test("poll deadline: shows the close date and stops votes after it", async ({ page }) => {
+    test.skip(!DEV_AUTH, "backdates the deadline (dev-exempt validation)");
+    await ensureUser(page, "dlhost", "Deadline Host", "dlhost");
+    const title = `Deadline ${test.info().testId}-${Date.now()}`;
+    const dt = (days: number) => {
+      const d = new Date(Date.now() + days * 24 * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T18:00`;
+    };
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-other").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-general").click();
+    await page.getByTestId("poll-deadline").fill(dt(2));
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const id = page.url().split("/e/")[1];
+
+    // The hero advertises the close date while the poll is open.
+    await expect(page.getByText(/poll closes/i)).toBeVisible();
+
+    // Host moves the deadline into the past (dev-exempt) - the poll closes.
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-deadline").fill(dt(-1));
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByText("Poll closed - time coming soon")).toBeVisible();
+
+    // Votes bounce off a closed poll (server-enforced, 409).
+    const status = await page.evaluate(async (eid) => {
+      const h = { "Content-Type": "application/json", "X-Dev-User": "dlguest" };
+      await fetch("/api/profile", { method: "PUT", headers: h, body: JSON.stringify({ display_name: "DL Guest", handle: "dlguest" }) });
+      const r = await fetch(`/api/events/${eid}/general-votes`, { method: "POST", headers: h, body: JSON.stringify({ months: [], slots: [] }) });
+      return r.status;
+    }, id);
+    expect(status).toBe(409);
+  });
+
   test("poll options rank against ALL attendees' availability", async ({ page, browser }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
     await ensureUser(page, "fit1", "Fit Host", "fit1");

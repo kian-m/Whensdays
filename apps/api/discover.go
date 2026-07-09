@@ -82,8 +82,10 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 	// monthly run just extended gets one celebratory email to every member
 	// (idempotent via group_streak_congrats).
 	streaks := s.sendStreakCongrats(r.Context())
-	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks})
-	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks})
+	// Poll velocity: last-chance vote reminders + poll-ready host emails.
+	voteReminded, pollsReady := s.sendPollVelocity(r.Context())
+	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady})
+	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady})
 }
 
 // ---------------------- public discovery ----------------------

@@ -550,6 +550,12 @@ func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending, "unseen": unseen, "faces": faces})
 }
 
+// pollClosed reports whether a poll's optional close date has passed - votes
+// are rejected after it (the host can still finalize any time).
+func pollClosed(ev db.Event) bool {
+	return ev.Status == "polling" && ev.PollDeadline.Valid && time.Now().After(ev.PollDeadline.Time)
+}
+
 // requireActiveEvent loads an event and rejects writes against cancelled ones
 // (the UI hides those surfaces; the API must enforce it too).
 func (s *server) requireActiveEvent(w http.ResponseWriter, r *http.Request, id pgtype.UUID) (db.Event, bool) {
@@ -593,6 +599,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		CustomLabel     string   `json:"custom_label"`  // ≤20 chars; forces event_type=other
 		GeneralScope    string   `json:"general_scope"` // general mode: week|month|general (default general)
 		Timezone        string   `json:"timezone"`      // host's IANA tz (e.g. America/Los_Angeles); for server-rendered times
+		PollDeadline    string   `json:"poll_deadline"` // optional RFC3339 close date (poll/general modes)
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -665,6 +672,24 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		Visibility: in.Visibility, Topic: in.Topic, City: in.City,
 		CustomEmoji: in.CustomEmoji, CustomLabel: in.CustomLabel, GeneralScope: in.GeneralScope,
 		Timezone: tz,
+	}
+	// Poll close date: optional, poll/general only, must be in the future
+	// (dev-exempt like every time check so hermetic E2E can backdate).
+	if in.PollDeadline != "" {
+		if in.SchedulingMode == "fixed" {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "poll_deadline needs a poll"})
+			return
+		}
+		dts, dok := parseTS(in.PollDeadline)
+		if !dok {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid poll_deadline"})
+			return
+		}
+		if timeInPast(dts) {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "poll_deadline can't be in the past"})
+			return
+		}
+		params.PollDeadline = dts
 	}
 	if in.GroupID != "" {
 		gid, ok := parseUUID(in.GroupID)
@@ -1059,7 +1084,12 @@ func (s *server) handleVotes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
 		return
 	}
-	if _, active := s.requireActiveEvent(w, r, id); !active {
+	ev, active := s.requireActiveEvent(w, r, id)
+	if !active {
+		return
+	}
+	if pollClosed(ev) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "this poll has closed"})
 		return
 	}
 	var in struct {
@@ -1099,6 +1129,7 @@ func (s *server) handleVotes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.analytics.Capture(uid, "poll_voted", map[string]any{"event_id": r.PathValue("id"), "votes": len(in.Votes)})
+	s.maybeNotifyQuorum(r.Context(), ev)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -1120,6 +1151,10 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 	}
 	ev, active := s.requireActiveEvent(w, r, id)
 	if !active {
+		return
+	}
+	if pollClosed(ev) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "this poll has closed"})
 		return
 	}
 	var in struct {
@@ -1228,6 +1263,7 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 		"scope":    ev.GeneralScope,
 		"picks":    len(rows),
 	})
+	s.maybeNotifyQuorum(r.Context(), ev)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

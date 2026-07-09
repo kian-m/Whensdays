@@ -7,7 +7,7 @@
 -- Pacific calendar date is compared to tomorrow's Pacific date. reminder_sent
 -- keeps it idempotent if the job runs more than once in a day.
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
 FROM events
 WHERE status = 'scheduled' AND reminder_sent = false
   AND (starts_at AT TIME ZONE 'America/Los_Angeles')::date

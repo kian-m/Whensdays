@@ -29,6 +29,7 @@ export type Event = {
   theme: string;
   timezone: string;
   ends_at: string | null;
+  poll_deadline: string | null;
   created_at: string;
 };
 

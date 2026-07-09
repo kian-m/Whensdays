@@ -150,7 +150,7 @@ const cancelEvent = `-- name: CancelEvent :one
 UPDATE events SET status = 'cancelled'
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
 `
 
 func (q *Queries) CancelEvent(ctx context.Context, id pgtype.UUID) (Event, error) {
@@ -183,6 +183,10 @@ func (q *Queries) CancelEvent(ctx context.Context, id pgtype.UUID) (Event, error
 		&i.Theme,
 		&i.Timezone,
 		&i.EndsAt,
+		&i.PollDeadline,
+		&i.PollReadySent,
+		&i.VoteReminderSent,
+		&i.QuorumSent,
 	)
 	return i, err
 }
@@ -194,6 +198,20 @@ UPDATE events SET status = 'cancelled' WHERE series_id = $1
 func (q *Queries) CancelSeries(ctx context.Context, seriesID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, cancelSeries, seriesID)
 	return err
+}
+
+const claimQuorumSent = `-- name: ClaimQuorumSent :one
+UPDATE events SET quorum_sent = true
+WHERE id = $1 AND quorum_sent = false
+RETURNING id
+`
+
+// Atomic once-gate (multi-instance safe): no row back = already claimed.
+func (q *Queries) ClaimQuorumSent(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, claimQuorumSent, id)
+	var id_2 pgtype.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const clearAvailability = `-- name: ClearAvailability :exec
@@ -266,6 +284,17 @@ func (q *Queries) CopyInvites(ctx context.Context, arg CopyInvitesParams) error 
 	return err
 }
 
+const countEventInvites = `-- name: CountEventInvites :one
+SELECT count(*)::int FROM event_invites WHERE event_id = $1
+`
+
+func (q *Queries) CountEventInvites(ctx context.Context, eventID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countEventInvites, eventID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countGoing = `-- name: CountGoing :one
 SELECT count(*)::int FROM event_attendees WHERE event_id = $1 AND rsvp = 'going'
 `
@@ -279,16 +308,35 @@ func (q *Queries) CountGoing(ctx context.Context, eventID pgtype.UUID) (int32, e
 	return column_1, err
 }
 
+const countInvitedNonVoters = `-- name: CountInvitedNonVoters :one
+SELECT count(*)::int FROM event_invites i
+WHERE i.event_id = $1
+  AND i.user_id NOT IN (
+    SELECT gv.user_id FROM event_general_votes gv WHERE gv.event_id = $1
+    UNION
+    SELECT tv.user_id FROM event_time_votes tv
+    JOIN event_time_options o ON o.id = tv.option_id WHERE o.event_id = $1
+  )
+`
+
+// Quorum check: 0 = every invited person has voted.
+func (q *Queries) CountInvitedNonVoters(ctx context.Context, eventID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countInvitedNonVoters, eventID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createEvent = `-- name: CreateEvent :one
 
 INSERT INTO events (
     host_id, title, event_type, description,
     location_mode, location_address, scheduling_mode, starts_at, status, group_id, series_id, recurrence,
-    visibility, topic, city, custom_emoji, custom_label, general_scope, timezone, ends_at
+    visibility, topic, city, custom_emoji, custom_label, general_scope, timezone, ends_at, poll_deadline
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
 `
 
 type CreateEventParams struct {
@@ -312,6 +360,7 @@ type CreateEventParams struct {
 	GeneralScope    string             `json:"general_scope"`
 	Timezone        string             `json:"timezone"`
 	EndsAt          pgtype.Timestamptz `json:"ends_at"`
+	PollDeadline    pgtype.Timestamptz `json:"poll_deadline"`
 }
 
 // =========================== events ===============================
@@ -337,6 +386,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event
 		arg.GeneralScope,
 		arg.Timezone,
 		arg.EndsAt,
+		arg.PollDeadline,
 	)
 	var i Event
 	err := row.Scan(
@@ -366,6 +416,10 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event
 		&i.Theme,
 		&i.Timezone,
 		&i.EndsAt,
+		&i.PollDeadline,
+		&i.PollReadySent,
+		&i.VoteReminderSent,
+		&i.QuorumSent,
 	)
 	return i, err
 }
@@ -425,7 +479,7 @@ UPDATE events
 SET starts_at = $2, status = 'scheduled'
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
 `
 
 type FinalizeEventParams struct {
@@ -463,6 +517,10 @@ func (q *Queries) FinalizeEvent(ctx context.Context, arg FinalizeEventParams) (E
 		&i.Theme,
 		&i.Timezone,
 		&i.EndsAt,
+		&i.PollDeadline,
+		&i.PollReadySent,
+		&i.VoteReminderSent,
+		&i.QuorumSent,
 	)
 	return i, err
 }
@@ -493,7 +551,7 @@ func (q *Queries) GetAttendee(ctx context.Context, arg GetAttendeeParams) (Event
 
 const getEvent = `-- name: GetEvent :one
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
 FROM events
 WHERE id = $1
 `
@@ -528,6 +586,10 @@ func (q *Queries) GetEvent(ctx context.Context, id pgtype.UUID) (Event, error) {
 		&i.Theme,
 		&i.Timezone,
 		&i.EndsAt,
+		&i.PollDeadline,
+		&i.PollReadySent,
+		&i.VoteReminderSent,
+		&i.QuorumSent,
 	)
 	return i, err
 }
@@ -762,7 +824,7 @@ func (q *Queries) ListAvailabilityDays(ctx context.Context, userID string) ([]Li
 
 const listEventsAttending = `-- name: ListEventsAttending :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent
 FROM events e
 JOIN event_attendees a ON a.event_id = e.id
 WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled'
@@ -806,6 +868,10 @@ func (q *Queries) ListEventsAttending(ctx context.Context, userID string) ([]Eve
 			&i.Theme,
 			&i.Timezone,
 			&i.EndsAt,
+			&i.PollDeadline,
+			&i.PollReadySent,
+			&i.VoteReminderSent,
+			&i.QuorumSent,
 		); err != nil {
 			return nil, err
 		}
@@ -819,7 +885,7 @@ func (q *Queries) ListEventsAttending(ctx context.Context, userID string) ([]Eve
 
 const listEventsCohosting = `-- name: ListEventsCohosting :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent
 FROM events e
 JOIN event_cohosts ch ON ch.event_id = e.id
 WHERE ch.user_id = $1 AND e.status <> 'cancelled'
@@ -862,6 +928,10 @@ func (q *Queries) ListEventsCohosting(ctx context.Context, userID string) ([]Eve
 			&i.Theme,
 			&i.Timezone,
 			&i.EndsAt,
+			&i.PollDeadline,
+			&i.PollReadySent,
+			&i.VoteReminderSent,
+			&i.QuorumSent,
 		); err != nil {
 			return nil, err
 		}
@@ -875,7 +945,7 @@ func (q *Queries) ListEventsCohosting(ctx context.Context, userID string) ([]Eve
 
 const listEventsHosting = `-- name: ListEventsHosting :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
 FROM events
 WHERE host_id = $1 AND status <> 'cancelled'
 ORDER BY created_at DESC
@@ -917,6 +987,10 @@ func (q *Queries) ListEventsHosting(ctx context.Context, hostID string) ([]Event
 			&i.Theme,
 			&i.Timezone,
 			&i.EndsAt,
+			&i.PollDeadline,
+			&i.PollReadySent,
+			&i.VoteReminderSent,
+			&i.QuorumSent,
 		); err != nil {
 			return nil, err
 		}
@@ -967,6 +1041,41 @@ func (q *Queries) ListFriends(ctx context.Context, requesterID string) ([]ListFr
 			&i.Handle,
 			&i.AvatarUrl,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGeneralTopCells = `-- name: ListGeneralTopCells :many
+SELECT value, count(*)::int AS votes
+FROM event_general_votes
+WHERE event_id = $1 AND dimension IN ('dayslot', 'slot', 'day')
+GROUP BY value
+ORDER BY votes DESC, value
+LIMIT 3
+`
+
+type ListGeneralTopCellsRow struct {
+	Value string `json:"value"`
+	Votes int32  `json:"votes"`
+}
+
+// Top-voted general-poll cells for the poll-ready email.
+func (q *Queries) ListGeneralTopCells(ctx context.Context, eventID pgtype.UUID) ([]ListGeneralTopCellsRow, error) {
+	rows, err := q.db.Query(ctx, listGeneralTopCells, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGeneralTopCellsRow{}
+	for rows.Next() {
+		var i ListGeneralTopCellsRow
+		if err := rows.Scan(&i.Value, &i.Votes); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1122,6 +1231,82 @@ func (q *Queries) ListIncomingRequests(ctx context.Context, addresseeID string) 
 	return items, nil
 }
 
+const listInvitedNonVoterContacts = `-- name: ListInvitedNonVoterContacts :many
+SELECT p.user_id, p.display_name, p.email
+FROM event_invites i
+JOIN profiles p ON p.user_id = i.user_id
+WHERE i.event_id = $1 AND p.email <> ''
+  AND p.user_id NOT IN (
+    SELECT gv.user_id FROM event_general_votes gv WHERE gv.event_id = $1
+    UNION
+    SELECT tv.user_id FROM event_time_votes tv
+    JOIN event_time_options o ON o.id = tv.option_id WHERE o.event_id = $1
+  )
+`
+
+type ListInvitedNonVoterContactsRow struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+}
+
+// Invitees with an email who haven't voted on this poll (any dimension).
+func (q *Queries) ListInvitedNonVoterContacts(ctx context.Context, eventID pgtype.UUID) ([]ListInvitedNonVoterContactsRow, error) {
+	rows, err := q.db.Query(ctx, listInvitedNonVoterContacts, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInvitedNonVoterContactsRow{}
+	for rows.Next() {
+		var i ListInvitedNonVoterContactsRow
+		if err := rows.Scan(&i.UserID, &i.DisplayName, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOptionYesCounts = `-- name: ListOptionYesCounts :many
+SELECT o.starts_at, count(v.user_id) FILTER (WHERE v.response = 'yes')::int AS yes
+FROM event_time_options o
+LEFT JOIN event_time_votes v ON v.option_id = o.id
+WHERE o.event_id = $1
+GROUP BY o.id, o.starts_at
+ORDER BY yes DESC, o.starts_at
+LIMIT 3
+`
+
+type ListOptionYesCountsRow struct {
+	StartsAt pgtype.Timestamptz `json:"starts_at"`
+	Yes      int32              `json:"yes"`
+}
+
+// Winning options for the poll-ready email, best first.
+func (q *Queries) ListOptionYesCounts(ctx context.Context, eventID pgtype.UUID) ([]ListOptionYesCountsRow, error) {
+	rows, err := q.db.Query(ctx, listOptionYesCounts, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOptionYesCountsRow{}
+	for rows.Next() {
+		var i ListOptionYesCountsRow
+		if err := rows.Scan(&i.StartsAt, &i.Yes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOutgoingRequests = `-- name: ListOutgoingRequests :many
 SELECT f.id, f.addressee_id, p.display_name, p.handle
 FROM friendships f
@@ -1151,6 +1336,129 @@ func (q *Queries) ListOutgoingRequests(ctx context.Context, requesterID string) 
 			&i.AddresseeID,
 			&i.DisplayName,
 			&i.Handle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPollsNeedingVoteReminder = `-- name: ListPollsNeedingVoteReminder :many
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
+FROM events
+WHERE status = 'polling' AND poll_deadline IS NOT NULL
+  AND poll_deadline > now() AND poll_deadline <= now() + interval '26 hours'
+  AND vote_reminder_sent = false
+`
+
+// Polls closing within the next cron day - invited non-voters get one
+// last-chance email (vote_reminder_sent gate).
+func (q *Queries) ListPollsNeedingVoteReminder(ctx context.Context) ([]Event, error) {
+	rows, err := q.db.Query(ctx, listPollsNeedingVoteReminder)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Event{}
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.HostID,
+			&i.Title,
+			&i.EventType,
+			&i.Description,
+			&i.LocationMode,
+			&i.LocationAddress,
+			&i.SchedulingMode,
+			&i.StartsAt,
+			&i.Status,
+			&i.CreatedAt,
+			&i.CommentsEnabled,
+			&i.GroupID,
+			&i.SeriesID,
+			&i.Recurrence,
+			&i.ReminderSent,
+			&i.Visibility,
+			&i.Topic,
+			&i.City,
+			&i.CustomEmoji,
+			&i.CustomLabel,
+			&i.GeneralScope,
+			&i.PhotoUrl,
+			&i.Theme,
+			&i.Timezone,
+			&i.EndsAt,
+			&i.PollDeadline,
+			&i.PollReadySent,
+			&i.VoteReminderSent,
+			&i.QuorumSent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPollsPastDeadline = `-- name: ListPollsPastDeadline :many
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
+FROM events
+WHERE status = 'polling' AND poll_deadline IS NOT NULL
+  AND poll_deadline < now() AND poll_ready_sent = false
+`
+
+// Polls whose close date passed without the host locking a time - the cron
+// emails the host ONCE with the winning options (poll_ready_sent gate).
+func (q *Queries) ListPollsPastDeadline(ctx context.Context) ([]Event, error) {
+	rows, err := q.db.Query(ctx, listPollsPastDeadline)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Event{}
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.HostID,
+			&i.Title,
+			&i.EventType,
+			&i.Description,
+			&i.LocationMode,
+			&i.LocationAddress,
+			&i.SchedulingMode,
+			&i.StartsAt,
+			&i.Status,
+			&i.CreatedAt,
+			&i.CommentsEnabled,
+			&i.GroupID,
+			&i.SeriesID,
+			&i.Recurrence,
+			&i.ReminderSent,
+			&i.Visibility,
+			&i.Topic,
+			&i.City,
+			&i.CustomEmoji,
+			&i.CustomLabel,
+			&i.GeneralScope,
+			&i.PhotoUrl,
+			&i.Theme,
+			&i.Timezone,
+			&i.EndsAt,
+			&i.PollDeadline,
+			&i.PollReadySent,
+			&i.VoteReminderSent,
+			&i.QuorumSent,
 		); err != nil {
 			return nil, err
 		}
@@ -1370,6 +1678,24 @@ func (q *Queries) ListVotesForEvent(ctx context.Context, eventID pgtype.UUID) ([
 	return items, nil
 }
 
+const markPollReady = `-- name: MarkPollReady :exec
+UPDATE events SET poll_ready_sent = true WHERE id = $1
+`
+
+func (q *Queries) MarkPollReady(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markPollReady, id)
+	return err
+}
+
+const markVoteReminded = `-- name: MarkVoteReminded :exec
+UPDATE events SET vote_reminder_sent = true WHERE id = $1
+`
+
+func (q *Queries) MarkVoteReminded(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markVoteReminded, id)
+	return err
+}
+
 const setAvatar = `-- name: SetAvatar :one
 UPDATE profiles SET avatar_url = $2
 WHERE user_id = $1
@@ -1471,10 +1797,10 @@ const updateEvent = `-- name: UpdateEvent :one
 UPDATE events
 SET title = $2, description = $3, location_mode = $4, location_address = $5,
     visibility = $6, topic = $7, city = $8, photo_url = $9, theme = $10,
-    starts_at = $11, reminder_sent = $12, ends_at = $13
+    starts_at = $11, reminder_sent = $12, ends_at = $13, poll_deadline = $14
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
 `
 
 type UpdateEventParams struct {
@@ -1491,6 +1817,7 @@ type UpdateEventParams struct {
 	StartsAt        pgtype.Timestamptz `json:"starts_at"`
 	ReminderSent    bool               `json:"reminder_sent"`
 	EndsAt          pgtype.Timestamptz `json:"ends_at"`
+	PollDeadline    pgtype.Timestamptz `json:"poll_deadline"`
 }
 
 // starts_at + reminder_sent are set by the handler: the time stays editable
@@ -1511,6 +1838,7 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Event
 		arg.StartsAt,
 		arg.ReminderSent,
 		arg.EndsAt,
+		arg.PollDeadline,
 	)
 	var i Event
 	err := row.Scan(
@@ -1540,6 +1868,10 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Event
 		&i.Theme,
 		&i.Timezone,
 		&i.EndsAt,
+		&i.PollDeadline,
+		&i.PollReadySent,
+		&i.VoteReminderSent,
+		&i.QuorumSent,
 	)
 	return i, err
 }

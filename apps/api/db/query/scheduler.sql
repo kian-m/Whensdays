@@ -124,28 +124,28 @@ SELECT EXISTS (
 INSERT INTO events (
     host_id, title, event_type, description,
     location_mode, location_address, scheduling_mode, starts_at, status, group_id, series_id, recurrence,
-    visibility, topic, city, custom_emoji, custom_label, general_scope, timezone, ends_at
+    visibility, topic, city, custom_emoji, custom_label, general_scope, timezone, ends_at, poll_deadline
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at;
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent;
 
 -- name: GetEvent :one
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
 FROM events
 WHERE id = $1;
 
 -- name: ListEventsHosting :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
 FROM events
 WHERE host_id = $1 AND status <> 'cancelled'
 ORDER BY created_at DESC;
 
 -- name: ListEventsAttending :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent
 FROM events e
 JOIN event_attendees a ON a.event_id = e.id
 WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled'
@@ -154,7 +154,7 @@ ORDER BY e.created_at DESC;
 
 -- name: ListEventsCohosting :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent
 FROM events e
 JOIN event_cohosts ch ON ch.event_id = e.id
 WHERE ch.user_id = $1 AND e.status <> 'cancelled'
@@ -165,7 +165,7 @@ UPDATE events
 SET starts_at = $2, status = 'scheduled'
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at;
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent;
 
 -- name: UpdateEvent :one
 -- starts_at + reminder_sent are set by the handler: the time stays editable
@@ -174,10 +174,10 @@ RETURNING id, host_id, title, event_type, description,
 UPDATE events
 SET title = $2, description = $3, location_mode = $4, location_address = $5,
     visibility = $6, topic = $7, city = $8, photo_url = $9, theme = $10,
-    starts_at = $11, reminder_sent = $12, ends_at = $13
+    starts_at = $11, reminder_sent = $12, ends_at = $13, poll_deadline = $14
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at;
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent;
 
 -- name: SetCommentsEnabled :exec
 UPDATE events SET comments_enabled = $2 WHERE id = $1;
@@ -325,7 +325,7 @@ DELETE FROM friendships WHERE id = $1;
 UPDATE events SET status = 'cancelled'
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at;
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent;
 
 -- name: CancelSeries :exec
 UPDATE events SET status = 'cancelled' WHERE series_id = $1;
@@ -373,3 +373,80 @@ WHERE p.user_id IN (
 -- Going-count for one event - rides on the OG unfurl ("4 in so far") so the
 -- link preview in a group chat carries live social pressure.
 SELECT count(*)::int FROM event_attendees WHERE event_id = $1 AND rsvp = 'going';
+
+-- name: ListPollsPastDeadline :many
+-- Polls whose close date passed without the host locking a time - the cron
+-- emails the host ONCE with the winning options (poll_ready_sent gate).
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
+FROM events
+WHERE status = 'polling' AND poll_deadline IS NOT NULL
+  AND poll_deadline < now() AND poll_ready_sent = false;
+
+-- name: MarkPollReady :exec
+UPDATE events SET poll_ready_sent = true WHERE id = $1;
+
+-- name: ListPollsNeedingVoteReminder :many
+-- Polls closing within the next cron day - invited non-voters get one
+-- last-chance email (vote_reminder_sent gate).
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent
+FROM events
+WHERE status = 'polling' AND poll_deadline IS NOT NULL
+  AND poll_deadline > now() AND poll_deadline <= now() + interval '26 hours'
+  AND vote_reminder_sent = false;
+
+-- name: MarkVoteReminded :exec
+UPDATE events SET vote_reminder_sent = true WHERE id = $1;
+
+-- name: ListInvitedNonVoterContacts :many
+-- Invitees with an email who haven't voted on this poll (any dimension).
+SELECT p.user_id, p.display_name, p.email
+FROM event_invites i
+JOIN profiles p ON p.user_id = i.user_id
+WHERE i.event_id = $1 AND p.email <> ''
+  AND p.user_id NOT IN (
+    SELECT gv.user_id FROM event_general_votes gv WHERE gv.event_id = $1
+    UNION
+    SELECT tv.user_id FROM event_time_votes tv
+    JOIN event_time_options o ON o.id = tv.option_id WHERE o.event_id = $1
+  );
+
+-- name: CountInvitedNonVoters :one
+-- Quorum check: 0 = every invited person has voted.
+SELECT count(*)::int FROM event_invites i
+WHERE i.event_id = $1
+  AND i.user_id NOT IN (
+    SELECT gv.user_id FROM event_general_votes gv WHERE gv.event_id = $1
+    UNION
+    SELECT tv.user_id FROM event_time_votes tv
+    JOIN event_time_options o ON o.id = tv.option_id WHERE o.event_id = $1
+  );
+
+-- name: CountEventInvites :one
+SELECT count(*)::int FROM event_invites WHERE event_id = $1;
+
+-- name: ClaimQuorumSent :one
+-- Atomic once-gate (multi-instance safe): no row back = already claimed.
+UPDATE events SET quorum_sent = true
+WHERE id = $1 AND quorum_sent = false
+RETURNING id;
+
+-- name: ListOptionYesCounts :many
+-- Winning options for the poll-ready email, best first.
+SELECT o.starts_at, count(v.user_id) FILTER (WHERE v.response = 'yes')::int AS yes
+FROM event_time_options o
+LEFT JOIN event_time_votes v ON v.option_id = o.id
+WHERE o.event_id = $1
+GROUP BY o.id, o.starts_at
+ORDER BY yes DESC, o.starts_at
+LIMIT 3;
+
+-- name: ListGeneralTopCells :many
+-- Top-voted general-poll cells for the poll-ready email.
+SELECT value, count(*)::int AS votes
+FROM event_general_votes
+WHERE event_id = $1 AND dimension IN ('dayslot', 'slot', 'day')
+GROUP BY value
+ORDER BY votes DESC, value
+LIMIT 3;

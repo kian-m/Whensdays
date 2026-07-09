@@ -62,6 +62,7 @@ export function NewEvent() {
   const [repeatCount, setRepeatCount] = useState(4);
   // Irregular series: extra explicit dates (any days - recurring, no pattern).
   const [moreStarts, setMoreStarts] = useState<string[]>([]);
+  const [pollDeadline, setPollDeadline] = useState("");
   const [options, setOptions] = useState<string[]>([""]);
   const [invitees, setInvitees] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -157,6 +158,8 @@ export function NewEvent() {
       // Scope shapes the question guests answer (this week / this month / generally).
       body.general_scope = generalScope;
     }
+    // Optional close date - the cron chases non-voters then hands the host results.
+    if (schedulingMode !== "fixed" && pollDeadline) body.poll_deadline = new Date(pollDeadline).toISOString();
     const res = await sendJSON(api, "POST", "/api/events", body);
     if (!res.ok) {
       setSaving(false);
@@ -351,6 +354,12 @@ export function NewEvent() {
                 <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
                   data-testid="add-option" onClick={() => setOptions((o) => [...o, ""])}>+ Add another time</button>
               </div>
+            )}
+            {schedulingMode !== "fixed" && (
+              <label className="field" style={{ marginTop: 8 }}>Poll closes <span className="muted small">(optional - non-voters get a last-chance email, then you get the results)</span>
+                <input type="datetime-local" className="input" min={MIN_DT} data-testid="poll-deadline"
+                  value={pollDeadline} onChange={(e) => setPollDeadline(e.target.value)} />
+              </label>
             )}
             {schedulingMode === "general" && (
               <div className="stack" style={{ marginTop: 8, gap: 6 }}>

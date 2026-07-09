@@ -290,6 +290,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			StartsAt string `json:"starts_at"`
 		} `json:"series_times"`
 		AddStarts []string `json:"add_starts"` // optional: add MORE dates - grows a lone event into a series
+		PollDeadline string `json:"poll_deadline"` // optional close date while polling ("" clears)
 	}
 	// Covers ride in as data URLs, so this endpoint gets a larger body cap.
 	if !decodeJSONLimit(w, r, &in, coverMaxBody) {
@@ -385,12 +386,31 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			addStarts = append(addStarts, ats)
 		}
 	}
+	// Poll close date is editable while polling: "" clears, else future-only.
+	pollDeadline := current.PollDeadline
+	if current.Status == "polling" {
+		if in.PollDeadline == "" {
+			pollDeadline = pgtype.Timestamptz{}
+		} else {
+			dts, dok := parseTS(in.PollDeadline)
+			if !dok {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid poll_deadline"})
+				return
+			}
+			if (!current.PollDeadline.Valid || !dts.Time.Equal(current.PollDeadline.Time)) && timeInPast(dts) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "poll_deadline can't be in the past"})
+				return
+			}
+			pollDeadline = dts
+		}
+	}
 	ev, err := s.queries.UpdateEvent(r.Context(), db.UpdateEventParams{
 		ID: id, Title: in.Title, Description: in.Description,
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress,
 		Visibility: in.Visibility, Topic: in.Topic, City: in.City,
 		PhotoUrl: in.PhotoUrl, Theme: in.Theme,
 		StartsAt: startsAt, ReminderSent: reminderSent, EndsAt: endsAt,
+		PollDeadline: pollDeadline,
 	})
 	if err != nil {
 		s.internal(w, "update event", err)
@@ -415,6 +435,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 					Visibility: in.Visibility, Topic: in.Topic, City: in.City,
 					PhotoUrl: in.PhotoUrl, Theme: in.Theme,
 					StartsAt: full.StartsAt, ReminderSent: full.ReminderSent, EndsAt: full.EndsAt,
+					PollDeadline: full.PollDeadline,
 				})
 			}
 		}
@@ -449,6 +470,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			Visibility: sib.Visibility, Topic: sib.Topic, City: sib.City,
 			PhotoUrl: sib.PhotoUrl, Theme: sib.Theme,
 			StartsAt: ts, ReminderSent: false, EndsAt: sibEnd,
+			PollDeadline: sib.PollDeadline,
 		})
 	}
 	// Grow the series: each added date becomes a sibling occurrence carrying
@@ -489,7 +511,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 				Visibility: ev.Visibility, Topic: ev.Topic, City: ev.City,
 				PhotoUrl: ev.PhotoUrl, Theme: ev.Theme,
 				StartsAt: ats, ReminderSent: false, EndsAt: sibEnd,
-			})
+			}) // no PollDeadline - siblings are born scheduled
 			_ = s.queries.CopyAttendees(r.Context(), db.CopyAttendeesParams{EventID: id, Column2: sib.ID})
 			_ = s.queries.CopyInvites(r.Context(), db.CopyInvitesParams{EventID: id, Column2: sib.ID})
 		}
