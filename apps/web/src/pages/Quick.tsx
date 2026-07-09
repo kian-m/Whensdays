@@ -3,12 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { Event, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
 import { DEV_AUTH } from "../App";
 
-// Native min-validation would block dev/E2E backdating (streaks, Past tab) —
+// Native min-validation would block dev/E2E backdating (streaks, Past tab) -
 // the server enforces the same rule with the same dev exemption.
 const MIN_DT = DEV_AUTH ? undefined : toDatetimeLocal(new Date().toISOString());
 
 // Quick plan: the 10-second path. Either set a time, or open it up so everyone
-// marks when they're free (a general-availability poll) — you lock it in from
+// marks when they're free (a general-availability poll) - you lock it in from
 // the results. Lands on the event page ready to share. The full wizard (/new)
 // remains for types, visibility, and invites.
 export function Quick() {
@@ -52,7 +52,7 @@ export function Quick() {
   return (
     <div className="stack" style={{ maxWidth: 460, margin: "1rem auto" }}>
       <h1>⚡ Quick plan</h1>
-      <p className="muted small">Name it, pick how you'll set the time — share the link, done.</p>
+      <p className="muted small">Name it, pick how you'll set the time - share the link, done.</p>
       <form className="card stack" onSubmit={go}>
         <input className="input" data-testid="quick-title" value={title} autoFocus
           placeholder="Pizza night, study session, pickup game…" onChange={(e) => setTitle(e.target.value)} />
@@ -75,9 +75,9 @@ export function Quick() {
               ))}
             </div>
             <p className="muted small">
-              {scope === "week" && "Everyone marks the days and times that work over the next 7 days — you lock it in from the results."}
-              {scope === "month" && "Everyone taps the days that work over the next 4 weeks — you lock it in from the results."}
-              {scope === "general" && "Everyone marks the months, days and times that generally work for them — you lock it in from the results."}
+              {scope === "week" && "Everyone marks the days and times that work over the next 7 days - you lock it in from the results."}
+              {scope === "month" && "Everyone taps the days that work over the next 4 weeks - you lock it in from the results."}
+              {scope === "general" && "Everyone marks the months, days and times that generally work for them - you lock it in from the results."}
             </p>
           </>
         )}

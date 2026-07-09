@@ -40,7 +40,7 @@ export function Discover() {
     load();
   }, [load]);
 
-  // Ranked "For you" feed — only when signed in; scope switches between all
+  // Ranked "For you" feed - only when signed in; scope switches between all
   // public events and events your friends are hosting.
   const loadFeed = useCallback(async () => {
     if (!profile) return;
@@ -76,7 +76,7 @@ export function Discover() {
   return (
     <div className="stack">
       <h1>Discover</h1>
-      <p className="muted small">Public Whensdays anyone can join — streams, meetups, game nights. Filter by topic or city.</p>
+      <p className="muted small">Public Whensdays anyone can join - streams, meetups, game nights. Filter by topic or city.</p>
 
       {/* Only categories that currently have an upcoming public event render
           (the selected one stays visible so it can be unselected). */}
@@ -109,7 +109,7 @@ export function Discover() {
           </div>
           {feed.length === 0 && (
             <p className="muted small" data-testid="feed-empty">
-              {scope === "friends" ? "No upcoming events from your friends yet." : "Nothing for you yet — follow a host or topic below."}
+              {scope === "friends" ? "No upcoming events from your friends yet." : "Nothing for you yet - follow a host or topic below."}
             </p>
           )}
           {forYou.map((e) => (
@@ -120,7 +120,7 @@ export function Discover() {
       )}
 
       <div className="section-h">Upcoming events</div>
-      {browse.length === 0 && events && <p className="muted small" data-testid="disc-empty">{forYou.length > 0 ? "That's everything — see For you above." : "Nothing public yet — host one and set it to Public!"}</p>}
+      {browse.length === 0 && events && <p className="muted small" data-testid="disc-empty">{forYou.length > 0 ? "That's everything - see For you above." : "Nothing public yet - host one and set it to Public!"}</p>}
       {browse.map((e) => (
         <PublicEventRow key={e.id} e={e} onOpen={() => nav(`/e/${e.id}`)}
           canFollow={!!profile} following={following} toggleFollow={toggleFollow} viewerId={profile?.user_id} testid="disc-event" />
@@ -161,7 +161,7 @@ function PublicEventRow({ e, onOpen, canFollow, following, toggleFollow, viewerI
           </span>
         </span>
         {e.topic && (
-          // A plain category label (not interactive) — filtering by category
+          // A plain category label (not interactive) - filtering by category
           // is done with the chips at the top of the page.
           <span className="cat-tag" data-testid={`cat-tag-${e.topic}`}>
             {CATEGORIES.find((c) => c.slug === e.topic)?.emoji ?? "#"} {CATEGORIES.find((c) => c.slug === e.topic)?.label ?? e.topic}

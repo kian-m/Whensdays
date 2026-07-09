@@ -1,6 +1,6 @@
 /* Default theme = dark. Light theme opts in via <html data-theme="light">.
    Look: crystal/glass panels floating over a slowly drifting sky. Everything is
-   token-driven — surfaces read --glass*, radii read --radius*, and the sky is
+   token-driven - surfaces read --glass*, radii read --radius*, and the sky is
    pure CSS (no image assets): a gradient (--sky) plus blurred radial "clouds"
    (--cloud-*) that drift via one keyframe animation. */
 :root {
@@ -16,10 +16,10 @@
   --maybe: #e2a33d;
   --no: #e2606e;
   --radius: 14px;       /* cards / panels */
-  --radius-sm: 10px;    /* buttons / chips / inputs — crisp, editorial */
+  --radius-sm: 10px;    /* buttons / chips / inputs - crisp, editorial */
   --radius-xs: 7px;     /* status pills / micro elements */
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 12px 32px rgba(0, 0, 0, 0.35);
-  /* dusk sky — sunset through glass: coral glow sinking into teal-navy */
+  /* dusk sky - sunset through glass: coral glow sinking into teal-navy */
   --sky: linear-gradient(180deg, #16203a 0%, #121728 55%, #0e1220 100%);
   --cloud-a: rgba(238, 108, 77, 0.26);
   --cloud-b: rgba(58, 163, 139, 0.18);
@@ -98,7 +98,7 @@ body::after {
   body::after { animation: none; }
 }
 
-/* type scale — display-weight headings with tight tracking read editorial,
+/* type scale - display-weight headings with tight tracking read editorial,
    not template. */
 h1, h2, h3 { letter-spacing: -0.025em; line-height: 1.08; margin: 0; }
 h1 { font-size: 2.2rem; font-weight: 850; }
@@ -115,7 +115,7 @@ a { color: inherit; text-decoration: none; }
   padding: 1.1rem 0 1.4rem;
 }
 .brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.15rem; }
-/* The brand lockup = the W logo (.dot, apps/web/public/icon.svg — same asset
+/* The brand lockup = the W logo (.dot, apps/web/public/icon.svg - same asset
    as the favicon) + the cursive "hensdays" wordmark (.word) right after it,
    spelling Whensdays. The wordmark is a CSS mask painted with --ink so it's
    near-black in light mode and warm-white in dark automatically. */
@@ -138,7 +138,7 @@ a { color: inherit; text-decoration: none; }
 }
 .nav-links a.active { background: var(--accent-soft); color: var(--accent); }
 
-/* bottom tab bar — mobile only (hidden on wider screens) */
+/* bottom tab bar - mobile only (hidden on wider screens) */
 .tabbar { display: none; }
 .tab {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -181,14 +181,14 @@ a { color: inherit; text-decoration: none; }
   /* mobile-first: rows wrap rather than overflow. Buttons are nowrap, so a row
      that can't fit folds to the next line instead of pushing off-screen.
      EXCEPT .between header rows (title left, actions right): folding drops the
-     action button under the title (the wandering ✎ Edit) — they keep one line
+     action button under the title (the wandering ✎ Edit) - they keep one line
      and their children shrink instead. */
   .row { flex-wrap: wrap; }
   .row.between { flex-wrap: nowrap; }
   .row.between > * { min-width: 0; }
 }
 
-/* cards — the frosted-glass panel every feature sits in */
+/* cards - the frosted-glass panel every feature sits in */
 .card {
   background: var(--glass);
   -webkit-backdrop-filter: blur(16px) saturate(1.5);
@@ -233,10 +233,10 @@ a { color: inherit; text-decoration: none; }
 }
 .ev .title { font-weight: 700; }
 
-/* buttons — crisp, editorial, high-contrast. Sharp radius, confident weight,
+/* buttons - crisp, editorial, high-contrast. Sharp radius, confident weight,
    real interaction physics: lift on hover, press on tap, visible focus ring.
    Primary carries the coral gradient; ghost is a hairline-bordered dark surface.
-   Interaction feel lives here once — never per-component. */
+   Interaction feel lives here once - never per-component. */
 .btn {
   font: inherit; font-weight: 700; letter-spacing: -0.01em; cursor: pointer;
   white-space: nowrap; /* a button label must never wrap mid-phrase on mobile */
@@ -285,7 +285,7 @@ input.input[type="datetime-local"], input.input[type="date"], input.input[type="
 }
 textarea.input { resize: vertical; min-height: 64px; }
 
-/* chips / pills — crisp and typographic. A selected chip fills with the accent
+/* chips / pills - crisp and typographic. A selected chip fills with the accent
    gradient and glows. Status pills read as editorial state labels: uppercase
    letterspaced micro-type, hairline colored border, live status dot. */
 .chip {
@@ -328,7 +328,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .cell.on { background: var(--go); border-color: var(--go); }
 .cell.busy-mark { background: var(--no); border-color: var(--no); }
-/* Busy pulled from an imported calendar — locked, hatched red so it reads as
+/* Busy pulled from an imported calendar - locked, hatched red so it reads as
    "busy, and not yours to edit". */
 .cell.locked {
   cursor: not-allowed; border-color: transparent;
@@ -357,11 +357,11 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* klipy gif results */
 /* Responsive columns: cells stay a legible size and the count adapts to width
    (≈3 across on a phone, more on desktop) instead of cramming a fixed 4 into any
-   width. The grid itself is the scroll region — a viewport-relative height keeps
+   width. The grid itself is the scroll region - a viewport-relative height keeps
    it a real, obviously-scrollable box on mobile, and overscroll-behavior stops
    the page from scrolling once you hit the end. */
 /* A compact, always-scrollable GIF grid: FIXED row height so every cell reserves
-   its space on first paint (the images lazy-load into a stable box — no reflow
+   its space on first paint (the images lazy-load into a stable box - no reflow
    that used to leave the grid unbounded until a "Load more" tap), and a FIXED
    ~2-row pixel max-height (no `vh`, which is unreliable on mobile) so it scrolls
    from the very first render instead of stretching to many rows. */
@@ -373,7 +373,7 @@ textarea.input { resize: vertical; min-height: 64px; }
    1. a bold full-viewport backdrop wash (::before, fixed, over the sky), and
    2. design-token overrides on the .event-theme wrapper so every button, chip,
       selected state and accent inside the event page adopts the theme colour.
-   Pure CSS, one block per preset — extend by adding a .theme-x pair. */
+   Pure CSS, one block per preset - extend by adding a .theme-x pair. */
 .event-theme { position: relative; }
 .event-theme::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
@@ -402,11 +402,11 @@ textarea.input { resize: vertical; min-height: 64px; }
 
 @keyframes theme-flow { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
 
-/* Theme washes are static or slow-flowing gradients only — NO particle layers
+/* Theme washes are static or slow-flowing gradients only - NO particle layers
    or JS-driven moments: they proved unreliable on iOS (Low Power Mode pauses
    or degrades animation), and a paused gradient is still just a gradient. */
 
-/* COZY keeps a static hearth glow at the foot of the page (no flicker loop —
+/* COZY keeps a static hearth glow at the foot of the page (no flicker loop -
    a paused flicker is just a glow, but why leave a loop around to pause). */
 .event-theme.theme-cozy::after {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
@@ -438,7 +438,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 
 /* Themed event TILES (Home/Discover/Groups): the same palette as the event-page
-   themes, scoped to the card so the WHOLE tile is unmistakably themed — a bold
+   themes, scoped to the card so the WHOLE tile is unmistakably themed - a bold
    diagonal wash over the glass, an accent-glow border, and the theme accent on
    every child (the theme-x class also sets --accent above). Tiles carry
    .theme-tile (never .event-theme), so the full-page ::before backdrop above
@@ -464,7 +464,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .facepile .face:first-child { margin-left: 0; }
 /* ring separates overlapped faces from each other and the glass */
 .facepile .face .avatar { box-shadow: 0 0 0 2px var(--surface); }
-/* friends get the accent ring — they're why you'd tap in */
+/* friends get the accent ring - they're why you'd tap in */
 .facepile .face-friend .avatar { box-shadow: 0 0 0 2px var(--accent); }
 
 /* horizontally scrollable emoji picker strip */
@@ -495,7 +495,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .land-points { display: flex; gap: 1.4rem; justify-content: center; flex-wrap: wrap; margin-top: 2.4rem; color: var(--muted); font-size: 0.9rem; }
 .land-points b { color: var(--ink); }
 
-/* filter chip row — scrolls horizontally on mobile */
+/* filter chip row - scrolls horizontally on mobile */
 .filter-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
 .filter-row .chip { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .filter-count {
@@ -505,7 +505,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .chip.on .filter-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
 
-/* responder dots on the general-availability results — tap to see one guest's picks */
+/* responder dots on the general-availability results - tap to see one guest's picks */
 .resp-dot { background: none; border: none; padding: 0; cursor: pointer; border-radius: 50%; opacity: 0.8; transition: opacity 0.1s ease, transform 0.1s ease; }
 .resp-dot:hover { opacity: 1; }
 .resp-dot:active { transform: scale(0.94); }

@@ -6,18 +6,18 @@ import (
 	"strings"
 )
 
-// emails.go — the branded HTML for transactional email. Whensdays' look is
+// emails.go - the branded HTML for transactional email. Whensdays' look is
 // "sunset through glass" (see styles.css): a teal-navy dusk with a coral accent.
 // Email clients strip <style>/<link> and external CSS, so everything here is
 // inline and table-based (the only layout that survives Outlook/Gmail). Copy is
-// warm and short — these are coordination nudges, not marketing.
+// warm and short - these are coordination nudges, not marketing.
 //
 // Every in-email link is UTM-tagged (campaignURL) so PostHog attributes the
 // resulting visit to email: it auto-captures utm_* on the landing pageview and
 // the web forwards them into the distinct person timeline. One campaign value
 // per email type keeps the funnel legible (email_finalized, email_reminder, …).
 
-// brand palette — mirrors the dark-default tokens in styles.css.
+// brand palette - mirrors the dark-default tokens in styles.css.
 const (
 	emailBG     = "#10141f" // page dusk
 	emailPanel  = "#1a2233" // frosted panel
@@ -50,7 +50,7 @@ type emailItem struct {
 	title, when, url, muteURL, cover string
 }
 
-// themeAccent maps an event theme to its accent gradient pair — mirrors the
+// themeAccent maps an event theme to its accent gradient pair - mirrors the
 // .theme-* --accent tokens in styles.css (keep in sync). Empty theme → brand coral.
 func themeAccent(theme string) (string, string) {
 	switch theme {
@@ -86,8 +86,8 @@ type emailContent struct {
 	moreURL   string
 	logoURL   string      // hosted PNG logo (APP_ORIGIN/apple-touch-icon.png)
 	unsubURL  string      // optional one-click mute link for THIS recipient
-	coverURL  string      // optional event cover/GIF banner (https only — mail clients block data: URIs)
-	theme     string      // optional event theme — tints the header/CTA to match the event page
+	coverURL  string      // optional event cover/GIF banner (https only - mail clients block data: URIs)
+	theme     string      // optional event theme - tints the header/CTA to match the event page
 	items     []emailItem // optional digest list (e.g. multiple events tomorrow)
 }
 
@@ -100,7 +100,7 @@ func renderEmail(c emailContent) string {
 	var b strings.Builder
 	accent, accent2 := themeAccent(c.theme)
 
-	// Hidden preheader — the grey preview text next to the subject in most inboxes.
+	// Hidden preheader - the grey preview text next to the subject in most inboxes.
 	if c.preheader != "" {
 		fmt.Fprintf(&b, `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:%s">%s</div>`,
 			emailBG, esc(c.preheader))
@@ -111,7 +111,7 @@ func renderEmail(c emailContent) string {
 		emailBG, emailInk)
 	b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto"><tr><td>`)
 
-	// Header — brand gradient bar with logo + wordmark.
+	// Header - brand gradient bar with logo + wordmark.
 	logo := ""
 	if c.logoURL != "" {
 		logo = fmt.Sprintf(`<img src="%s" width="34" height="34" alt="" style="vertical-align:middle;border-radius:9px;margin-right:10px">`, esc(c.logoURL))
@@ -140,7 +140,7 @@ func renderEmail(c emailContent) string {
 			emailBG, accent, emailInk, esc(c.quote))
 	}
 
-	// Digest list: one bordered row per event — cover thumbnail (when https)
+	// Digest list: one bordered row per event - cover thumbnail (when https)
 	// on the left, title/summary/links on the right.
 	for _, it := range c.items {
 		thumb := ""
@@ -178,13 +178,13 @@ func renderEmail(c emailContent) string {
 
 	b.WriteString(`</td></tr></table>`)
 
-	// Footer — includes the one-click mute link when the caller supplied a
+	// Footer - includes the one-click mute link when the caller supplied a
 	// per-recipient token.
 	unsub := ""
 	if c.unsubURL != "" {
 		unsub = fmt.Sprintf(`<br><a href="%s" style="color:%s;text-decoration:underline">Mute notifications for this event</a>`, esc(c.unsubURL), emailMuted)
 	}
-	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0"><tr><td style="padding:18px 24px;text-align:center;font-size:12px;line-height:1.5;color:%s">You're receiving this because you're part of this plan on Whensdays.<br>Whensdays — scheduling that actually happens.%s</td></tr></table>`,
+	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0"><tr><td style="padding:18px 24px;text-align:center;font-size:12px;line-height:1.5;color:%s">You're receiving this because you're part of this plan on Whensdays.<br>Whensdays - scheduling that actually happens.%s</td></tr></table>`,
 		emailMuted, unsub)
 
 	b.WriteString(`</td></tr></table></div>`)

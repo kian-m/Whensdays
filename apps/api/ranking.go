@@ -8,7 +8,7 @@ import (
 	"github.com/clsandbox/api/internal/db"
 )
 
-// ranking.go — the "For you" feed. Social-media-style pipeline, deliberately
+// ranking.go - the "For you" feed. Social-media-style pipeline, deliberately
 // simple and inspectable:
 //
 //	candidates (upcoming public events)
@@ -18,7 +18,7 @@ import (
 //
 // All weights live here so tuning is a one-file change. score() is pure for
 // table-driven tests. No engagement-bait terms: nothing rewards outrage or
-// session time — just relevance and social proof.
+// session time - just relevance and social proof.
 
 // categories are the ONLY topics a new public event may use (server-enforced;
 // the web shows them as chips). Curated for IRL + online communities.
@@ -56,8 +56,8 @@ func capped(n int, per float64, cap_ float64) float64 {
 	return math.Min(float64(n)*per, cap_)
 }
 
-// timeProximity peaks for events a few days out — near enough to plan for,
-// far enough to still join — and tapers both ways.
+// timeProximity peaks for events a few days out - near enough to plan for,
+// far enough to still join - and tapers both ways.
 func timeProximity(now, starts time.Time) float64 {
 	d := starts.Sub(now).Hours() / 24
 	switch {
@@ -81,7 +81,7 @@ func timeProximity(now, starts time.Time) float64 {
 // score is the whole algorithm. Pure: same inputs, same output.
 func score(ev db.ListPublicEventsRow, sig feedSignals) float64 {
 	id := uuidStr(ev.ID)
-	// Polls have no time yet — give them the mid proximity score (they're the
+	// Polls have no time yet - give them the mid proximity score (they're the
 	// events that most want joiners right now).
 	s := 10.0
 	if ev.StartsAt.Valid {

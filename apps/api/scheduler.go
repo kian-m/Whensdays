@@ -22,7 +22,7 @@ import (
 // scheduler.go holds the "Whensdays" feature: profiles, general
 // availability, friends, and events (with availability polls + per-event-type
 // preference questions). Every handler scopes its writes/reads to the
-// authenticated user (userIDFrom) — never a user id from the request body.
+// authenticated user (userIDFrom) - never a user id from the request body.
 
 const maxBody = 1 << 16
 
@@ -94,7 +94,7 @@ var dayparts = []string{"early_morning", "morning", "noon", "afternoon", "evenin
 
 // timeInPast rejects event times more than an hour behind now (grace covers
 // clock skew and "starting right now" events). Dev mode is exempt: hermetic
-// E2E deliberately backdates events to simulate history (streaks, Past tab) —
+// E2E deliberately backdates events to simulate history (streaks, Past tab) -
 // same dev-only escape as the rate limiter.
 func timeInPast(ts pgtype.Timestamptz) bool {
 	if os.Getenv("AUTH_MODE") == "dev" {
@@ -103,7 +103,7 @@ func timeInPast(ts pgtype.Timestamptz) bool {
 	return time.Since(ts.Time) > time.Hour
 }
 
-// hourToDaypart buckets an hour like the web's helper of the same name — keep
+// hourToDaypart buckets an hour like the web's helper of the same name - keep
 // the two in sync (lib.tsx).
 func hourToDaypart(h int) string {
 	switch {
@@ -197,7 +197,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return decodeJSONLimit(w, r, dst, maxBody)
 }
 
-// decodeJSONLimit is decodeJSON with a custom body cap — for the few endpoints
+// decodeJSONLimit is decodeJSON with a custom body cap - for the few endpoints
 // that legitimately carry a data-URL image (event covers).
 func decodeJSONLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) bool {
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit)).Decode(dst); err != nil {
@@ -262,7 +262,7 @@ func (s *server) handleUpsertProfile(w http.ResponseWriter, r *http.Request) {
 		UserID: uid, DisplayName: in.DisplayName, Handle: in.Handle,
 	})
 	if isUniqueViolation(err) && autoHandle {
-		// Derived handle collided — retry with a random suffix.
+		// Derived handle collided - retry with a random suffix.
 		var b [3]byte
 		_, _ = rand.Read(b[:])
 		in.Handle = in.Handle + "-" + fmt.Sprintf("%x", b)
@@ -285,8 +285,8 @@ func (s *server) handleUpsertProfile(w http.ResponseWriter, r *http.Request) {
 
 // handleSetProfileEmail syncs the address from the auth provider (Clerk owns it;
 // the client mirrors the verified primary email here so transactional email has a
-// destination). Email is never user-typed in our UI — it comes from a verified
-// Clerk address — but we still validate shape defensively. Empty string clears it.
+// destination). Email is never user-typed in our UI - it comes from a verified
+// Clerk address - but we still validate shape defensively. Empty string clears it.
 func (s *server) handleSetProfileEmail(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	var in struct {
@@ -303,7 +303,7 @@ func (s *server) handleSetProfileEmail(w http.ResponseWriter, r *http.Request) {
 	p, err := s.queries.SetProfileEmail(r.Context(), db.SetProfileEmailParams{UserID: uid, Email: in.Email})
 	if err != nil {
 		// No profile row yet (email sync can race ahead of profile creation on a
-		// fresh sign-up) — not an error worth surfacing; the next sync will land.
+		// fresh sign-up) - not an error worth surfacing; the next sync will land.
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 			return
@@ -330,7 +330,7 @@ func (s *server) handleSetAvatar(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "image too large (max ~300KB)"})
 		return
 	}
-	// data:image only — the web always uploads a resized data URL (fileToAvatar);
+	// data:image only - the web always uploads a resized data URL (fileToAvatar);
 	// allowing arbitrary https would let one user's avatar make every viewer's
 	// browser fetch an attacker URL (tracking / internal-SSRF from the client).
 	if in.AvatarURL != "" && !strings.HasPrefix(in.AvatarURL, "data:image/") {
@@ -414,7 +414,7 @@ func (s *server) handleGetAvailabilityDays(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	// Commitments (events you're going to) ride along so RSVPs automatically
-	// overlay the grid as booked — derived, never written into availability, so
+	// overlay the grid as booked - derived, never written into availability, so
 	// nothing goes stale when plans change. Same shape as the friend endpoint.
 	commitments, err := s.queries.ListUpcomingCommitments(r.Context(), uid)
 	if err != nil {
@@ -481,7 +481,7 @@ func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "list hosting", err)
 		return
 	}
-	// Cohosted events belong under Hosting too — a cohost helps run the event
+	// Cohosted events belong under Hosting too - a cohost helps run the event
 	// and must see it on their dashboard without ever opening the invite link.
 	cohosting, err := s.queries.ListEventsCohosting(r.Context(), uid)
 	if err != nil {
@@ -501,7 +501,7 @@ func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	attending = append(attending, invited...)
 	// Per-event "new" markers: ids of invited events the user hasn't opened yet.
-	// (Cleared one at a time in handleGetEvent, not en masse here — so the alert
+	// (Cleared one at a time in handleGetEvent, not en masse here - so the alert
 	// stays on each event until it's actually opened.)
 	unseenRows, err := s.queries.ListUnseenInviteEventIDs(r.Context(), uid)
 	if err != nil {
@@ -584,8 +584,8 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		GroupID         string   `json:"group_id"`      // optional: attach to a group
 		Repeat          string   `json:"repeat"`        // optional: weekly|biweekly|monthly (fixed mode only)
 		RepeatCount     int      `json:"repeat_count"`  // total occurrences, 2-12 (default 4)
-		MoreStarts      []string `json:"more_starts"`   // optional extra dates (fixed mode): an IRREGULAR series — recurring, no exact pattern
-		InviteFrom      string   `json:"invite_from"`   // optional event id: re-poll — copy that event's people as invites (+ email them)
+		MoreStarts      []string `json:"more_starts"`   // optional extra dates (fixed mode): an IRREGULAR series - recurring, no exact pattern
+		InviteFrom      string   `json:"invite_from"`   // optional event id: re-poll - copy that event's people as invites (+ email them)
 		Visibility      string   `json:"visibility"`    // optional: private (default) | public
 		Topic           string   `json:"topic"`         // optional slug, for public discovery
 		City            string   `json:"city"`          // optional, for public discovery
@@ -721,7 +721,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Recurrence: fixed-time events can repeat. Occurrences are materialized now
-	// as separate events sharing a series_id — per-occurrence RSVPs, no cron.
+	// as separate events sharing a series_id - per-occurrence RSVPs, no cron.
 	if in.Repeat != "" {
 		if !oneOf(in.Repeat, "weekly", "biweekly", "monthly") || in.SchedulingMode != "fixed" {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "repeat must be weekly/biweekly/monthly, on a fixed-time event"})
@@ -741,7 +741,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		params.SeriesID = newUUID()
 		params.Recurrence = in.Repeat
 	}
-	// Irregular series: explicit extra dates, any days — recurring without a
+	// Irregular series: explicit extra dates, any days - recurring without a
 	// pattern ("next three: the 12th, the 23rd, then a Tuesday"). Same series
 	// machinery as repeat, just with host-picked times.
 	var moreStarts []pgtype.Timestamptz
@@ -802,7 +802,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Re-poll: pull the people from a previous event (e.g. the series that just
-	// ended) onto this one as invites, and email them — "the poll goes out".
+	// ended) onto this one as invites, and email them - "the poll goes out".
 	// Manager-only on the SOURCE event, so only its host/cohost can re-poll it.
 	if in.InviteFrom != "" {
 		srcID, ok := parseUUID(in.InviteFrom)
@@ -947,13 +947,13 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 
 	muted, _ := s.queries.IsEventMuted(r.Context(), db.IsEventMutedParams{EventID: id, UserID: uid})
 
-	// Names for poll responders — a pure voter (availability filled, no RSVP)
+	// Names for poll responders - a pure voter (availability filled, no RSVP)
 	// has no attendee row, so the web can't label them from attendees alone.
 	voterProfiles, _ := s.queries.ListVoterProfiles(r.Context(), id)
 
 	// Best-time ranking input: for specific-time polls, score every option
 	// against ALL attendees' saved availability (free/busy for that option's
-	// day+daypart in the event's timezone) — not just the viewer's calendar.
+	// day+daypart in the event's timezone) - not just the viewer's calendar.
 	optionFit := map[string]map[string]int{}
 	if ev.SchedulingMode == "poll" && len(options) > 0 {
 		if rows, ferr := s.queries.ListAttendeeAvailabilityForEvent(r.Context(), id); ferr == nil && len(rows) > 0 {
@@ -1030,7 +1030,7 @@ func (s *server) handleRsvp(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// UpsertRsvp returns no row when the rsvp is unchanged (a re-submit) — treat
+	// UpsertRsvp returns no row when the rsvp is unchanged (a re-submit) - treat
 	// that as "nothing happened": don't re-notify the host. Only a genuine change
 	// TO "going" emails the host, so double-clicks/reconfirms can't duplicate it.
 	a, err := s.queries.UpsertRsvp(r.Context(), db.UpsertRsvpParams{EventID: id, UserID: uid, Rsvp: in.Rsvp})
@@ -1107,7 +1107,7 @@ func (s *server) handleVotes(w http.ResponseWriter, r *http.Request) {
 //
 //	week    → day_slots: concrete date+daypart cells inside the event's week window
 //	month   → days: concrete dates inside the event's month window
-//	general → months (YYYY-MM) + slots (weekday×daypart) — the original shape
+//	general → months (YYYY-MM) + slots (weekday×daypart) - the original shape
 //
 // The guest's whole set is replaced each save. Windows are anchored at the
 // event's created_at so every attendee answers about the same dates.

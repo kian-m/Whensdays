@@ -48,7 +48,7 @@ export const DEV_AUTH = import.meta.env.VITE_AUTH_MODE === "dev";
 
 // Dev-only multi-user switch: open the app with ?as=<name> to act as that user
 // (the API trusts the X-Dev-User header in dev). Stored per-TAB in sessionStorage
-// so two tabs/windows can be two different people at once — handy for testing
+// so two tabs/windows can be two different people at once - handy for testing
 // friends, invites, and RSVPs. Defaults to "demo-user". No effect with Clerk.
 function resolveDevUser(): string {
   if (!DEV_AUTH) return "";
@@ -206,8 +206,8 @@ function GuestJoin({ eventId, onJoined }: { eventId: string | null; onJoined: (a
         <h1>{eventId ? "You're invited 🎉" : "Let's make a plan ⚡"}</h1>
         <p className="muted" style={{ maxWidth: 420 }}>
           {eventId
-            ? "Tell us your name and you can RSVP, vote on times, and chat — no account needed."
-            : "Tell us your name and you can set something up and share the link — no account needed."}
+            ? "Tell us your name and you can RSVP, vote on times, and chat - no account needed."
+            : "Tell us your name and you can set something up and share the link - no account needed."}
         </p>
         <form className="row" style={{ maxWidth: 360, width: "100%" }} onSubmit={join}>
           <input className="input" data-testid="guest-name" value={name} placeholder="Your name"
@@ -263,7 +263,7 @@ function Landing() {
           real plan. Pick a time or let everyone weigh in, drop one link. Its that easy.
         </p>
         <div className="land-cta">
-          <a href="/start" className="btn" data-testid="start-plan">Start a plan — no account needed</a>
+          <a href="/start" className="btn" data-testid="start-plan">Start a plan - no account needed</a>
           {!DEV_AUTH && (
             <SignInButton mode="modal">
               <button className="btn ghost" data-testid="sign-in">Sign in</button>
@@ -404,12 +404,12 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
           but signing up preserves their plans across devices. */}
       {profile?.user_id.startsWith("guest_") && (
         <div className="card row between" data-testid="guest-banner" style={{ marginBottom: "0.9rem" }}>
-          <span className="small">You're in as a guest — sign up to keep your plans on any device.</span>
+          <span className="small">You're in as a guest - sign up to keep your plans on any device.</span>
           <span className="row" style={{ gap: 6 }}>
             <button className="btn ghost sm" data-testid="guest-reset"
               onClick={() => { localStorage.removeItem(GUEST_KEY); location.href = "/"; }}>Start over</button>
             {DEV_AUTH ? (
-              /* Dev has no Clerk modal — simulate the conversion (guest → signed-in dev user). */
+              /* Dev has no Clerk modal - simulate the conversion (guest → signed-in dev user). */
               <button className="btn sm" data-testid="guest-signup"
                 onClick={() => { analytics.capture(EVENTS.guestSignupClicked, { mode: "dev" }); sessionStorage.removeItem("clsandbox.devGuest"); location.href = "/"; }}>Sign up</button>
             ) : (
@@ -428,9 +428,9 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
 }
 
 // Bottom tab bar for mobile (CSS hides it on wider screens). Same destinations
-// as the top nav, as icon + label — inspired by app-style bottom navigation.
+// as the top nav, as icon + label - inspired by app-style bottom navigation.
 // Discover is deliberately NOT here (roadmap: no public social surface before
-// group density — empty rooms kill trust). Its routes stay live for direct
+// group density - empty rooms kill trust). Its routes stay live for direct
 // links; re-add the tab when there's density to show.
 const TABS = [
   { to: "/", id: "events", label: "Events", end: true, icon: IconHome },
@@ -477,7 +477,7 @@ function IconFriends(_: IconProps) {
     <svg {...svgProps}><circle cx="9.5" cy="8" r="3.2" /><path d="M3.8 19v-1a4 4 0 0 1 4-4h3.4a4 4 0 0 1 4 4v1" /><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6" /><path d="M17.5 14.2A4 4 0 0 1 20.2 18v1" /></svg>
   );
 }
-// IconCompass belonged to the Discover tab — kept for when Discover returns to
+// IconCompass belonged to the Discover tab - kept for when Discover returns to
 // the nav (see the TABS comment); referenced here so strict TS keeps it.
 void IconCompass;
 function IconCompass(_: IconProps) {

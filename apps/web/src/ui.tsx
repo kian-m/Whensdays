@@ -6,7 +6,7 @@ import { EVENTS, analytics } from "./analytics";
 // Small data-loading hook with STALE-WHILE-REVALIDATE: the last successful
 // result for each call site is kept in a session-lived cache, so returning to a
 // page renders instantly from cache while a background refetch updates it in
-// place. Every mount still refetches — nothing is served stale-only, so no
+// place. Every mount still refetches - nothing is served stale-only, so no
 // invalidation bookkeeping is needed; a full page load starts fresh.
 // Cache key = the fetcher's source + deps (closure source is stable per call
 // site; deps carry the ids that vary, e.g. the event id).
@@ -63,7 +63,7 @@ export function Pill({ kind, children }: { kind: string; children: React.ReactNo
   return <span className={`pill ${kind}`}>{children}</span>;
 }
 
-// Two-tap destructive confirmation — native confirm() dialogs are silently
+// Two-tap destructive confirmation - native confirm() dialogs are silently
 // suppressed on iOS (especially installed-PWA standalone mode), so "Cancel
 // event" did nothing on phones. First tap arms the button (auto-disarms after
 // 4s); the second tap actually fires.
@@ -95,7 +95,7 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, testid }: {
 // Defaults to the 6 DAYPARTS / "avail" test ids (explicit date availability);
 // pass `cols`/`idPrefix` to reuse it for the recurring weekly grid.
 // Cells are tri-state: `free` (green), `busy` (red, user-marked), or neither
-// (neutral gray = unselected). `locked` cells come from an imported calendar —
+// (neutral gray = unselected). `locked` cells come from an imported calendar -
 // hatched red and non-interactive (you can't edit what your calendar says).
 export function DayGrid({
   dates, free, busy, locked, cols = DAYPARTS, idPrefix = "avail",
@@ -178,7 +178,7 @@ export function AvailLegend({ hasCalendar }: { hasCalendar?: boolean }) {
 }
 
 // Resize an image File to a small square JPEG data URL (cover crop), client-side
-// — keeps images tiny so they can live as data URLs in the DB (no object store).
+// - keeps images tiny so they can live as data URLs in the DB (no object store).
 // Used for profile avatars and group icons.
 export function fileToAvatar(file: File, size = 160): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -233,7 +233,7 @@ export function EventThumb({ photo, emoji, color, size = 46 }: {
   );
 }
 
-// Klipy GIF picker (server-proxied — the API key never reaches the browser).
+// Klipy GIF picker (server-proxied - the API key never reaches the browser).
 // Trending shows on open, search filters as you type, and "Load more" pages
 // through Klipy's cursor. Hidden entirely when the integration is unconfigured.
 type KlipyGif = { url: string; preview: string; title: string };
@@ -264,7 +264,7 @@ export function GifPicker({ onPick }: { onPick: (url: string) => void }) {
       if (pos) {
         setGifs((prev) => [...prev, ...b.gifs]); // append on "load more"
       } else {
-        setGifs(b.gifs); // a fresh search replaces the list — scroll back to the top
+        setGifs(b.gifs); // a fresh search replaces the list - scroll back to the top
         gridRef.current?.scrollTo({ top: 0 });
       }
       setNext(b.next ?? "");
@@ -332,7 +332,9 @@ export function AddressInput({ value, onChange, placeholder, testid }: {
   function query(v: string) {
     onChange(v);
     if (timer.current) clearTimeout(timer.current);
-    if (v.trim().length < 3) { setResults([]); setOpen(false); return; }
+    // Suggestions only for street-address-shaped input (starts with a number,
+    // e.g. "123 Main"). Venue names / free text stay a plain text box.
+    if (v.trim().length < 3 || !/^\d/.test(v.trim())) { setResults([]); setOpen(false); return; }
     timer.current = setTimeout(async () => {
       try {
         const b = await getJSON<{ results: { label: string }[] }>(

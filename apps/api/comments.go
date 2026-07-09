@@ -15,12 +15,12 @@ import (
 // comments.go adds an event comment thread plus host-delegated cohosts.
 //
 // Roles on an event:
-//   host   — events.host_id. Can do everything: edit, finalize, moderate
+//   host   - events.host_id. Can do everything: edit, finalize, moderate
 //            comments, toggle comments on/off, and add/remove cohosts.
-//   cohost — a row in event_cohosts. A "manager": can edit + finalize the event,
+//   cohost - a row in event_cohosts. A "manager": can edit + finalize the event,
 //            share the invite link (sees the host view), and moderate comments.
 //            Cannot manage cohosts or toggle the thread.
-//   guest  — anyone else with the invite link. Can read and (if comments are
+//   guest  - anyone else with the invite link. Can read and (if comments are
 //            enabled) post comments, and delete their own comments.
 
 const maxCommentLen = 2000
@@ -142,7 +142,7 @@ func (s *server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handleSetCommentsEnabled turns the thread on/off — host only.
+// handleSetCommentsEnabled turns the thread on/off - host only.
 func (s *server) handleSetCommentsEnabled(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	id, ok := parseUUID(r.PathValue("id"))
@@ -176,7 +176,7 @@ func (s *server) handleSetCommentsEnabled(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]bool{"comments_enabled": in.Enabled})
 }
 
-// handleAddCohost delegates to another user by handle — host only.
+// handleAddCohost delegates to another user by handle - host only.
 func (s *server) handleAddCohost(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	id, ok := parseUUID(r.PathValue("id"))
@@ -251,7 +251,7 @@ func (s *server) handleRemoveCohost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handleUpdateEvent edits an event's details — host or cohost.
+// handleUpdateEvent edits an event's details - host or cohost.
 func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	id, ok := parseUUID(r.PathValue("id"))
@@ -325,7 +325,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "cover must be an uploaded image or a Klipy gif"})
 		return
 	}
-	// The time stays editable after finalize — but only for events that already
+	// The time stays editable after finalize - but only for events that already
 	// have a concrete time (fixed or finalized). A poll still in progress decides
 	// its time through voting/finalize, not this field. Rescheduling resets
 	// reminder_sent so the day-before reminder re-fires for the new date.
@@ -371,7 +371,7 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	// Series editing (edit one vs ALL): with apply_series, copy the CONTENT
 	// fields to every sibling occurrence. Each keeps its own starts_at and
-	// reminder state — only this event's time was (possibly) rescheduled above.
+	// reminder state - only this event's time was (possibly) rescheduled above.
 	if in.ApplySeries && current.SeriesID.Valid {
 		if sibs, serr := s.queries.ListSeriesEvents(r.Context(), current.SeriesID); serr == nil {
 			for _, sib := range sibs {

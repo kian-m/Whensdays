@@ -31,7 +31,7 @@ const MAX_OFFSET = 70; // furthest page start: 70..83 days out (~12 weeks ahead)
 // Rows for the recurring weekly grid: Sunday…Saturday, keyed by weekday index.
 const WEEK_ROWS = WEEKDAYS_FULL.map((label, i) => ({ value: String(i), label }));
 
-// The whole profile: name, handle, photo, and availability — either a recurring
+// The whole profile: name, handle, photo, and availability - either a recurring
 // weekly pattern OR explicit availability on concrete upcoming dates (paginated).
 export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) {
   const api = useApi();
@@ -47,7 +47,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   useEffect(() => {
     const connected = sp.get("connected");
     if (!connected) return;
-    setSavedMsg(sp.get("status") ? "Calendar connection failed — try again." : "Calendar connected ✓");
+    setSavedMsg(sp.get("status") ? "Calendar connection failed - try again." : "Calendar connected ✓");
     sp.delete("connected");
     sp.delete("status");
     setSp(sp, { replace: true });
@@ -69,7 +69,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   const dates = daysFrom(pageOffset, PAGE);
 
   // Each grid is tri-state: a cell is in `free` (green), `busy` (red), or neither
-  // (unselected). The two sets are always disjoint — painting one clears the other.
+  // (unselected). The two sets are always disjoint - painting one clears the other.
   const [free, setFree] = useState<Set<string>>(new Set());
   const [dayBusy, setDayBusy] = useState<Set<string>>(new Set());
   const [week, setWeek] = useState<Set<string>>(new Set());
@@ -100,7 +100,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   // Imported-calendar busy times lock cells in the specific-dates grid (read-only).
   const { data: cal } = useAsync<{ events: ImportedEvent[] }>((a) => getJSON(a, "/api/calendar/events"));
   // Locked (hatched, uneditable) cells = imported-calendar busy + your own
-  // RSVP'd commitments — an RSVP automatically blocks your availability.
+  // RSVP'd commitments - an RSVP automatically blocks your availability.
   const busyCells = new Set([
     ...importedBusy(cal?.events ?? []).cells,
     ...commitmentBusy(availData?.commitments ?? []),
@@ -311,7 +311,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
         {!editingAvail && (
           <p className="muted small" data-testid="avail-readonly">
             {(mode === "weekly" ? week.size + weekBusy.size : free.size + dayBusy.size) === 0
-              ? "You haven't set your availability yet. Tap Edit, then mark when you're free (green) or busy (red) — friends can see this."
+              ? "You haven't set your availability yet. Tap Edit, then mark when you're free (green) or busy (red) - friends can see this."
               : "Green is when you're free, red is when you're busy, blank is unset (friends can see this). Tap Edit to change."}
           </p>
         )}
@@ -326,7 +326,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
           </div>
         )}
 
-        {/* The grids only render while editing — collapsed, the card is just the
+        {/* The grids only render while editing - collapsed, the card is just the
             summary line + the Edit button, so the profile stays compact. */}
         {editingAvail && (mode === "weekly" ? (
           <>

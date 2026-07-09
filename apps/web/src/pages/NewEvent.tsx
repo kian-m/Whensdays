@@ -6,7 +6,7 @@ import { EVENT_TYPES } from "../scheduler/questions";
 import { AddressInput, Avatar, useAsync } from "../ui";
 import { DEV_AUTH } from "../App";
 
-// Native min-validation would block dev/E2E backdating — server enforces the
+// Native min-validation would block dev/E2E backdating - server enforces the
 // same rule with the same dev exemption.
 const MIN_DT = DEV_AUTH ? undefined : toDatetimeLocal(new Date().toISOString());
 import { EVENTS, analytics } from "../analytics";
@@ -44,7 +44,7 @@ export function NewEvent() {
       setDescription(d.event.description);
       setLocationMode(d.event.location_mode);
       setAddress(d.event.location_address);
-    }).catch(() => { /* stale link — start blank */ });
+    }).catch(() => { /* stale link - start blank */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [againId]);
 
@@ -60,7 +60,7 @@ export function NewEvent() {
   const [endsAt, setEndsAt] = useState(""); // optional end time (fixed mode)
   const [repeat, setRepeat] = useState<"" | "weekly" | "biweekly" | "monthly">("");
   const [repeatCount, setRepeatCount] = useState(4);
-  // Irregular series: extra explicit dates (any days — recurring, no pattern).
+  // Irregular series: extra explicit dates (any days - recurring, no pattern).
   const [moreStarts, setMoreStarts] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<"private" | "friends" | "public">("private");
   const [topic, setTopic] = useState("");
@@ -119,7 +119,7 @@ export function NewEvent() {
     if (!DEV_AUTH) {
       const chosen = schedulingMode === "fixed" ? [startsAt, ...moreStarts] : schedulingMode === "poll" ? options : [];
       if (chosen.some((v) => v.trim() !== "" && new Date(v).getTime() < Date.now() - 3600_000)) {
-        return setError("Events can't start in the past — pick an upcoming time.");
+        return setError("Events can't start in the past - pick an upcoming time.");
       }
     }
     setSaving(true);
@@ -313,7 +313,7 @@ export function NewEvent() {
                     data-testid="fixed-end" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
                 </label>
                 {/* Irregular series: stack more explicit dates (any days). Mutually
-                    exclusive with a repeat pattern — picking dates clears it. */}
+                    exclusive with a repeat pattern - picking dates clears it. */}
                 {moreStarts.map((d, i) => (
                   <div key={i} className="row" style={{ gap: 6 }}>
                     <input type="datetime-local" className="input" min={MIN_DT} data-testid={`more-date-${i}`}
@@ -342,7 +342,7 @@ export function NewEvent() {
                   </div>
                 )}
                 {moreStarts.length > 0 && (
-                  <p className="muted small">These dates become one series — everyone RSVPs per date.</p>
+                  <p className="muted small">These dates become one series - everyone RSVPs per date.</p>
                 )}
               </div>
             )}
@@ -405,8 +405,8 @@ export function NewEvent() {
               )}
             </div>
             <div>
-              <label className="field">Invite friends? <span className="muted small">(optional — they'll see it on their dashboard)</span></label>
-              {friends.length === 0 && <p className="muted small">No friends yet — add some on the Friends page, or share the invite link after creating.</p>}
+              <label className="field">Invite friends? <span className="muted small">(optional - they'll see it on their dashboard)</span></label>
+              {friends.length === 0 && <p className="muted small">No friends yet - add some on the Friends page, or share the invite link after creating.</p>}
               <div className="row wrap" style={{ gap: 6 }}>
                 {friends.map((f) => (
                   <button key={f.friend_id} type="button"

@@ -80,7 +80,7 @@ export const TYPE_COLORS: Record<EventType, string> = {
 };
 export type Follow = { kind: "host" | "topic"; value: string };
 
-// Discovery categories — the ONLY topics allowed (server-enforced, ranking.go).
+// Discovery categories - the ONLY topics allowed (server-enforced, ranking.go).
 export const CATEGORIES: { slug: string; label: string; emoji: string }[] = [
   { slug: "gaming", label: "Gaming", emoji: "🎮" },
   { slug: "streams", label: "Streams & shows", emoji: "📺" },
@@ -98,8 +98,8 @@ export const CATEGORIES: { slug: string; label: string; emoji: string }[] = [
   { slug: "other", label: "Other", emoji: "✨" },
 ];
 
-// Metro regions — filtering by one matches all its member cities (the API
-// expands them server-side; see apps/api/regions.go — keep the names in sync).
+// Metro regions - filtering by one matches all its member cities (the API
+// expands them server-side; see apps/api/regions.go - keep the names in sync).
 export const REGIONS = [
   "Bay Area, CA", "Orange County, CA", "Greater LA, CA", "Inland Empire, CA",
   "San Diego County, CA", "Sacramento Metro, CA", "NYC Metro", "Greater Boston, MA",
@@ -110,7 +110,7 @@ export const REGIONS = [
   "Tampa Bay, FL", "Research Triangle, NC",
 ];
 
-// Curated city list for the <datalist> autocomplete — no external geo API by
+// Curated city list for the <datalist> autocomplete - no external geo API by
 // design (privacy, rate limits, deterministic E2E). Extend freely.
 export const CITIES = [
   "New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia",
@@ -132,7 +132,7 @@ export const CITIES = [
 // What the city datalists offer: regions first, then cities.
 export const CITY_OPTIONS = [...REGIONS, ...CITIES];
 
-// Best-effort city prefill from the browser timezone — zero network, zero
+// Best-effort city prefill from the browser timezone - zero network, zero
 // permission prompts (vs. geolocation + a reverse-geocoding API).
 const TZ_CITY: Record<string, string> = {
   "America/New_York": "New York", "America/Chicago": "Chicago",
@@ -171,9 +171,9 @@ export function applyTheme(t: Theme) {
   else root.removeAttribute("data-theme");
 }
 
-// Universal "get directions" URL — opens the native Maps app on iOS/Android and
+// Universal "get directions" URL - opens the native Maps app on iOS/Android and
 // Google Maps on desktop. No key, no SDK.
-// mapsUrl / appleMapsUrl — there's no single link that opens each person's
+// mapsUrl / appleMapsUrl - there's no single link that opens each person's
 // *default* map app across platforms, so the event page offers both. Google's
 // is a universal web link that opens the Google Maps app on mobile when
 // installed; Apple's opens Maps on iOS/macOS and falls back to a web map elsewhere.
@@ -397,7 +397,7 @@ export function importedBusy(events: BusySource[]): { cells: Set<string>; interv
 }
 
 // commitmentBusy maps RSVP'd-going events (2h assumed, like the ICS default)
-// onto availability-grid cells — an RSVP automatically shows as booked without
+// onto availability-grid cells - an RSVP automatically shows as booked without
 // ever writing to availability_days (derived, so it can't go stale).
 export function commitmentBusy(commitments: Commitment[]): Set<string> {
   return importedBusy(commitments.map((c) => ({ title: c.title, starts_at: c.starts_at }))).cells;
@@ -412,7 +412,7 @@ export function busyConflict(intervals: { start: Date; end: Date; title: string 
 }
 
 // toDatetimeLocal formats an instant as a <input type="datetime-local"> value
-// ("YYYY-MM-DDTHH:mm") in the viewer's local zone — for editing a start time.
+// ("YYYY-MM-DDTHH:mm") in the viewer's local zone - for editing a start time.
 export function toDatetimeLocal(iso: string): string {
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, "0");

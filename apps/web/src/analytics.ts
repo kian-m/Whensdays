@@ -1,7 +1,7 @@
 // Frontend analytics wrapper. Safe to call always: when VITE_PUBLIC_POSTHOG_KEY
 // is unset (hermetic E2E/docs builds, or any build without analytics) every call
-// is a no-op. The distinct id is the app user id (Clerk sub / "demo-user") — the
-// SAME id the API uses — so client and server events stitch to one person.
+// is a no-op. The distinct id is the app user id (Clerk sub / "demo-user") - the
+// SAME id the API uses - so client and server events stitch to one person.
 //
 // Config (all public, baked into the bundle at build time):
 //   VITE_PUBLIC_POSTHOG_KEY     project API key (phc_...)
@@ -29,7 +29,7 @@ export const EVENTS = {
   guestSignupClicked: "guest_signup_clicked",
 } as const;
 
-// posthog-js is ~fifty KB gzipped — keep it OUT of the critical bundle. The
+// posthog-js is ~fifty KB gzipped - keep it OUT of the critical bundle. The
 // library loads on idle after first paint; calls made before then queue and
 // flush in order once it's ready, so no event is lost.
 type PostHog = typeof import("posthog-js").default;
@@ -59,12 +59,12 @@ export function initAnalytics() {
 function init(posthog: PostHog) {
   posthog.init(KEY!, {
     api_host: HOST,
-    // Dated defaults preset — opts into PostHog's current recommended behaviors.
+    // Dated defaults preset - opts into PostHog's current recommended behaviors.
     defaults: "2026-05-30",
     // When HOST is a reverse proxy (prod: PostHog managed proxy on our domain,
     // so adblockers don't eat events), links/toolbar still need the real UI.
     ui_host: "https://us.posthog.com",
-    // Only create person profiles for identified (signed-in) users — cheaper,
+    // Only create person profiles for identified (signed-in) users - cheaper,
     // and anonymous landing traffic still shows up in event trends.
     person_profiles: "identified_only",
     // We capture pageviews manually on route change (SPA), so disable auto.

@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-// geo.go — address type-ahead for the event location field. Proxies Photon
+// geo.go - address type-ahead for the event location field. Proxies Photon
 // (photon.komoot.io, OpenStreetMap-based): free, keyless, no billing. Server-
 // side so the browser stays single-origin, the upstream host is fixed (no
-// SSRF), and we can bound/normalize the response. Best-effort — any upstream
+// SSRF), and we can bound/normalize the response. Best-effort - any upstream
 // failure returns an empty result, not an error, so the field stays usable.
 
 // geoStub mirrors CALENDAR_MODE=stub / KLIPY_MODE=stub: fixed, network-free

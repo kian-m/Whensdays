@@ -15,11 +15,11 @@ import (
 	"github.com/clsandbox/api/internal/db"
 )
 
-// guests.go — frictionless guest access (growth priority #1). An invitee can
+// guests.go - frictionless guest access (growth priority #1). An invitee can
 // join an event from its link with just a name: POST /api/guest/join mints a
 // low-privilege user ("guest_<id>") plus an HMAC-signed bearer token the web
-// stores locally. Guests are real users — every query is already scoped to the
-// authenticated user id, and the invite link remains the only capability — so
+// stores locally. Guests are real users - every query is already scoped to the
+// authenticated user id, and the invite link remains the only capability - so
 // they can RSVP, vote, comment, and even host (participant→host conversion).
 // No account merging yet; signing up later starts a fresh identity.
 
@@ -81,7 +81,7 @@ func (s *server) handleGuestJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	// Two entry paths: joining an existing event (the id is the capability) or
 	// starting a brand-new plan with no account ("Start a plan" on the landing
-	// page) — guests are full users, so they can host.
+	// page) - guests are full users, so they can host.
 	if in.EventID != "" {
 		id, ok := parseUUID(in.EventID)
 		if !ok {
@@ -119,11 +119,11 @@ func (s *server) handleGuestJoin(w http.ResponseWriter, r *http.Request) {
 // tables still delete any dup first so the merge is idempotent/safe if re-run.
 //
 // Table + column names below are compile-time constants (never user input);
-// the ids are always parameterized — no injection surface. This bulk cross-
+// the ids are always parameterized - no injection surface. This bulk cross-
 // table migration is the one place sqlc's one-statement-per-query model fits
 // poorly, so it lives here as a single audited function.
 
-// uniqueOwned: tables with a UNIQUE/PK over (user_id, <key>) — delete guest
+// uniqueOwned: tables with a UNIQUE/PK over (user_id, <key>) - delete guest
 // dups that the target already has, then reassign the rest.
 var uniqueOwned = []struct{ table, key string }{
 	{"event_attendees", "event_id"},
@@ -193,7 +193,7 @@ func (s *server) mergeGuestInto(ctx context.Context, oldID, newID string) (strin
 	if _, err := tx.Exec(ctx, "DELETE FROM friendships WHERE requester_id = addressee_id"); err != nil {
 		return "", err
 	}
-	// The guest profile is discarded — the real account makes its own (name prefilled).
+	// The guest profile is discarded - the real account makes its own (name prefilled).
 	if _, err := tx.Exec(ctx, "DELETE FROM profiles WHERE user_id=$1", oldID); err != nil {
 		return "", err
 	}

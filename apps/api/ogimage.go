@@ -27,7 +27,7 @@ import (
 	"github.com/clsandbox/api/internal/db"
 )
 
-// ogimage.go — the per-event social card behind og:image. When an invite link
+// ogimage.go - the per-event social card behind og:image. When an invite link
 // is texted/posted, the unfurl shows the event's cover (photo or the gif's
 // first frame) as a big 1200×630 tile with the host's name top-left and the
 // logo top-right; cover-less events get a brand-gradient card with the title.
@@ -138,7 +138,7 @@ func (s *server) loadCover(u string) image.Image {
 
 // composeOGCard draws the 1200×630 unfurl tile: cover (center-cropped to fill)
 // or a brand gradient, a legibility scrim, host name top-left, logo top-right,
-// and — on the fallback — the event title.
+// and - on the fallback - the event title.
 func composeOGCard(cover image.Image, hostName, title string) *image.RGBA {
 	card := image.NewRGBA(image.Rect(0, 0, ogW, ogH))
 

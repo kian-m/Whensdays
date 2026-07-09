@@ -48,7 +48,7 @@ export function Friends() {
     reload();
   }
 
-  // Decline an incoming request, cancel an outgoing one, or unfriend — all the
+  // Decline an incoming request, cancel an outgoing one, or unfriend - all the
   // same friendship-row delete.
   async function remove(id: string) {
     await api(`/api/friends/${id}`, { method: "DELETE" });
@@ -87,13 +87,13 @@ export function Friends() {
       )}
 
       <div className="section-h">Your friends</div>
-      {data && data.friends.length === 0 && <p className="muted small">No friends yet — add someone above.</p>}
+      {data && data.friends.length === 0 && <p className="muted small">No friends yet - add someone above.</p>}
       {data?.friends.map((f) => <FriendCard key={f.friend_id} friend={f} onRemove={() => remove(f.id)} />)}
 
       {data && data.suggestions.length > 0 && (
         <>
           <div className="section-h">People you may know</div>
-          <p className="muted small" style={{ marginTop: -4 }}>From events you've both been to — the more it was a close, invite-only plan, the higher up.</p>
+          <p className="muted small" style={{ marginTop: -4 }}>From events you've both been to - the more it was a close, invite-only plan, the higher up.</p>
           {data.suggestions.map((s) => (
             <div key={s.friend_id} className="card row between" data-testid="suggestion">
               <span className="row" style={{ gap: 8 }}>
@@ -145,7 +145,7 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
 
   const free = new Set((avail?.days ?? []).filter((d) => d.status !== "busy").map((d) => `${d.day}:${d.daypart}`));
   const busy = new Set((avail?.days ?? []).filter((d) => d.status === "busy").map((d) => `${d.day}:${d.daypart}`));
-  // Their RSVP'd events overlay the grid as booked — derived from commitments,
+  // Their RSVP'd events overlay the grid as booked - derived from commitments,
   // the same hatched treatment as imported-calendar busy.
   const locked = commitmentBusy(avail?.commitments ?? []);
 

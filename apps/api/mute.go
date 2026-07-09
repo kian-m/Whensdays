@@ -14,7 +14,7 @@ import (
 	"github.com/clsandbox/api/internal/db"
 )
 
-// mute.go — per-recipient muting of an event's notification email. Two ways in:
+// mute.go - per-recipient muting of an event's notification email. Two ways in:
 //   1. Signed-in toggle:  POST /api/events/{id}/mute  {muted: bool}
 //   2. One-click from an email: GET /api/events/{id}/unsubscribe?token=...
 //
@@ -23,7 +23,7 @@ import (
 // signed with the same server key as guest tokens (a distinct "mute|" payload
 // namespace prevents a guest token from being replayed here). Muting only ever
 // affects the token's own user and is fully reversible, so the capability is
-// low-risk. Tokens don't expire — an unsubscribe link must keep working.
+// low-risk. Tokens don't expire - an unsubscribe link must keep working.
 
 func (g guestSigner) signMute(userID, eventID string) string {
 	return hmacSeal(g.key, "mute|"+userID+"|"+eventID)
@@ -139,7 +139,7 @@ func (s *server) unsubPage(w http.ResponseWriter, status int, title, msg, eventU
 	}
 	links := ""
 	if undoURL != "" {
-		links += fmt.Sprintf(`<a href="%s" style="color:#ee6c4d;font-weight:600;text-decoration:none">Undo — keep me subscribed</a><br><br>`, html.EscapeString(undoURL))
+		links += fmt.Sprintf(`<a href="%s" style="color:#ee6c4d;font-weight:600;text-decoration:none">Undo - keep me subscribed</a><br><br>`, html.EscapeString(undoURL))
 	}
 	if eventURL != "" {
 		links += fmt.Sprintf(`<a href="%s" style="color:#9aa4b6;text-decoration:none">Open the event →</a>`, html.EscapeString(eventURL))

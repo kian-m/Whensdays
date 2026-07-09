@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Event, Group, GroupDetail, TYPE_COLORS, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
 
 // Consecutive months (ending now, with a one-month grace) in which the group
-// had at least one scheduled event — the ritual streak. Loss aversion is the
+// had at least one scheduled event - the ritual streak. Loss aversion is the
 // retention mechanic: breaking it should feel like a loss.
 function groupStreak(events: Event[]): number {
   const months = new Set(
@@ -20,7 +20,7 @@ function groupStreak(events: Event[]): number {
 import { Avatar, BackLink, ConfirmButton, GifPicker, Loading, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { eventEmoji } from "../scheduler/questions";
 
-// Group icons are an emoji from this palette or an uploaded photo — never free
+// Group icons are an emoji from this palette or an uploaded photo - never free
 // text (the API rejects non-emoji values too).
 const GROUP_EMOJIS = ["👥", "🎉", "🍜", "📚", "🏃", "🎲", "⛺️", "🍻", "🎬", "🧗", "⚽️", "🎮"];
 
@@ -78,13 +78,13 @@ export function Groups() {
           />
           <button className="btn" data-testid="group-create">Create</button>
         </div>
-        <p className="muted small">Pick an emoji — or upload a photo from the group page after creating.</p>
+        <p className="muted small">Pick an emoji - or upload a photo from the group page after creating.</p>
         {msg && <p className="muted small">{msg}</p>}
       </form>
 
       <div className="section-h">Your groups</div>
       {data && data.groups.length === 0 && (
-        <p className="muted small">No groups yet — make one for your crew.</p>
+        <p className="muted small">No groups yet - make one for your crew.</p>
       )}
       {data?.groups.map((g) => (
         <div
@@ -183,7 +183,7 @@ export function GroupPage() {
               style={{ display: "none" }} onChange={onPickIcon} />
             <button type="button" className="btn ghost sm" data-testid="group-icon-gif"
               onClick={() => setPickingGif((p) => !p)}>GIF</button>
-            <ConfirmButton label="Delete group" confirmLabel="Tap again — events stay, group goes" testid="group-delete"
+            <ConfirmButton label="Delete group" confirmLabel="Tap again - events stay, group goes" testid="group-delete"
               onConfirm={async () => { await api(`/api/groups/${id}`, { method: "DELETE" }); nav("/groups"); }} />
           </div>
         )}
@@ -199,7 +199,7 @@ export function GroupPage() {
       </div>
 
       <div className="section-h">Members</div>
-      {members.length === 0 && <p className="muted small">No members yet — add someone below.</p>}
+      {members.length === 0 && <p className="muted small">No members yet - add someone below.</p>}
       {members.map((m) => (
         <div key={m.user_id} className="card row between" data-testid="group-member">
           <span className="row" style={{ gap: 8 }}>

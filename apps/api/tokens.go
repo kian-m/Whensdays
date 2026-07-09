@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// tokens.go — the shared tamper-proof token envelope used by every capability
+// tokens.go - the shared tamper-proof token envelope used by every capability
 // that has to travel outside an authenticated request: guest bearer tokens
 // (guests.go), one-click event-mute links (mute.go), and OAuth `state`
 // (calendars_import.go). Each layers its own payload format + expiry on top; the

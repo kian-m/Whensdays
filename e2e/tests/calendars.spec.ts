@@ -4,13 +4,13 @@ import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 const DEV_AUTH = process.env.E2E_AUTH_MODE === "dev";
 
 // Feature: calendar import. Connecting Google (OAuth) and Apple (iCal URL) hit
-// external providers, so this exercises the hermetic CALENDAR_MODE=stub path —
+// external providers, so this exercises the hermetic CALENDAR_MODE=stub path -
 // connecting seeds a fake connection + fixed events. Only meaningful in the dev
 // stack; skipped in prod-shaped Clerk runs.
 //
 // e2e-docker runs Playwright twice against the SAME persistent DB (baseline pass,
 // then assertion pass), so each test uses its OWN dev user (?as=…) to stay
-// independent — the snapshot test's user only ever links Google, keeping its
+// independent - the snapshot test's user only ever links Google, keeping its
 // visual baseline identical on both passes.
 test.describe("calendars (import)", () => {
   test.describe.configure({ mode: "serial" });
@@ -32,7 +32,7 @@ test.describe("calendars (import)", () => {
   }
 
   test("calendars page (empty state) visual baseline", async ({ page }) => {
-    // A dedicated user that never connects — the empty page renders identically
+    // A dedicated user that never connects - the empty page renders identically
     // on the baseline and assertion passes (no stateful connect/reload between).
     await gotoCalendars(page, "calempty");
     await expect(page.getByTestId("connect-google")).toBeVisible();
@@ -47,7 +47,7 @@ test.describe("calendars (import)", () => {
     if (await page.getByTestId("connect-google").isVisible().catch(() => false)) {
       await page.getByTestId("connect-google").click();
       // The stub redirects through /profile?connected=google, which lazy-loads
-      // the Profile chunk and refetches connections — generous timeout, and the
+      // the Profile chunk and refetches connections - generous timeout, and the
       // connected state (Disconnect visible) is the invariant, not the toast.
     }
     await expect(page.getByTestId("disconnect-google")).toBeVisible({ timeout: 20000 });
@@ -91,7 +91,7 @@ test.describe("calendars (import)", () => {
   test("disconnect a calendar", async ({ page }) => {
     // Uses Apple (a paste-a-URL connect, no OAuth redirect). Connect, wait for
     // the write to land, then reload so the connected state renders on initial
-    // load — deterministic, independent of the in-place refetch timing.
+    // load - deterministic, independent of the in-place refetch timing.
     await gotoCalendars(page, "caldisc");
     if (await page.getByTestId("connect-apple-open").isVisible().catch(() => false)) {
       await page.getByTestId("connect-apple-open").click();

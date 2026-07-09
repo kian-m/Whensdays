@@ -18,7 +18,7 @@ function soonLabel(iso: string): string {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - startOfToday.getTime()) / DAY);
-  if (days < 0) return ""; // already happened — no urgency pill
+  if (days < 0) return ""; // already happened - no urgency pill
   if (days === 0) return "Today";
   if (days === 1) return "Tomorrow";
   if (days < 7) return `In ${days} days`;
@@ -68,7 +68,7 @@ export function Home() {
     upcoming: [...upcoming].sort(byWhen),
     hosting: hosting.filter((e) => !isPast(e)).sort(byWhen),
     attending: attending.filter((e) => !isPast(e)).sort(byWhen),
-    // Past reads newest-first — the most recent memory on top.
+    // Past reads newest-first - the most recent memory on top.
     past: [...past].sort((a, b) => new Date(b.starts_at!).getTime() - new Date(a.starts_at!).getTime()),
   };
   const shown = lists[filter];
@@ -91,7 +91,7 @@ export function Home() {
         </span>
       </div>
 
-      {/* Filter row — tap to narrow the list (Kalshi/Partiful-style). */}
+      {/* Filter row - tap to narrow the list (Kalshi/Partiful-style). */}
       <div className="filter-row" data-testid="event-filters">
         {FILTERS.map((f) => (
           <button key={f.key} type="button" className={`chip sm ${filter === f.key ? "on" : ""}`}
@@ -105,8 +105,8 @@ export function Home() {
         <div className="card empty stack" data-testid="events-empty">
           <div style={{ fontSize: "2.4rem" }}>🗓️</div>
           <h3>No plans yet</h3>
-          <p className="muted">Host a dinner, movie night or camping trip — or wait for an invite.</p>
-          {/* No Discover link here — the public surface is out of the product
+          <p className="muted">Host a dinner, movie night or camping trip - or wait for an invite.</p>
+          {/* No Discover link here - the public surface is out of the product
               until group density exists (see the TABS comment in App.tsx). */}
           <div className="row wrap" style={{ justifyContent: "center" }}>
             <Link to="/new" className="btn soft">Create your first event</Link>
@@ -114,11 +114,11 @@ export function Home() {
         </div>
       ) : shown.length === 0 ? (
         <p className="muted small" data-testid="filter-empty">
-          {filter === "upcoming" ? "Nothing scheduled yet — check your polls for times still being decided."
+          {filter === "upcoming" ? "Nothing scheduled yet - check your polls for times still being decided."
             : filter === "hosting" ? "You're not hosting anything right now."
-            : filter === "past" ? "No past events yet — memories land here the day after."
-            : filter === "all" ? "Nothing coming up — everything's in Past."
-            : "Nothing here — you haven't been added to any events."}
+            : filter === "past" ? "No past events yet - memories land here the day after."
+            : filter === "all" ? "Nothing coming up - everything's in Past."
+            : "Nothing here - you haven't been added to any events."}
         </p>
       ) : (
         <div className="stack" data-testid="event-list">

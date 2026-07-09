@@ -2,7 +2,7 @@ package main
 
 import "strings"
 
-// regions.go — named metro areas for city filtering. Filtering by a region
+// regions.go - named metro areas for city filtering. Filtering by a region
 // matches events tagged with the region name OR any member city (server-side
 // expansion, no geocoding/zip-radius: zero external APIs, deterministic).
 // Mirror additions in the web's REGIONS list (lib.tsx).

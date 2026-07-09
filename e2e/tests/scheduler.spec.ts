@@ -59,7 +59,7 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("share-link")).toBeVisible();
 
     // Preview as a guest: RSVP, then answer the one-at-a-time preference Qs
-    // (they live off the critical path now — expand the optional section).
+    // (they live off the critical path now - expand the optional section).
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
     await page.getByTestId("pref-summary").click();
@@ -137,7 +137,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(`Custom del ${test.info().testId}`);
-    // The saved chip is offered on the next create — delete it.
+    // The saved chip is offered on the next create - delete it.
     await page.goto("/new");
     await expect(page.getByTestId("custom-jam sesh")).toBeVisible();
     await page.getByTestId("custom-del-jam sesh").click();
@@ -163,7 +163,7 @@ test.describe("scheduler", () => {
       name: "cover.png", mimeType: "image/png", buffer: Buffer.from(png, "base64"),
     });
     await expect(page.getByTestId("event-cover")).toHaveAttribute("src", /^data:image\//);
-    // Pick a backdrop theme — the WHOLE page reflects it live, before saving.
+    // Pick a backdrop theme - the WHOLE page reflects it live, before saving.
     await page.getByTestId("theme-party").click();
     await expect(page.locator(".event-theme.theme-party")).toBeVisible();
     await page.getByTestId("edit-save").click();
@@ -173,7 +173,7 @@ test.describe("scheduler", () => {
     await expect(page.locator(".event-theme.theme-party")).toBeVisible();
     // The per-event social card (og:image) serves a composited PNG, and the
     // unfurl page points at it.
-    // After the reload, the OG shell bounced /e/{id} to the SPA alias /ev/{id} —
+    // After the reload, the OG shell bounced /e/{id} to the SPA alias /ev/{id} -
     // parse the uuid itself rather than assuming the prefix.
     const evId = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
     const og = await page.request.get(`/api/events/${evId}/og.png`);
@@ -191,7 +191,7 @@ test.describe("scheduler", () => {
     await expect(covRow).toHaveClass(/theme-party/);
     await covRow.click();
     // Clean up the theme+cover so other shared-user tests see a plain hero, and
-    // reschedule — the start time stays editable after the event has a time.
+    // reschedule - the start time stays editable after the event has a time.
     await page.getByTestId("edit-event-open").click();
     await page.getByTestId("cover-remove").click();
     await page.getByTestId("theme-none").click();
@@ -220,7 +220,7 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
 
-    // The recap email's "Plan the next one" link lands here — prefilled.
+    // The recap email's "Plan the next one" link lands here - prefilled.
     await page.goto(`/new?again=${id}`);
     await expect(page.getByTestId("event-title")).toHaveValue(title);
   });
@@ -249,7 +249,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
-    // Both dates form one series ("1 of 2", picked-dates recurrence) — and the
+    // Both dates form one series ("1 of 2", picked-dates recurrence) - and the
     // hero card lists EVERY date, not just this occurrence's.
     await expect(page.getByTestId("series")).toContainText("1 of 2");
     await expect(page.getByTestId("series")).toContainText("on picked dates");
@@ -489,7 +489,11 @@ test.describe("scheduler", () => {
     await page.getByTestId("type-party").click();
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("loc-host").click();
-    // Address type-ahead: GEO_MODE=stub serves fixed suggestions; pick one.
+    // Address type-ahead: GEO_MODE=stub serves fixed suggestions. Letters-first
+    // input (a venue name) gets NO suggestions; digits-first (a street address) does.
+    await page.getByTestId("event-address").fill("main street");
+    await page.waitForTimeout(600);
+    await expect(page.getByTestId("addr-menu")).toHaveCount(0);
     await page.getByTestId("event-address").fill("123 main");
     await expect(page.getByTestId("addr-menu")).toBeVisible();
     await page.getByTestId("addr-opt-0").click();
@@ -685,7 +689,7 @@ test.describe("scheduler", () => {
       await expect(guest.getByText("Can I bring a friend?")).toBeVisible();
 
       // The gap fix: the cohost sees the event on their OWN dashboard under
-      // Hosting — without ever having opened the invite link.
+      // Hosting - without ever having opened the invite link.
       await co.goto("/");
       await expect(co.getByTestId("event-row").filter({ hasText: title }).first()).toBeVisible();
 
@@ -821,7 +825,7 @@ test.describe("scheduler", () => {
 
   test("discover: public event browsable, topic filter, follow → feed", async ({ page, browser, request }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
-    // The browse API is public — no auth headers at all.
+    // The browse API is public - no auth headers at all.
     const unauth = await request.get("/api/discover");
     expect(unauth.status()).toBe(200);
 
@@ -979,11 +983,11 @@ test.describe("scheduler", () => {
       await fv2.goto("/discover");
       await fv2.getByTestId("scope-friends").click();
       const row = fv2.getByTestId("feed-event").filter({ hasText: title }).first();
-      // Ranked-feed fetch + render across two contexts — allow extra time under
+      // Ranked-feed fetch + render across two contexts - allow extra time under
       // CI load (the default 5s flakes when the runner is starved).
       await expect(row).toBeVisible({ timeout: 15000 });
       // Each event renders exactly once: it's in the For-you rail, so the
-      // browse list below must NOT duplicate it — and it never leaks to the
+      // browse list below must NOT duplicate it - and it never leaks to the
       // anonymous public endpoint.
       await expect(fv2.getByTestId("disc-event").filter({ hasText: title })).toHaveCount(0);
       const pub = await request.get("/api/discover");
@@ -1133,7 +1137,7 @@ test.describe("scheduler", () => {
       await expect(page.getByText("Invited: Inv Bee")).toBeVisible();
 
       // B: red count on Events + the event on the dashboard (no link needed),
-      // marked NEW. The alert PERSISTS across dashboard views — it only clears
+      // marked NEW. The alert PERSISTS across dashboard views - it only clears
       // when B actually opens that event.
       await b.goto("/friends");
       await expect(b.getByTestId("nav-badge-events")).toBeVisible();
@@ -1272,7 +1276,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
     await expect(page.getByText("Which days work this month?")).toBeVisible();
-    // Month is a dates × dayparts grid now (28 days) — pick times, not just days.
+    // Month is a dates × dayparts grid now (28 days) - pick times, not just days.
     await page.getByTestId("gpm-cell-5-evening").click();
     await page.getByTestId("gpm-cell-12-noon").click();
     await page.getByTestId("save-general").click();
@@ -1322,7 +1326,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("general-finalize-clear").click();
     await expect(page.getByTestId("general-finalize-time")).toHaveValue("");
 
-    // Host can target a specific MONTH: pick next month, tap a weekday cell —
+    // Host can target a specific MONTH: pick next month, tap a weekday cell -
     // the resolved date lands in that month (shown as a removable chip).
     const nm = new Date(); nm.setMonth(nm.getMonth() + 1, 1);
     const nmValue = `${nm.getFullYear()}-${String(nm.getMonth() + 1).padStart(2, "0")}`;
@@ -1330,7 +1334,7 @@ test.describe("scheduler", () => {
     await page.getByTestId(`target-month-${nmValue}`).click();
     await page.getByTestId("grg-pick-1-evening").click();
     await expect(page.getByTestId("picked-cells")).toContainText(nmShort);
-    // unpick — back to manual-only for the rest of this test
+    // unpick - back to manual-only for the rest of this test
     await page.getByTestId(`picked-${nmValue}|1:evening`).click();
     await expect(page.getByTestId("picked-cells")).toHaveCount(0);
 
@@ -1495,7 +1499,7 @@ test.describe("scheduler", () => {
       await g.getByTestId("guest-join").click();
       await expect(g.getByTestId("guest-banner")).toBeVisible();
 
-      // The guest hosts an event (from Home — /start is the Quick page).
+      // The guest hosts an event (from Home - /start is the Quick page).
       await g.goto("/");
       const title = `Merge plan ${test.info().testId}-${Date.now()}`;
       await g.getByTestId("new-event").click();
@@ -1571,7 +1575,7 @@ test.describe("scheduler", () => {
     }
 
     // The host sees the guest's participation (name may appear in both the
-    // guest list and the comment byline — assert at least one).
+    // guest list and the comment byline - assert at least one).
     await page.reload();
     await expect(page.getByText("Guest Gal").first()).toBeVisible();
   });
@@ -1777,10 +1781,10 @@ test.describe("scheduler", () => {
       await amy.getByTestId("add-friend").click();
       await expect(amy.getByText("Request sent ✓")).toBeVisible(); // request persisted
 
-      // Ben accepts (only if a request is pending — keeps the run idempotent),
+      // Ben accepts (only if a request is pending - keeps the run idempotent),
       // then wait until Amy shows as an accepted friend so the round-trip is done.
       await ben.goto("/friends");
-      // Wait for the page to finish its initial load first — a non-waiting
+      // Wait for the page to finish its initial load first - a non-waiting
       // isVisible() during the loading spinner would skip the accept step.
       await ben.getByTestId("friend-handle").waitFor();
       const accept = ben.getByTestId("accept-amy");

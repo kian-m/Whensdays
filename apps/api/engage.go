@@ -12,13 +12,13 @@ import (
 	"github.com/clsandbox/api/internal/db"
 )
 
-// engage.go — the two "tighten the loop" levers from the roadmap:
+// engage.go - the two "tighten the loop" levers from the roadmap:
 //
 //  1. One-tap RSVP from email. GET /api/events/{id}/rsvp-link?token=&r= is
 //     UNauthenticated by necessity (mail clients send no bearer): identity and
 //     scope ride in an HMAC token namespaced "rsvp|" (same envelope as guest/
 //     mute tokens, so nothing cross-verifies). It records the RSVP and renders
-//     a script-free confirmation page with a one-tap undo — a guest can say
+//     a script-free confirmation page with a one-tap undo - a guest can say
 //     yes without ever loading the app.
 //
 //  2. Host Nudge. POST /api/events/{id}/nudge re-emails ONLY invited people
@@ -73,7 +73,7 @@ func (s *server) handleEmailRsvp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil || ev.Status == "cancelled" {
-		s.unsubPage(w, http.StatusConflict, "This event was cancelled", "No RSVP needed — the host called it off.", s.eventURL(id), "")
+		s.unsubPage(w, http.StatusConflict, "This event was cancelled", "No RSVP needed - the host called it off.", s.eventURL(id), "")
 		return
 	}
 	// Same change-detection as the in-app handler: no row back = unchanged.
@@ -128,7 +128,7 @@ func (s *server) handleNudge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if last, err := s.queries.GetNudgedAt(r.Context(), id); err == nil && time.Since(last.Time) < 24*time.Hour {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "already nudged today — try again tomorrow"})
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "already nudged today - try again tomorrow"})
 		return
 	}
 	contacts, err := s.queries.ListInvitedNonResponderContacts(r.Context(), id)
@@ -141,7 +141,7 @@ func (s *server) handleNudge(w http.ResponseWriter, r *http.Request) {
 		body := renderEmail(emailContent{
 			preheader: "Still deciding? One tap and you're done.",
 			heading:   fmt.Sprintf("%s is waiting on you 👀", host.DisplayName),
-			lines:     []string{fmt.Sprintf("Quick one — are you in for \"%s\"? One tap below and you're done.", ev.Title)},
+			lines:     []string{fmt.Sprintf("Quick one - are you in for \"%s\"? One tap below and you're done.", ev.Title)},
 			meta:      eventMeta(ev),
 			ctaLabel:  "✅ I'm going",
 			ctaURL:    s.rsvpLink(c.UserID, uuidStr(ev.ID), "going"),

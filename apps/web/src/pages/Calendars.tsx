@@ -14,8 +14,8 @@ import { Loading, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 // ---------------------------------------------------------------------------
-// The Calendars page: an Outlook/Apple-style calendar of YOUR schedule — your
-// scheduler events (hosting + attending) merged with imported calendar events —
+// The Calendars page: an Outlook/Apple-style calendar of YOUR schedule - your
+// scheduler events (hosting + attending) merged with imported calendar events -
 // with month / week / day views and prev/today/next navigation. Connection
 // management lives on the Profile page (CalendarConnections below).
 // ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ function DayList({ cursor, byDay, onOpen }: {
 }
 
 // ---------------------------------------------------------------------------
-// Connection management — rendered on the PROFILE page.
+// Connection management - rendered on the PROFILE page.
 // ---------------------------------------------------------------------------
 
 type CalendarResp = { connections: CalendarConnection[]; events: ImportedEvent[] };

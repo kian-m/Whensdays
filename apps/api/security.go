@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// security.go — SSRF-hardened HTTP transport + a lightweight per-IP rate limiter.
+// security.go - SSRF-hardened HTTP transport + a lightweight per-IP rate limiter.
 
 // blockedIP reports whether an IP must never be dialed (loopback, private,
 // link-local incl. cloud metadata 169.254.169.254, unspecified, CGNAT).
@@ -25,9 +25,9 @@ func blockedIP(ip net.IP) bool {
 }
 
 // safeHTTPClient returns a client that (1) validates the ACTUAL resolved IP at
-// connect time via the dialer Control hook — this fires after DNS resolution
+// connect time via the dialer Control hook - this fires after DNS resolution
 // for the initial request AND every redirect hop, so it defeats both redirect-
-// based SSRF and DNS-rebinding — and (2) caps redirects. Use for every outbound
+// based SSRF and DNS-rebinding - and (2) caps redirects. Use for every outbound
 // fetch that touches a user-influenced or third-party URL.
 func safeHTTPClient(timeout time.Duration) *http.Client {
 	dialer := &net.Dialer{

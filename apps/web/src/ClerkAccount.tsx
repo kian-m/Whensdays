@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { useApi, sendJSON } from "./lib";
 
-// Our own account management — replaces Clerk's prebuilt <UserButton>/<UserProfile>.
+// Our own account management - replaces Clerk's prebuilt <UserButton>/<UserProfile>.
 // Shows the primary email, lets the user change it (Clerk's email-code
 // verification), and sign out. Rendered only in Clerk mode (dev has no
 // ClerkProvider), so the hooks are always inside a provider.
@@ -30,7 +30,7 @@ export function ClerkAccountCard() {
 
   // Clerk owns the address; mirror the verified primary email into our profile so
   // transactional email (reminders/updates) has a destination. Fires on load and
-  // whenever the primary changes — the server upsert is idempotent.
+  // whenever the primary changes - the server upsert is idempotent.
   const syncEmail = useCallback(async (addr: string) => {
     try { await sendJSON(api, "PUT", "/api/profile/email", { email: addr }); } catch { /* best-effort */ }
   }, [api]);
@@ -39,7 +39,7 @@ export function ClerkAccountCard() {
   }, [primaryEmail, syncEmail]);
 
   if (!user) return null;
-  const primary = primaryEmail || "—";
+  const primary = primaryEmail || "-";
 
   function clerkErr(e: unknown, fallback: string): string {
     const m = e as { errors?: { message?: string }[] };

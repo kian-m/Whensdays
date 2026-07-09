@@ -27,7 +27,7 @@ func validEmoji(s string) bool {
 	return true
 }
 
-// groups.go — recurring groups (the product wedge): a persistent circle that
+// groups.go - recurring groups (the product wedge): a persistent circle that
 // plans together. Owner manages members; any member sees the group and can
 // attach events to it. Access is membership-gated, not link-capability.
 
@@ -150,7 +150,7 @@ func (s *server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "ok"})
 }
 
-// handleSetGroupIcon uploads a picture icon (owner only) — same contract as
+// handleSetGroupIcon uploads a picture icon (owner only) - same contract as
 // profile avatars: small data URL or https, replaces the emoji when set.
 func (s *server) handleSetGroupIcon(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
@@ -174,7 +174,7 @@ func (s *server) handleSetGroupIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Same policy as event covers: uploads or the Klipy CDN (validGifURL also
-	// admits the stub sentinel in test stacks) — never arbitrary remotes.
+	// admits the stub sentinel in test stacks) - never arbitrary remotes.
 	if in.IconURL != "" && !strings.HasPrefix(in.IconURL, "data:image/") && !validGifURL(in.IconURL) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "icon must be an uploaded image or a Klipy gif"})
 		return

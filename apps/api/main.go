@@ -100,7 +100,7 @@ func main() {
 	// looser but still bounded so a scraper can't exhaust CPU/DB. Authenticated
 	// routes rely on Clerk + per-user scoping and are not IP-limited here.
 	// Disabled under AUTH_MODE=dev so hermetic E2E (all from one runner IP)
-	// stays deterministic — mirrors the CALENDAR/KLIPY/GEO stub pattern.
+	// stays deterministic - mirrors the CALENDAR/KLIPY/GEO stub pattern.
 	writeLimit := func(h http.Handler) http.Handler { return h }
 	readLimit := func(h http.Handler) http.Handler { return h }
 	if os.Getenv("AUTH_MODE") != "dev" {
@@ -130,7 +130,7 @@ func main() {
 	mux.Handle("GET /api/notes", auth(http.HandlerFunc(s.handleListNotes)))
 	mux.Handle("POST /api/notes", auth(http.HandlerFunc(s.handleCreateNote)))
 
-	// Scheduler ("Whensdays") feature — see scheduler.go.
+	// Scheduler ("Whensdays") feature - see scheduler.go.
 	mux.Handle("GET /api/profile", auth(http.HandlerFunc(s.handleGetProfile)))
 	mux.Handle("PUT /api/profile", auth(http.HandlerFunc(s.handleUpsertProfile)))
 	mux.Handle("PUT /api/profile/avatar", auth(http.HandlerFunc(s.handleSetAvatar)))
@@ -160,15 +160,15 @@ func main() {
 	mux.Handle("POST /api/events/{id}/cohosts", auth(http.HandlerFunc(s.handleAddCohost)))
 	mux.Handle("DELETE /api/events/{id}/cohosts/{userId}", auth(http.HandlerFunc(s.handleRemoveCohost)))
 	// Notification mute: signed-in toggle + the one-click email link (the latter
-	// is UNauthenticated — identity rides in a signed token; see mute.go).
+	// is UNauthenticated - identity rides in a signed token; see mute.go).
 	mux.Handle("POST /api/events/{id}/mute", auth(http.HandlerFunc(s.handleMuteToggle)))
 	mux.Handle("GET /api/events/{id}/unsubscribe", readLimit(http.HandlerFunc(s.handleUnsubscribe)))
-	// One-tap RSVP from email (UNauthenticated — signed token; see engage.go)
+	// One-tap RSVP from email (UNauthenticated - signed token; see engage.go)
 	// and the host's nudge-non-responders lever.
 	mux.Handle("GET /api/events/{id}/rsvp-link", readLimit(http.HandlerFunc(s.handleEmailRsvp)))
 	mux.Handle("POST /api/events/{id}/nudge", auth(http.HandlerFunc(s.handleNudge)))
 	// Public on purpose: the event id IS the invite capability (same fields the
-	// OG unfurl already serves), and a bare <a href> can't attach a bearer —
+	// OG unfurl already serves), and a bare <a href> can't attach a bearer -
 	// this is what lets iOS open the invite directly in Calendar.
 	mux.Handle("GET /api/events/{id}/calendar.ics", readLimit(http.HandlerFunc(s.handleEventICS)))
 	// Unauthenticated for the same reason: og:image is fetched by link
@@ -176,7 +176,7 @@ func main() {
 	mux.Handle("GET /api/events/{id}/og.png", readLimit(http.HandlerFunc(s.handleEventOGImage)))
 
 	// Calendar import (see calendars_import.go). The Google OAuth callback is
-	// intentionally UNauthenticated — Google redirects the browser to it with no
+	// intentionally UNauthenticated - Google redirects the browser to it with no
 	// bearer; identity rides in the signed `state`.
 	mux.Handle("GET /api/calendar/connections", auth(http.HandlerFunc(s.handleListCalendarConnections)))
 	mux.Handle("GET /api/calendar/events", auth(http.HandlerFunc(s.handleCalendarEvents)))
@@ -184,7 +184,7 @@ func main() {
 	mux.HandleFunc("GET /api/calendar/google/callback", s.handleGoogleCallback)
 	mux.Handle("POST /api/calendar/apple", auth(http.HandlerFunc(s.handleAppleConnect)))
 	mux.Handle("DELETE /api/calendar/connections/{provider}", auth(http.HandlerFunc(s.handleDisconnectCalendar)))
-	// Groups (see groups.go) — the recurring-circle wedge.
+	// Groups (see groups.go) - the recurring-circle wedge.
 	mux.Handle("POST /api/groups", auth(http.HandlerFunc(s.handleCreateGroup)))
 	mux.Handle("GET /api/groups", auth(http.HandlerFunc(s.handleListGroups)))
 	mux.Handle("GET /api/groups/{id}", auth(http.HandlerFunc(s.handleGetGroup)))
@@ -253,11 +253,11 @@ func runMigrations(dbURL string) error {
 
 // authMiddleware returns the protection wrapper for /api routes. Default is
 // Clerk (verifies the session JWT). AUTH_MODE=dev swaps in a stub that trusts an
-// X-Dev-User header — for local/CI hermetic runs only, never production.
+// X-Dev-User header - for local/CI hermetic runs only, never production.
 func (s *server) authMiddleware() func(http.Handler) http.Handler {
 	var base func(http.Handler) http.Handler
 	if os.Getenv("AUTH_MODE") == "dev" {
-		s.logger.Warn("AUTH_MODE=dev: authentication is STUBBED — do not use in production")
+		s.logger.Warn("AUTH_MODE=dev: authentication is STUBBED - do not use in production")
 		base = devAuth
 	} else {
 		// TrimSpace guards against a trailing newline in the secret (e.g. pasted
@@ -404,7 +404,7 @@ func (r *statusRecorder) WriteHeader(code int) {
 }
 
 // telemetry sends one PostHog event per request (method, matched route, status,
-// duration) as an operational signal — the raw material for latency/error-rate
+// duration) as an operational signal - the raw material for latency/error-rate
 // dashboards and anomaly alerts. It wraps the mux so it sees the final status and
 // can resolve the low-cardinality route pattern. No-op when analytics is off.
 func (s *server) telemetry(mux *http.ServeMux) http.Handler {

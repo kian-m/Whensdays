@@ -10,14 +10,14 @@ import (
 	"github.com/clsandbox/api/internal/db"
 )
 
-// deletion.go — destructive actions, all soft where it matters:
+// deletion.go - destructive actions, all soft where it matters:
 //   events   → cancelled (status flip; lists already exclude cancelled, the
 //              invite link keeps working so guests see "Cancelled" not a 404)
 //   groups   → hard delete (members cascade; events keep living, group_id nulls)
 //   friends  → hard delete of the friendship row (covers declining an incoming
 //              request, cancelling an outgoing one, and unfriending)
 
-// handleCancelEvent cancels an event (host only — more destructive than the
+// handleCancelEvent cancels an event (host only - more destructive than the
 // edit/finalize powers cohosts get). ?series=all cancels every occurrence.
 func (s *server) handleCancelEvent(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
@@ -41,7 +41,7 @@ func (s *server) handleCancelEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	wholeSeries := r.URL.Query().Get("series") == "all" && ev.SeriesID.Valid
 	// Email going, unmuted attendees before flipping status. For a whole-series
-	// cancel, each occurrence has its OWN attendee list — union them (deduped by
+	// cancel, each occurrence has its OWN attendee list - union them (deduped by
 	// user). Sent per-recipient so each carries its own one-click mute link.
 	if s.notify.Enabled() {
 		seen := map[string]bool{}
@@ -69,7 +69,7 @@ func (s *server) handleCancelEvent(w http.ResponseWriter, r *http.Request) {
 			body := renderEmail(emailContent{
 				preheader: "This plan was called off.",
 				heading:   ev.Title + " was cancelled",
-				lines:     []string{"The host called this one off. No action needed — check the event page for any follow-up."},
+				lines:     []string{"The host called this one off. No action needed - check the event page for any follow-up."},
 				ctaLabel:  "View the event →",
 				ctaURL:    campaignURL(s.eventURL(ev.ID), "cancelled"),
 				logoURL:   s.logoURL(),
@@ -95,7 +95,7 @@ func (s *server) handleCancelEvent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
-// handleDeleteGroup removes a group entirely — owner only. Its events survive
+// handleDeleteGroup removes a group entirely - owner only. Its events survive
 // (group_id nulls out); memberships cascade away.
 func (s *server) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())

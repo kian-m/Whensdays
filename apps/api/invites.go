@@ -6,7 +6,7 @@ import (
 	"github.com/clsandbox/api/internal/db"
 )
 
-// invites.go — direct friend invites (a growth loop: any participant can pull
+// invites.go - direct friend invites (a growth loop: any participant can pull
 // their own friends in) + the nav badge counts.
 
 // handleInviteFriend invites one of YOUR friends to an event you can see.
@@ -77,7 +77,7 @@ func (s *server) handleListCustomTypes(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteCustomType removes one of the user's saved custom types (by its
-// label). Existing events keep their custom emoji/label — this only removes
+// label). Existing events keep their custom emoji/label - this only removes
 // the reusable wizard chip.
 func (s *server) handleDeleteCustomType(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())

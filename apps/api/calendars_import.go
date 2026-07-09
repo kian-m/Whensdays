@@ -28,7 +28,7 @@ import (
 
 // calendars_import.go is the import half of the calendar feature: connect a
 // Google calendar (OAuth 2.0) or an Apple iCloud published .ics URL, read-only,
-// to display the user's own commitments. Display only — imports never change
+// to display the user's own commitments. Display only - imports never change
 // scheduler availability/voting.
 //
 // All external providers are bypassed when CALENDAR_MODE=stub (hermetic E2E),
@@ -65,11 +65,11 @@ func loadCalendarConfig(logger *slog.Logger) calendarConfig {
 		if k, err := base64.StdEncoding.DecodeString(raw); err == nil && len(k) == 32 {
 			c.key = k
 		} else {
-			logger.Warn("CALENDAR_TOKEN_KEY invalid (want base64 of 32 bytes) — OAuth tokens will NOT be encrypted at rest")
+			logger.Warn("CALENDAR_TOKEN_KEY invalid (want base64 of 32 bytes) - OAuth tokens will NOT be encrypted at rest")
 		}
 	}
 	if c.mode == "stub" {
-		logger.Warn("CALENDAR_MODE=stub: calendar providers are stubbed — do not use in production")
+		logger.Warn("CALENDAR_MODE=stub: calendar providers are stubbed - do not use in production")
 	}
 	return c
 }
@@ -245,7 +245,7 @@ func (s *server) handleGoogleConnect(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"auth_url": "https://accounts.google.com/o/oauth2/v2/auth?" + q.Encode()})
 }
 
-// handleGoogleCallback is the OAuth redirect target. NOT behind auth — Google
+// handleGoogleCallback is the OAuth redirect target. NOT behind auth - Google
 // sends the browser here with no bearer, so identity comes from the signed state.
 func (s *server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -685,7 +685,7 @@ func parseICalTime(params, value string) (time.Time, bool, bool) {
 			return t, false, true
 		}
 	}
-	// Floating/local time — treat as UTC for display purposes.
+	// Floating/local time - treat as UTC for display purposes.
 	if t, err := time.Parse("20060102T150405", value); err == nil {
 		return t, false, true
 	}

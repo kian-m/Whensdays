@@ -12,10 +12,10 @@ import (
 	"github.com/clsandbox/api/internal/db"
 )
 
-// discover.go — Phase 2 (public discovery) + the P2 reminder cron.
+// discover.go - Phase 2 (public discovery) + the P2 reminder cron.
 //
 // Public events are browsable by ANYONE (GET /api/discover is unauthenticated
-// and read-only: it exposes only what the host chose to publish — title, type,
+// and read-only: it exposes only what the host chose to publish - title, type,
 // time, topic, city, host name). Follows (host or topic) build a personal feed.
 // Reminders: a once-daily 2pm-Pacific scheduler hits the key-gated cron
 // endpoint; each event happening the next Pacific calendar day is reminded once.
@@ -238,7 +238,7 @@ func (s *server) handleRemoveFollow(w http.ResponseWriter, r *http.Request) {
 }
 
 // validatePublicFields checks visibility/topic/city on event creation. Topics
-// are a FIXED category set (ranking.go) — never free text.
+// are a FIXED category set (ranking.go) - never free text.
 func validatePublicFields(visibility, topic, city string) error {
 	if visibility != "" && !oneOf(visibility, "private", "friends", "public") {
 		return fmt.Errorf("invalid visibility")

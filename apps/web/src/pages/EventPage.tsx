@@ -33,7 +33,7 @@ import { AddressInput, Avatar, BackLink, ConfirmButton, DayGrid, GifPicker, Load
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH } from "../App";
 
-// Native min-validation would block dev/E2E backdating — server enforces the
+// Native min-validation would block dev/E2E backdating - server enforces the
 // same rule with the same dev exemption.
 const MIN_DT = DEV_AUTH ? undefined : toDatetimeLocal(new Date().toISOString());
 
@@ -42,11 +42,11 @@ export function EventPage() {
   const { id } = useParams();
   const { data, loading, reload } = useAsync<EventDetail>((api) => getJSON(api, `/api/events/${id}`), [id]);
   const [preview, setPreview] = useState(false);
-  // Live theme preview while editing the hero card — reflects the whole page
+  // Live theme preview while editing the hero card - reflects the whole page
   // before the edit is saved. null = show the saved theme.
   const [themePreview, setThemePreview] = useState<string | null>(null);
   // The lock moment: when this session watches the status flip polling →
-  // scheduled, celebrate — a one-shot confetti burst + banner. Catching the
+  // scheduled, celebrate - a one-shot confetti burst + banner. Catching the
   // transition here (rather than in each finalize button) covers every path.
   const prevStatus = useRef<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
@@ -103,7 +103,7 @@ export function EventPage() {
   );
 }
 
-// Per-event notification mute — available to anyone on the event (host or
+// Per-event notification mute - available to anyone on the event (host or
 // attendee). Hosts use it to stop the RSVP/comment stream; attendees to stop
 // finalize/reminder mail. Also toggleable one-click from any email.
 function MuteToggle({ data }: { data: EventDetail }) {
@@ -124,14 +124,14 @@ function MuteToggle({ data }: { data: EventDetail }) {
     <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="mute-toggle"
       disabled={busy} onClick={toggle}
       title={muted ? "You won't get emails about this event" : "Stop emails about this event"}>
-      {muted ? "🔕 Notifications muted — turn back on" : "🔔 Mute notifications"}
+      {muted ? "🔕 Notifications muted - turn back on" : "🔔 Mute notifications"}
     </button>
   );
 }
 
 // ---------------- recurring series ----------------
 
-// Representative start hour per daypart — used when the host schedules straight
+// Representative start hour per daypart - used when the host schedules straight
 // from a heat cell (they can fine-tune afterwards; the time stays editable).
 const DAYPART_HOUR: Record<string, number> = {
   early_morning: 8, morning: 10, noon: 12, afternoon: 15, evening: 19, night: 21,
@@ -228,7 +228,7 @@ function gcalStamp(d: Date): string {
   return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
-// Builds an "Add to Google Calendar" template URL entirely client-side — no API
+// Builds an "Add to Google Calendar" template URL entirely client-side - no API
 // call or account needed. Matches the API's 2h default export duration.
 function googleCalendarUrl(e: EventDetail["event"]): string {
   const start = new Date(e.starts_at!);
@@ -272,7 +272,7 @@ function AddToCalendar({ event }: { event: EventDetail["event"] }) {
   return (
     <div className="card stack" data-testid="add-to-calendar">
       <h3 style={{ margin: 0 }}>Add to your calendar</h3>
-      <p className="muted small" style={{ margin: 0 }}>One tap — title, time and a link back to this page ride along.</p>
+      <p className="muted small" style={{ margin: 0 }}>One tap - title, time and a link back to this page ride along.</p>
       <div className="row" style={{ gap: "0.6rem", flexWrap: "wrap" }}>
         {/* Plain link (no fetch): iPhone/Mac open the .ics straight in Calendar. */}
         <a className="btn sm" data-testid="add-apple" href={`/api/events/${event.id}/calendar.ics`}
@@ -380,7 +380,7 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
   );
 }
 
-// WhosIn — live social pressure above the fold on the invite page: a progress
+// WhosIn - live social pressure above the fold on the invite page: a progress
 // bar of committed vs invited plus the going facepile.
 function WhosIn({ data }: { data: EventDetail }) {
   const going = data.attendees.filter((a) => a.rsvp === "going");
@@ -409,7 +409,7 @@ function WhosIn({ data }: { data: EventDetail }) {
 
 function Rsvp({ eventId, current, reload }: { eventId: string; current?: string; reload: () => void }) {
   const api = useApi();
-  // OPTIMISTIC: the tap flips the selection instantly — waiting on the POST
+  // OPTIMISTIC: the tap flips the selection instantly - waiting on the POST
   // plus a full event refetch before showing the choice felt broken (Cloud Run
   // + Neon round-trips add up). Server sync + reload happen in the background;
   // a failed POST reverts the flip.
@@ -552,7 +552,7 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
     keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
   });
 
-  // Month scope: 28 concrete dates × dayparts — same grid as week, longer window.
+  // Month scope: 28 concrete dates × dayparts - same grid as week, longer window.
   const monthDates = daysFromDate(event.created_at, 28);
   const toggleMonthCol = (dp: string) => mutate(setDayCells, (s) => {
     const keys = monthDates.map((d) => `${d.value}:${dp}`);
@@ -692,7 +692,7 @@ function PrefFlow({ eventId, type, answers, reload }: {
         {questions.map((q) => (
           <div key={q.key} className="small">
             <span className="muted">{q.prompt}</span><br />
-            <strong>{existing[q.key] || "—"}</strong>
+            <strong>{existing[q.key] || "-"}</strong>
           </div>
         ))}
       </div>
@@ -743,7 +743,7 @@ function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
   );
 }
 
-// Nudge — the host's lever for "nobody replied": one tap re-emails only the
+// Nudge - the host's lever for "nobody replied": one tap re-emails only the
 // invited people who haven't responded (server rate-limits to once a day).
 function Nudge({ data }: { data: EventDetail }) {
   const api = useApi();
@@ -769,7 +769,7 @@ function Nudge({ data }: { data: EventDetail }) {
   );
 }
 
-// The hero card: cover art + title/meta, and — for the host/cohosts — an Edit
+// The hero card: cover art + title/meta, and - for the host/cohosts - an Edit
 // button that flips the card into in-place editing (details, visibility, a
 // square cover photo or Klipy GIF, and a page backdrop theme).
 function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail; reload: () => void; canEdit: boolean; onPreviewTheme: (t: string | null) => void }) {
@@ -785,7 +785,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   const [city, setCity] = useState(e.city || guessCity());
   const [photo, setPhoto] = useState(e.photo_url);
   const [theme, setTheme] = useState(e.theme);
-  // Editable start time — only meaningful once the event has a concrete time
+  // Editable start time - only meaningful once the event has a concrete time
   // (fixed or finalized); a poll still decides its time by voting.
   const [startsAt, setStartsAt] = useState(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
   const [endsAt, setEndsAt] = useState(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
@@ -795,7 +795,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   const [sibTimes, setSibTimes] = useState<Record<string, string>>({});
   const sibValue = (id: string, iso: string) => sibTimes[id] ?? toDatetimeLocal(iso);
   // Series editing: apply content edits (title/details/cover/theme…) to every
-  // occurrence — each keeps its own date.
+  // occurrence - each keeps its own date.
   const [applySeries, setApplySeries] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -849,13 +849,16 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
     return (
       <div className="card stack">
         {e.photo_url && <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />}
-        <div className="row" style={{ gap: "0.9rem" }}>
-          <div className="emoji" style={{ fontSize: "1.8rem", width: 56, height: 56 }}>{eventEmoji(e)}</div>
-          <div style={{ flex: 1 }}>
+        {/* Header row NEVER wraps: the status pill + Edit stay pinned to the
+            top-right corner even when a long title runs two lines (the mobile
+            .row wrap rule would otherwise strand them mid-card). */}
+        <div className="row" style={{ gap: "0.9rem", flexWrap: "nowrap", alignItems: "flex-start" }}>
+          <div className="emoji" style={{ fontSize: "1.8rem", width: 56, height: 56, flex: "none" }}>{eventEmoji(e)}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h1 data-testid="event-title">{e.title}</h1>
             <p className="muted">{eventLabel(e)}</p>
           </div>
-          <span className="stack" style={{ alignItems: "flex-end", gap: 6 }}>
+          <span className="stack" style={{ alignItems: "flex-end", gap: 6, flex: "none" }}>
             {e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
               : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
               : <Pill kind="scheduled">Confirmed</Pill>}
@@ -1043,10 +1046,10 @@ function HostControls({ data, reload }: { data: EventDetail; reload: () => void 
 
       <div className="section-h">Danger zone</div>
       <div className="row wrap">
-        <ConfirmButton label="Cancel event" confirmLabel="Tap again — guests will see it as cancelled" testid="cancel-event"
+        <ConfirmButton label="Cancel event" confirmLabel="Tap again - guests will see it as cancelled" testid="cancel-event"
           onConfirm={async () => { await api(`/api/events/${e.id}`, { method: "DELETE" }); reload(); }} />
         {e.series_id && (
-          <ConfirmButton label="Cancel whole series" confirmLabel="Tap again — cancels EVERY date" testid="cancel-series"
+          <ConfirmButton label="Cancel whole series" confirmLabel="Tap again - cancels EVERY date" testid="cancel-series"
             onConfirm={async () => { await api(`/api/events/${e.id}?series=all`, { method: "DELETE" }); reload(); }} />
         )}
       </div>
@@ -1054,7 +1057,7 @@ function HostControls({ data, reload }: { data: EventDetail; reload: () => void 
   );
 }
 
-// The comment thread — visible to everyone; composer shows when comments are on.
+// The comment thread - visible to everyone; composer shows when comments are on.
 function EventComments({ data, reload }: { data: EventDetail; reload: () => void }) {
   const api = useApi();
   const e = data.event;
@@ -1126,7 +1129,7 @@ function ShareLink({ eventId }: { eventId: string }) {
   return (
     <div className="card stack">
       <h3>Invite people</h3>
-      <p className="muted small">Share this link — anyone who opens it can RSVP.</p>
+      <p className="muted small">Share this link - anyone who opens it can RSVP.</p>
       <div className="row">
         <input className="input" readOnly value={url} data-testid="share-link" onFocus={(ev) => ev.currentTarget.select()} />
         <button className="btn soft sm" onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); analytics.capture(EVENTS.shareLinkCopied); }}>
@@ -1149,7 +1152,7 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
   const yesFor = (o: TimeOption) => data.votes.filter((v) => v.option_id === o.id && v.response === "yes").length;
   // Rank best-first: explicit yes-votes, then how the slot fits EVERYONE's
   // saved availability (server-computed across all attendees, not just the
-  // viewer) — the "it just knows" ranking.
+  // viewer) - the "it just knows" ranking.
   const fitOf = (o: TimeOption) => data.option_fit?.[o.id] ?? { free: 0, busy: 0 };
   const ranked = [...data.time_options].sort((a, b) =>
     (yesFor(b) - yesFor(a)) || (fitOf(b).free - fitOf(a).free) || (fitOf(a).busy - fitOf(b).busy));
@@ -1286,7 +1289,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
   };
 
   // Multi-date finalize: the host TAPS winning cells right on the results (or
-  // types times manually) — one or several. Extra dates become a series with
+  // types times manually) - one or several. Extra dates become a series with
   // everyone (RSVPs intact) carried onto each occurrence.
   const [moreWhens, setMoreWhens] = useState<string[]>([]);
   // picked: heat-cell selections, cellKey -> datetime-local (daypart mapped to
@@ -1306,7 +1309,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
     picked.has(key)
       ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative", zIndex: 2 }
       : {};
-  // General-scope cells aren't dated — the host first picks a TARGET MONTH
+  // General-scope cells aren't dated - the host first picks a TARGET MONTH
   // (the group's month votes, best-first; "Soonest" = next occurrence), then a
   // weekday cell resolves to that month's first future matching date.
   const [targetMonth, setTargetMonth] = useState<string>("");
@@ -1487,7 +1490,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
           </div>
           <p className="muted small">
             {sel
-              ? `Highlighting ${responders.find((r) => r.id === sel)?.name}'s picks — tap again for everyone.`
+              ? `Highlighting ${responders.find((r) => r.id === sel)?.name}'s picks - tap again for everyone.`
               : "Tap someone to see exactly what they picked."}
           </p>
         </div>
@@ -1496,7 +1499,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
       <div className="divider" />
       <div className="muted small">
         {canPick ? "Tap winning cells above to schedule them" : "Pick the winning date & time"}
-        {canPick ? " — or type times manually:" : ":"}
+        {canPick ? " - or type times manually:" : ":"}
       </div>
       {picked.size > 0 && (
         <div className="row wrap" style={{ gap: 6 }} data-testid="picked-cells">
@@ -1532,13 +1535,13 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
         </button>
       </div>
       {pickCount > 1 && (
-        <p className="muted small">All {pickCount} dates become one series — everyone here is on each date, RSVPs carried over.</p>
+        <p className="muted small">All {pickCount} dates become one series - everyone here is on each date, RSVPs carried over.</p>
       )}
     </div>
   );
 }
 
-// Who's coming — grouped by RSVP so it's scannable at a glance. Any real
+// Who's coming - grouped by RSVP so it's scannable at a glance. Any real
 // (non-guest) attendee who isn't already your friend gets an "Add friend"
 // button right here, so an event is a place to grow your circle.
 function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: string }) {
@@ -1550,7 +1553,7 @@ function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: stri
 
   const friendIds = new Set((fr?.friends ?? []).map((f) => f.friend_id));
   const pending = new Set((fr?.outgoing ?? []).map((o) => o.handle).filter(Boolean) as string[]);
-  // Guests have no account to befriend from — they still see the full list.
+  // Guests have no account to befriend from - they still see the full list.
   const viewerIsGuest = viewerId.startsWith("guest_");
 
   async function addFriend(handle: string) {
@@ -1575,7 +1578,7 @@ function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: stri
         <h3 style={{ margin: 0 }}>Who's coming</h3>
         <span className="muted small">{going} going · {total} responded</span>
       </div>
-      {total === 0 && <p className="muted small">No responses yet — share the link to get RSVPs.</p>}
+      {total === 0 && <p className="muted small">No responses yet - share the link to get RSVPs.</p>}
 
       {GROUPS.map(({ key, label }) => {
         const rows = attendees.filter((a) => a.rsvp === key);

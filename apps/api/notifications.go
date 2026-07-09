@@ -11,7 +11,7 @@ import (
 	"github.com/clsandbox/api/internal/db"
 )
 
-// notifications.go — the transactional-email triggers (growth priority #2).
+// notifications.go - the transactional-email triggers (growth priority #2).
 // Copy + layout live in emails.go; this file decides *who* gets *which* message
 // and fills the variables from the event. All best-effort: failures are logged
 // by the notify client, never surfaced to the request.
@@ -30,7 +30,7 @@ func (s *server) logoURL() string {
 }
 
 // defaultTimeZone is the fallback for events with no stored tz (created before
-// the timezone column, or with an unrecognized name) — the app's home tz.
+// the timezone column, or with an unrecognized name) - the app's home tz.
 const defaultTimeZone = "America/Los_Angeles"
 
 // eventLocation resolves the event's IANA timezone (the host's, captured at
@@ -62,7 +62,7 @@ func eventWhen(ev db.Event) string {
 	return w
 }
 
-// eventCover returns the event's cover/GIF for email — https only (mail
+// eventCover returns the event's cover/GIF for email - https only (mail
 // clients strip data: URIs, which is what uploaded covers are).
 func eventCover(ev db.Event) string {
 	if strings.HasPrefix(ev.PhotoUrl, "https://") {
@@ -114,19 +114,19 @@ func (s *server) notifyFinalized(ctx context.Context, ev db.Event, extra []pgtyp
 		return
 	}
 	meta := eventMeta(ev)
-	heading, line := ev.Title+" has a time 🎉", "Good news — the group landed on a time. Add it to your calendar so it actually happens."
+	heading, line := ev.Title+" has a time 🎉", "Good news - the group landed on a time. Add it to your calendar so it actually happens."
 	if len(extra) > 0 {
 		heading = fmt.Sprintf("%s has its dates 🎉", ev.Title)
-		line = fmt.Sprintf("Good news — the group locked in %d dates. Add them to your calendar so they actually happen.", 1+len(extra))
+		line = fmt.Sprintf("Good news - the group locked in %d dates. Add them to your calendar so they actually happen.", 1+len(extra))
 		loc := eventLocation(ev)
 		for _, ts := range extra {
 			meta = append(meta, emailMetaRow{"Also", ts.Time.In(loc).Format("Mon Jan 2 · 3:04 PM MST")})
 		}
 	}
-	subject := fmt.Sprintf("It's on — %s is locked in 🎉", ev.Title)
+	subject := fmt.Sprintf("It's on - %s is locked in 🎉", ev.Title)
 	for _, c := range contacts {
 		body := renderEmail(emailContent{
-			preheader: "A time is set — here are the details.",
+			preheader: "A time is set - here are the details.",
 			heading:   heading,
 			lines:     []string{line},
 			meta:      meta,
@@ -172,9 +172,9 @@ func (s *server) sendReminders(ctx context.Context, events []db.Event) int {
 		if len(r.events) == 1 {
 			ev := r.events[0]
 			body := renderEmail(emailContent{
-				preheader: "Happening soon — don't forget.",
+				preheader: "Happening soon - don't forget.",
 				heading:   ev.Title + " is tomorrow",
-				lines:     []string{"Just a heads up — this is coming up soon. See you there!"},
+				lines:     []string{"Just a heads up - this is coming up soon. See you there!"},
 				meta:      eventMeta(ev),
 				ctaLabel:  "See the details →",
 				ctaURL:    campaignURL(s.eventURL(ev.ID), "reminder"),
@@ -199,7 +199,7 @@ func (s *server) sendReminders(ctx context.Context, events []db.Event) int {
 			})
 		}
 		body := renderEmail(emailContent{
-			preheader: "Busy day ahead — here's the lineup.",
+			preheader: "Busy day ahead - here's the lineup.",
 			heading:   fmt.Sprintf("You have %d plans tomorrow", len(items)),
 			lines:     []string{"Here's everything on your calendar for tomorrow:"},
 			items:     items,
@@ -226,7 +226,7 @@ func (s *server) notifyInvite(ctx context.Context, ev db.Event, inviterID, invit
 	}
 	verb := "invited you. One tap and you're in."
 	if ev.Status == "polling" {
-		verb = "wants to find the next time that works — cast your vote."
+		verb = "wants to find the next time that works - cast your vote."
 	}
 	body := renderEmail(emailContent{
 		preheader: inviter.DisplayName + " invited you to " + ev.Title,
@@ -253,9 +253,9 @@ func (s *server) notifyInvite(ctx context.Context, ev db.Event, inviterID, invit
 func (s *server) notifyRecap(ctx context.Context, ev db.Event) int {
 	return s.broadcastToGoing(ctx, ev, "How was "+ev.Title+"?", func(_, unsub string) emailContent {
 		return emailContent{
-			preheader: "Relive it — and plan the next one.",
+			preheader: "Relive it - and plan the next one.",
 			heading:   "How was " + ev.Title + "? 📸",
-			lines:     []string{"Drop a photo or a highlight in the thread — it's the group's memory now.", "And if it was a good one… same time next month?"},
+			lines:     []string{"Drop a photo or a highlight in the thread - it's the group's memory now.", "And if it was a good one… same time next month?"},
 			ctaLabel:  "Drop a pic 📸",
 			ctaURL:    campaignURL(s.eventURL(ev.ID), "recap"),
 			cta2Label: "Plan the next one",
@@ -285,7 +285,7 @@ func (s *server) notifySeriesEnded(ctx context.Context, ev db.Event) {
 	body := renderEmail(emailContent{
 		preheader: "That was the last one on the calendar.",
 		heading:   "Keep " + ev.Title + " going 🔁",
-		lines:     []string{"That was the last scheduled date for this series. One tap opens a poll with everyone already invited — find the next times that work."},
+		lines:     []string{"That was the last scheduled date for this series. One tap opens a poll with everyone already invited - find the next times that work."},
 		ctaLabel:  "Poll the group for next dates",
 		ctaURL:    campaignURL(s.appOrigin+"/new?again="+uuidStr(ev.ID)+"&repoll=1", "repoll"),
 		logoURL:   s.logoURL(),
@@ -298,7 +298,7 @@ func (s *server) notifySeriesEnded(ctx context.Context, ev db.Event) {
 
 // --- host-activity digest -----------------------------------------------
 //
-// Comments and RSVPs do NOT email the host per action — someone flip-flopping
+// Comments and RSVPs do NOT email the host per action - someone flip-flopping
 // an RSVP or posting five comments would be spam. Instead each action enqueues
 // into notification_queue; a flusher (started from main, every 5 min) drains
 // items older than digestWindowMins, collapses them (latest RSVP per person
@@ -326,7 +326,7 @@ func (s *server) enqueueActivity(ctx context.Context, ev db.Event, kind, actorID
 	})
 }
 
-// digestLine is one collapsed update inside a digest — kind/actor/body are
+// digestLine is one collapsed update inside a digest - kind/actor/body are
 // kept so a lone update can be sent as the classic single email instead.
 type digestLine struct {
 	eventID   pgtype.UUID
@@ -338,10 +338,10 @@ type digestLine struct {
 
 // collapseActivity turns raw queue rows into per-recipient digest lines:
 // RSVP flip-flops collapse to the latest per (actor, event); comments all
-// survive. Pure — unit-tested without a DB.
+// survive. Pure - unit-tested without a DB.
 func collapseActivity(rows []db.DrainDueNotificationsRow) map[string][]digestLine {
 	out := map[string][]digestLine{}
-	seenRsvp := map[string]bool{} // recipient|event|actor — latest wins (rows scan newest-last, so walk backwards)
+	seenRsvp := map[string]bool{} // recipient|event|actor - latest wins (rows scan newest-last, so walk backwards)
 	for i := len(rows) - 1; i >= 0; i-- {
 		r := rows[i]
 		if r.Kind == "rsvp" {
@@ -362,7 +362,7 @@ func collapseActivity(rows []db.DrainDueNotificationsRow) map[string][]digestLin
 		}
 		out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, "💬 " + r.ActorName + ": " + text, "comment", r.ActorName, text})
 	}
-	// walking backwards reversed the order — restore oldest-first per recipient
+	// walking backwards reversed the order - restore oldest-first per recipient
 	for k := range out {
 		lines := out[k]
 		for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
@@ -402,7 +402,7 @@ func (s *server) flushActivityDigests(ctx context.Context) {
 		if perr != nil || prof.Email == "" {
 			continue
 		}
-		// A single update doesn't need digest framing — send the classic
+		// A single update doesn't need digest framing - send the classic
 		// "<name> is going to <event>" / comment email (cover + theme intact).
 		if len(lines) == 1 {
 			ln := lines[0]
@@ -415,7 +415,7 @@ func (s *server) flushActivityDigests(ctx context.Context) {
 			}
 			subject := fmt.Sprintf("✅ %s is going to %s", ln.actorName, ev.Title)
 			heading := ln.actorName + " is going to " + ev.Title
-			bodyLines := []string{ln.actorName + " just RSVP'd — they're going. 🎉"}
+			bodyLines := []string{ln.actorName + " just RSVP'd - they're going. 🎉"}
 			campaign := "rsvp"
 			if ln.kind == "comment" {
 				subject = fmt.Sprintf("💬 %s commented on %s", ln.actorName, ev.Title)

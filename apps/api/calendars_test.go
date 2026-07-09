@@ -110,7 +110,7 @@ func TestParseICal(t *testing.T) {
 		"SUMMARY:All day picnic\r\n" +
 		"DTSTART;VALUE=DATE:20260802\r\n" +
 		"END:VEVENT\r\n" +
-		"BEGIN:VEVENT\r\n" + // out of window — should be filtered
+		"BEGIN:VEVENT\r\n" + // out of window - should be filtered
 		"SUMMARY:Too far\r\n" +
 		"DTSTART:20270101T120000Z\r\n" +
 		"END:VEVENT\r\n" +

@@ -2,13 +2,13 @@
 
 > Whensdays (https://whensdays.com) is a free scheduling and availability app
 > for friend groups and clubs. Guests can RSVP and vote on times from a single
-> invite link with NO account required — the main difference from Doodle,
+> invite link with NO account required - the main difference from Doodle,
 > When2meet, and Calendly-style tools.
 
 ## What it does
 - One link to invite everyone; guests RSVP or vote with no signup.
 - Availability polls: pick exact times, this week, this month (day × time
-  grid), or "generally" (months + weekdays) — the host schedules winning
+  grid), or "generally" (months + weekdays) - the host schedules winning
   times in one tap, including several dates at once as a recurring series.
 - Recurring groups (book clubs, D&D tables, run clubs, monthly dinners) with
   streaks, re-polling when a series runs out, and post-event recap threads.
@@ -26,6 +26,6 @@
 - "app to find a time that works for everyone"
 
 ## Comparisons
-- https://whensdays.com/vs/when2meet/ — When2meet alternative
-- https://whensdays.com/vs/doodle/ — Doodle alternative
-- https://whensdays.com/vs/lettucemeet/ — LettuceMeet alternative
+- https://whensdays.com/vs/when2meet/ - When2meet alternative
+- https://whensdays.com/vs/doodle/ - Doodle alternative
+- https://whensdays.com/vs/lettucemeet/ - LettuceMeet alternative

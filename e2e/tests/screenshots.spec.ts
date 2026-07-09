@@ -36,7 +36,7 @@ test.describe("docs screenshots", () => {
     await page.getByTestId("share-link").waitFor();
     await page.screenshot({ path: `${OUT}/02-scheduler-event.png`, fullPage: true, animations: "disabled" });
 
-    // Feature: general-availability poll — the per-day time grid (guest view).
+    // Feature: general-availability poll - the per-day time grid (guest view).
     await page.goto("/new");
     await page.getByTestId("event-title").fill("Camping trip");
     await page.getByTestId("type-camping").click();

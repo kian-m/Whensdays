@@ -1,4 +1,4 @@
-# Whensdays — all crawlers welcome, including AI assistants' bots.
+# Whensdays - all crawlers welcome, including AI assistants' bots.
 User-agent: *
 Allow: /
 

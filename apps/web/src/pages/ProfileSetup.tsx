@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Profile, sendJSON, useApi } from "../lib";
 
-// First-run gate: one field — a name. The handle is optional (we derive one
+// First-run gate: one field - a name. The handle is optional (we derive one
 // server-side when left blank).
 export function ProfileSetup({ onDone, prefillName }: { onDone: (p: Profile) => void; prefillName?: string }) {
   const api = useApi();
   const [displayName, setDisplayName] = useState(prefillName ?? "");
-  // The prefill (a merged guest's name) can arrive after mount — sync it in.
+  // The prefill (a merged guest's name) can arrive after mount - sync it in.
   useEffect(() => { if (prefillName) setDisplayName(prefillName); }, [prefillName]);
   const [handle, setHandle] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export function ProfileSetup({ onDone, prefillName }: { onDone: (p: Profile) => 
           />
         </div>
         <div>
-          <label className="field" htmlFor="hd">Handle <span className="muted small">(optional — we’ll pick one)</span></label>
+          <label className="field" htmlFor="hd">Handle <span className="muted small">(optional - we’ll pick one)</span></label>
           <input
             id="hd"
             className="input"

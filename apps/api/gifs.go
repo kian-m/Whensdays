@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// gifs.go — a thin authenticated proxy over the Klipy GIF search API, used to
+// gifs.go - a thin authenticated proxy over the Klipy GIF search API, used to
 // pick an event cover. The API key stays server-side (KLIPY_API_KEY env, never
 // shipped to the browser or the repo); when unset the endpoint reports
 // enabled=false and the web hides the GIF picker. Klipy is Tenor-compatible:
@@ -21,7 +21,7 @@ var eventThemes = []string{"", "party", "beach", "forest", "night", "neon", "coz
 
 func validEventTheme(t string) bool { return oneOf(t, eventThemes...) }
 
-// validCoverURL accepts an uploaded image (data URL) or a Klipy CDN asset —
+// validCoverURL accepts an uploaded image (data URL) or a Klipy CDN asset -
 // never an arbitrary remote URL (no hotlink/SSRF surface).
 func validCoverURL(u string) bool {
 	if u == "" {
@@ -34,7 +34,7 @@ func validCoverURL(u string) bool {
 }
 
 // validGifURL: comment/cover gifs may only come from the Klipy CDN (or the
-// stub sentinel in KLIPY_MODE=stub test stacks) — never arbitrary remotes.
+// stub sentinel in KLIPY_MODE=stub test stacks) - never arbitrary remotes.
 func validGifURL(u string) bool {
 	if u == "" {
 		return true

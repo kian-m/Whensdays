@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-// ogpage.go — link unfurls. Chat apps (iMessage/WhatsApp/Discord/Slack) fetch
+// ogpage.go - link unfurls. Chat apps (iMessage/WhatsApp/Discord/Slack) fetch
 // invite links with no JS, so the SPA's meta tags never reach them. nginx
 // proxies full-page loads of /e/{id} here; we return a tiny HTML shell whose
 // Open Graph tags describe the event, then bounce real browsers to the SPA at
@@ -22,9 +22,9 @@ func (s *server) handleOGPage(w http.ResponseWriter, r *http.Request) {
 			case ev.Status == "cancelled":
 				desc = "This get-together was cancelled."
 			case ev.StartsAt.Valid:
-				desc = "You're invited — " + ev.StartsAt.Time.In(eventLocation(ev)).Format("Mon Jan 2, 3:04 PM MST") + ". Tap to RSVP, no account needed."
+				desc = "You're invited - " + ev.StartsAt.Time.In(eventLocation(ev)).Format("Mon Jan 2, 3:04 PM MST") + ". Tap to RSVP, no account needed."
 			default:
-				desc = "You're invited — help pick the time. Tap to vote, no account needed."
+				desc = "You're invited - help pick the time. Tap to vote, no account needed."
 			}
 		}
 	}
