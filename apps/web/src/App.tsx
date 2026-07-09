@@ -278,6 +278,11 @@ function Landing() {
           <span><b>No account</b> to RSVP</span>
           <span><b>One link</b>, everyone's in</span>
         </div>
+        {/* Visible privacy link on the homepage - required for Google OAuth
+            app verification (a crawler-only link doesn't count). */}
+        <p className="muted small" style={{ textAlign: "center", marginTop: "2rem" }}>
+          <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy policy</a>
+        </p>
       </div>
     </div>
   );
