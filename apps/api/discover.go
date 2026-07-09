@@ -78,8 +78,12 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped})
-	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped})
+	// Group streak congratulations ride the same daily tick: a group whose
+	// monthly run just extended gets one celebratory email to every member
+	// (idempotent via group_streak_congrats).
+	streaks := s.sendStreakCongrats(r.Context())
+	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks})
+	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks})
 }
 
 // ---------------------- public discovery ----------------------

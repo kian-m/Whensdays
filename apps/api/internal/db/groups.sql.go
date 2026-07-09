@@ -122,6 +122,40 @@ func (q *Queries) ListGoingAttendeeEmails(ctx context.Context, eventID pgtype.UU
 	return items, nil
 }
 
+const listGroupEventMonths = `-- name: ListGroupEventMonths :many
+SELECT group_id, starts_at FROM events
+WHERE group_id IS NOT NULL AND status = 'scheduled'
+  AND starts_at IS NOT NULL AND starts_at <= now()
+`
+
+type ListGroupEventMonthsRow struct {
+	GroupID  pgtype.UUID        `json:"group_id"`
+	StartsAt pgtype.Timestamptz `json:"starts_at"`
+}
+
+// Start times of every HAPPENED scheduled group event - the cron computes
+// month streaks from these (mirrors the web's groupStreak, which also counts
+// this month's still-upcoming events; the email celebrates only real ones).
+func (q *Queries) ListGroupEventMonths(ctx context.Context) ([]ListGroupEventMonthsRow, error) {
+	rows, err := q.db.Query(ctx, listGroupEventMonths)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGroupEventMonthsRow{}
+	for rows.Next() {
+		var i ListGroupEventMonthsRow
+		if err := rows.Scan(&i.GroupID, &i.StartsAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGroupEvents = `-- name: ListGroupEvents :many
 SELECT id, host_id, title, event_type, description,
        location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at
@@ -167,6 +201,39 @@ func (q *Queries) ListGroupEvents(ctx context.Context, groupID pgtype.UUID) ([]E
 			&i.Timezone,
 			&i.EndsAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGroupMemberContacts = `-- name: ListGroupMemberContacts :many
+SELECT p.user_id, p.display_name, p.email
+FROM group_members m
+JOIN profiles p ON p.user_id = m.user_id
+WHERE m.group_id = $1 AND p.email <> ''
+`
+
+type ListGroupMemberContactsRow struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+}
+
+func (q *Queries) ListGroupMemberContacts(ctx context.Context, groupID pgtype.UUID) ([]ListGroupMemberContactsRow, error) {
+	rows, err := q.db.Query(ctx, listGroupMemberContacts, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGroupMemberContactsRow{}
+	for rows.Next() {
+		var i ListGroupMemberContactsRow
+		if err := rows.Scan(&i.UserID, &i.DisplayName, &i.Email); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -252,6 +319,25 @@ func (q *Queries) ListMyGroups(ctx context.Context, ownerID string) ([]Group, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const markStreakCongrats = `-- name: MarkStreakCongrats :one
+INSERT INTO group_streak_congrats (group_id, month) VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING group_id
+`
+
+type MarkStreakCongratsParams struct {
+	GroupID pgtype.UUID `json:"group_id"`
+	Month   string      `json:"month"`
+}
+
+// Idempotency gate: no row back = another tick (or instance) already sent.
+func (q *Queries) MarkStreakCongrats(ctx context.Context, arg MarkStreakCongratsParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, markStreakCongrats, arg.GroupID, arg.Month)
+	var group_id pgtype.UUID
+	err := row.Scan(&group_id)
+	return group_id, err
 }
 
 const removeGroupMember = `-- name: RemoveGroupMember :exec

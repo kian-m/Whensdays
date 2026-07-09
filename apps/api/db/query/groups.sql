@@ -56,3 +56,23 @@ WHERE a.event_id = $1 AND a.rsvp = 'going' AND p.email <> '';
 UPDATE groups SET icon_url = $2
 WHERE id = $1
 RETURNING id, owner_id, name, emoji, created_at, icon_url;
+
+-- name: ListGroupEventMonths :many
+-- Start times of every HAPPENED scheduled group event - the cron computes
+-- month streaks from these (mirrors the web's groupStreak, which also counts
+-- this month's still-upcoming events; the email celebrates only real ones).
+SELECT group_id, starts_at FROM events
+WHERE group_id IS NOT NULL AND status = 'scheduled'
+  AND starts_at IS NOT NULL AND starts_at <= now();
+
+-- name: MarkStreakCongrats :one
+-- Idempotency gate: no row back = another tick (or instance) already sent.
+INSERT INTO group_streak_congrats (group_id, month) VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING group_id;
+
+-- name: ListGroupMemberContacts :many
+SELECT p.user_id, p.display_name, p.email
+FROM group_members m
+JOIN profiles p ON p.user_id = m.user_id
+WHERE m.group_id = $1 AND p.email <> '';

@@ -190,3 +190,31 @@ func TestCollapseActivity(t *testing.T) {
 		t.Fatalf("unexpected digest lines: %s", joined)
 	}
 }
+
+func TestStreakLen(t *testing.T) {
+	m := func(ks ...int) map[int]bool {
+		out := map[int]bool{}
+		for _, k := range ks {
+			out[k] = true
+		}
+		return out
+	}
+	cases := []struct {
+		name   string
+		months map[int]bool
+		cur    int
+		want   int
+	}{
+		{"empty", m(), 100, 0},
+		{"current only", m(100), 100, 1},
+		{"three consecutive", m(98, 99, 100), 100, 3},
+		{"gap breaks the run", m(97, 99, 100), 100, 2},
+		{"current month missing = no streak ending now", m(98, 99), 100, 0},
+		{"future months ignored", m(100, 101, 102), 100, 1},
+	}
+	for _, c := range cases {
+		if got := streakLen(c.months, c.cur); got != c.want {
+			t.Errorf("%s: streakLen = %d, want %d", c.name, got, c.want)
+		}
+	}
+}

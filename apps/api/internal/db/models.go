@@ -176,6 +176,12 @@ type GroupMember struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type GroupStreakCongrat struct {
+	GroupID pgtype.UUID        `json:"group_id"`
+	Month   string             `json:"month"`
+	SentAt  pgtype.Timestamptz `json:"sent_at"`
+}
+
 type Note struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    string             `json:"user_id"`

@@ -296,6 +296,87 @@ func (s *server) notifySeriesEnded(ctx context.Context, ev db.Event) {
 	s.notify.Send([]string{host.Email}, "Plan the next "+ev.Title+"?", body)
 }
 
+// --- group streak congrats ------------------------------------------------
+
+// streakLen counts consecutive months (ending at cur) present in the set.
+// Month keys are year*12 + month0 - mirrors the web's groupStreak walk.
+func streakLen(months map[int]bool, cur int) int {
+	n := 0
+	for months[cur] {
+		n++
+		cur--
+	}
+	return n
+}
+
+// sendStreakCongrats emails every member of a group whose monthly streak just
+// extended: the current Pacific month gained its first HAPPENED event and the
+// run is >= 2 months. Once per group per month (group_streak_congrats is the
+// gate), riding the daily cron like recaps. Opt-out = leave the group; these
+// are at most one email a month.
+func (s *server) sendStreakCongrats(ctx context.Context) int {
+	if !s.notify.Enabled() {
+		return 0
+	}
+	rows, err := s.queries.ListGroupEventMonths(ctx)
+	if err != nil {
+		return 0
+	}
+	loc, lerr := time.LoadLocation(defaultTimeZone)
+	if lerr != nil {
+		loc = time.UTC
+	}
+	now := time.Now().In(loc)
+	cur := now.Year()*12 + int(now.Month()) - 1
+	byGroup := map[pgtype.UUID]map[int]bool{}
+	for _, r := range rows {
+		if !r.StartsAt.Valid {
+			continue
+		}
+		t := r.StartsAt.Time.In(loc)
+		if byGroup[r.GroupID] == nil {
+			byGroup[r.GroupID] = map[int]bool{}
+		}
+		byGroup[r.GroupID][t.Year()*12+int(t.Month())-1] = true
+	}
+	sent := 0
+	monthKey := now.Format("2006-01")
+	for gid, months := range byGroup {
+		n := streakLen(months, cur)
+		if n < 2 {
+			continue
+		}
+		if _, merr := s.queries.MarkStreakCongrats(ctx, db.MarkStreakCongratsParams{GroupID: gid, Month: monthKey}); merr != nil {
+			continue // pgx.ErrNoRows = already congratulated this month
+		}
+		group, gerr := s.queries.GetGroup(ctx, gid)
+		if gerr != nil {
+			continue
+		}
+		contacts, cerr := s.queries.ListGroupMemberContacts(ctx, gid)
+		if cerr != nil {
+			continue
+		}
+		subject := fmt.Sprintf("🔥 %d months strong - %s", n, group.Name)
+		for _, c := range contacts {
+			body := renderEmail(emailContent{
+				preheader: fmt.Sprintf("%s has met every month for %d months straight.", group.Name, n),
+				heading:   fmt.Sprintf("%d-month streak 🔥", n),
+				lines: []string{
+					fmt.Sprintf("%s has met every month for %d months straight. That doesn't happen by accident - nice work, everyone.", group.Name, n),
+					"Keep it alive: lock in next month's date before the chat goes quiet.",
+				},
+				ctaLabel: "Plan the next one",
+				ctaURL:   campaignURL(s.appOrigin+"/g/"+uuidStr(gid), "streak"),
+				logoURL:  s.logoURL(),
+			})
+			s.notify.Send([]string{c.Email}, subject, body)
+		}
+		sent++
+	}
+	return sent
+}
+
 // --- host-activity digest -----------------------------------------------
 //
 // Comments and RSVPs do NOT email the host per action - someone flip-flopping
