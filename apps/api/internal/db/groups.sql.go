@@ -27,6 +27,17 @@ func (q *Queries) AddGroupMember(ctx context.Context, arg AddGroupMemberParams) 
 	return err
 }
 
+const countGroupMembers = `-- name: CountGroupMembers :one
+SELECT count(*)::int FROM group_members WHERE group_id = $1
+`
+
+func (q *Queries) CountGroupMembers(ctx context.Context, groupID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countGroupMembers, groupID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createGroup = `-- name: CreateGroup :one
 
 INSERT INTO groups (owner_id, name, emoji)

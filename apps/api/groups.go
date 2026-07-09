@@ -117,6 +117,58 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleGroupPreview - NOT member-gated: the group link is the invite
+// capability (same model as events), so anyone holding it sees what they'd
+// be joining. Read-only, minimal fields.
+func (s *server) handleGroupPreview(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	id, ok := parseUUID(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
+		return
+	}
+	g, err := s.queries.GetGroup(r.Context(), id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err != nil {
+		s.internal(w, "group preview", err)
+		return
+	}
+	count, _ := s.queries.CountGroupMembers(r.Context(), id)
+	member, _ := s.queries.IsGroupMember(r.Context(), db.IsGroupMemberParams{ID: id, UserID: uid})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": g.ID, "name": g.Name, "emoji": g.Emoji, "icon_url": g.IconUrl,
+		"member_count": count, "is_member": member,
+	})
+}
+
+// handleJoinGroup lets ANYONE holding the group link join - including guests
+// (they're real low-privilege users). Membership then unlocks the group page
+// and its events, exactly like an event invite link unlocks the event.
+func (s *server) handleJoinGroup(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	id, ok := parseUUID(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
+		return
+	}
+	if _, err := s.queries.GetGroup(r.Context(), id); errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	} else if err != nil {
+		s.internal(w, "join group: load", err)
+		return
+	}
+	if err := s.queries.AddGroupMember(r.Context(), db.AddGroupMemberParams{GroupID: id, UserID: uid}); err != nil {
+		s.internal(w, "join group", err)
+		return
+	}
+	s.analytics.Capture(uid, "group_joined", map[string]any{"group_id": r.PathValue("id"), "via": "link"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	g, ok := s.loadGroupForMember(w, r)

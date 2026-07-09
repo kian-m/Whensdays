@@ -76,3 +76,6 @@ SELECT p.user_id, p.display_name, p.email
 FROM group_members m
 JOIN profiles p ON p.user_id = m.user_id
 WHERE m.group_id = $1 AND p.email <> '';
+
+-- name: CountGroupMembers :one
+SELECT count(*)::int FROM group_members WHERE group_id = $1;

@@ -17,7 +17,7 @@ function groupStreak(events: Event[]): number {
   while (months.has(m)) { n++; m--; }
   return n;
 }
-import { Avatar, BackLink, ConfirmButton, GifPicker, Loading, fileToAvatar, useAsync, EventThumb } from "../ui";
+import { Avatar, BackLink, ConfirmButton, GifPicker, Loading, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { eventEmoji } from "../scheduler/questions";
 
 // Group icons are an emoji from this palette or an uploaded photo - never free
@@ -104,6 +104,39 @@ export function Groups() {
   );
 }
 
+type GroupPreview = { id: string; name: string; emoji: string; icon_url: string; member_count: number; is_member: boolean };
+
+// The join view anyone (guests included) sees when they open a group link
+// they're not a member of yet.
+function GroupJoin({ id, onJoined }: { id: string; onJoined: () => void }) {
+  const api = useApi();
+  const { data, loading } = useAsync<GroupPreview>((a) => getJSON(a, `/api/groups/${id}/preview`), [id]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (loading && !data) return <Loading />;
+  if (!data) return <div className="stack"><BackLink /><p className="muted">Group not found.</p></div>;
+  async function join() {
+    setBusy(true);
+    const res = await sendJSON(api, "POST", `/api/groups/${id}/join`, {});
+    setBusy(false);
+    if (!res.ok) return setErr("could not join - try again");
+    onJoined();
+  }
+  return (
+    <div className="stack">
+      <div className="card stack" style={{ alignItems: "center", textAlign: "center" }} data-testid="group-join-card">
+        {data.icon_url ? <Avatar url={data.icon_url} name={data.name} size={72} /> : <span style={{ fontSize: "3rem" }}>{data.emoji || "👥"}</span>}
+        <h1>{data.name}</h1>
+        <p className="muted small">{data.member_count} {data.member_count === 1 ? "member" : "members"} · you're invited to join</p>
+        <button className="btn" data-testid="group-join" disabled={busy} onClick={join}>
+          {busy ? "Joining…" : "Join the group"}
+        </button>
+        {err && <p className="muted small">{err}</p>}
+      </div>
+    </div>
+  );
+}
+
 export function GroupPage() {
   const { id } = useParams();
   const api = useApi();
@@ -144,9 +177,12 @@ export function GroupPage() {
   }
 
   if (loading && !data) return <Loading />;
-  if (!data) return <div className="stack"><BackLink /><p className="muted">Group not found.</p></div>;
+  // Not a member (or arriving fresh from an invite link): the link is the
+  // capability - show a preview + Join instead of a wall.
+  if (!data) return <GroupJoin id={id!} onJoined={reload} />;
 
   const { group, members, events, is_owner } = data;
+  const inviteURL = `${location.origin}/g/${group.id}`;
 
   return (
     <div className="stack">
@@ -176,6 +212,14 @@ export function GroupPage() {
           >
             + New event
           </button>
+        </div>
+        {/* Any member can grow the group - the link IS the invite. */}
+        <div className="row wrap" style={{ gap: 6 }}>
+          <button type="button" className="btn soft sm" data-testid="group-invite-copy"
+            onClick={() => { navigator.clipboard?.writeText(inviteURL); setAddMsg("Invite link copied ✓"); }}>
+            🔗 Invite via link
+          </button>
+          <QRButton url={inviteURL} testid="group-qr" />
         </div>
         {is_owner && (
           <div className="row wrap">

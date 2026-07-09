@@ -119,7 +119,7 @@ function storedGuest(): GuestAuth | null {
 // everyone else sees the landing page.
 function GuestOrLanding() {
   const { pathname } = useLocation();
-  if (storedGuest() || pathname.startsWith("/e/") || pathname.startsWith("/ev/") || pathname.startsWith("/start")) return <GuestFlow />;
+  if (storedGuest() || pathname.startsWith("/e/") || pathname.startsWith("/ev/") || pathname.startsWith("/g/") || pathname.startsWith("/start")) return <GuestFlow />;
   // Discover is public: browsable without any account (follow requires one).
   if (pathname.startsWith("/discover")) {
     return (
@@ -139,6 +139,7 @@ function GuestFlow() {
   const [auth, setAuth] = useState<GuestAuth | null>(storedGuest);
   const { pathname } = useLocation();
   const eventId = pathname.startsWith("/e/") ? pathname.slice(3) : pathname.startsWith("/ev/") ? pathname.slice(4) : null;
+  const groupInvite = pathname.startsWith("/g/"); // group links invite guests too
 
   const api: ApiFn = useCallback(
     async (p, i) => {
@@ -157,7 +158,7 @@ function GuestFlow() {
   );
 
   if (!auth) {
-    if (!eventId && !pathname.startsWith("/start")) return <Landing />;
+    if (!eventId && !groupInvite && !pathname.startsWith("/start")) return <Landing />;
     return (
       <GuestJoin
         eventId={eventId}

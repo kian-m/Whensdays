@@ -373,6 +373,46 @@ test.describe("scheduler", () => {
     expect(synced).toContain("night:free");
   });
 
+  test("group invite link: a guest joins and sees the group's events", async ({ browser, page }) => {
+    test.skip(!DEV_AUTH, "guest flow via the dev ?guest=1 hook");
+    await ensureUser(page, "grpinv", "Group Inviter", "grpinv");
+    const gname = `Linked ${test.info().testId}-${Date.now()}`;
+    await page.goto("/groups");
+    await page.getByTestId("group-name").fill(gname);
+    await page.getByTestId("group-create").click();
+    await page.getByTestId("group-row").filter({ hasText: gname }).first().click();
+    await expect(page.getByTestId("group-title")).toHaveText(gname);
+    const gid = page.url().split("/g/")[1];
+
+    // An event inside the group (wizard arrives prefilled from the group page).
+    const etitle = `Grouped ${test.info().testId}-${Date.now()}`;
+    await page.getByTestId("group-new-event").click();
+    await page.getByTestId("event-title").fill(etitle);
+    await page.getByTestId("type-dinner").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-general").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(etitle);
+
+    // A guest opens the group link: name -> preview -> Join -> sees the events.
+    const gctx = await browser.newContext();
+    try {
+      const g = await gctx.newPage();
+      await g.goto(`/g/${gid}?guest=1`);
+      await g.getByTestId("guest-name").fill("Linky Guest");
+      await g.getByTestId("guest-join").click();
+      await expect(g.getByTestId("group-join-card")).toBeVisible();
+      await g.getByTestId("group-join").click();
+      await expect(g.getByTestId("group-title")).toHaveText(gname);
+      await expect(g.getByTestId("group-event").filter({ hasText: etitle }).first()).toBeVisible();
+    } finally {
+      await gctx.close();
+    }
+  });
+
   test("first event created suggests add-to-homescreen (phones, once)", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for an isolated user");
     await page.setViewportSize({ width: 390, height: 844 }); // the prompt is phone-only
