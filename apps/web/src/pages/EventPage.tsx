@@ -31,6 +31,11 @@ import {
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
 import { AddressInput, Avatar, BackLink, ConfirmButton, DayGrid, GifPicker, Loading, Pill, fileToAvatar, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
+import { DEV_AUTH } from "../App";
+
+// Native min-validation would block dev/E2E backdating — server enforces the
+// same rule with the same dev exemption.
+const MIN_DT = DEV_AUTH ? undefined : toDatetimeLocal(new Date().toISOString());
 
 
 export function EventPage() {
@@ -624,19 +629,19 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
           </div>
           <div>
             <div className="muted small" style={{ marginBottom: 6 }}>Times that work (tap a day or row label to fill it)</div>
-            <div className="grid" style={{ gridTemplateColumns: "auto repeat(7, 1fr)" }}>
+            <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }}>
               <div />
-              {WEEKDAYS.map((d, wd) => (
-                <button key={wd} type="button" className="hd gp-head" data-testid={`gp-col-${wd}`}
-                  onClick={() => toggleColumn(wd)}>{d}</button>
-              ))}
               {DAYPARTS.map((dp) => (
-                <Fragment key={dp.value}>
+                <button key={dp.value} type="button" className="hd gp-head" data-testid={`gp-row-${dp.value}`}
+                  onClick={() => toggleRow(dp.value)}>{dp.short}</button>
+              ))}
+              {WEEKDAYS.map((d, wd) => (
+                <Fragment key={wd}>
                   <button type="button" className="day gp-head" style={{ textAlign: "left" }}
-                    data-testid={`gp-row-${dp.value}`} onClick={() => toggleRow(dp.value)}>{dp.label}</button>
-                  {WEEKDAYS.map((_, wd) => {
+                    data-testid={`gp-col-${wd}`} onClick={() => toggleColumn(wd)}>{d}</button>
+                  {DAYPARTS.map((dp) => {
                     const k = slotKey(wd, dp.value);
-                    return <button key={wd} type="button" data-testid={`gp-cell-${wd}-${dp.value}`}
+                    return <button key={dp.value} type="button" data-testid={`gp-cell-${wd}-${dp.value}`}
                       className={`cell ${cells.has(k) ? "on" : ""}`} onClick={() => toggleCell(k)} />;
                   })}
                 </Fragment>
@@ -913,18 +918,18 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
       {e.status === "scheduled" && (
         <>
           <label className="field">{sibs.length > 0 ? "This date" : "When"}
-            <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="edit-time"
+            <input type="datetime-local" className="input" min={MIN_DT} data-testid="edit-time"
               value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
           </label>
           <label className="field">Ends <span className="muted small">(optional)</span>
-            <input type="datetime-local" className="input" min={startsAt || undefined} data-testid="edit-end"
+            <input type="datetime-local" className="input" min={startsAt || MIN_DT} data-testid="edit-end"
               value={endsAt} onChange={(ev) => setEndsAt(ev.target.value)} />
           </label>
         </>
       )}
       {sibs.map((occ, i) => (
         <label className="field" key={occ.id}>Date {i + 2} of the series
-          <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())}
+          <input type="datetime-local" className="input" min={MIN_DT}
             data-testid={`edit-time-sib-${i}`} value={sibValue(occ.id, occ.starts_at!)}
             onChange={(ev) => setSibTimes((m) => ({ ...m, [occ.id]: ev.target.value }))} />
         </label>
@@ -1437,18 +1442,18 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                 ))}
               </div>
             )}
-            <div className="grid" style={{ gridTemplateColumns: "auto repeat(7, 1fr)" }}>
+            <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }}>
               <div />
-              {WEEKDAYS.map((d, wd) => <div key={wd} className="hd">{d}</div>)}
-              {DAYPARTS.map((dp) => (
-                <Fragment key={dp.value}>
-                  <div className="day" style={{ textAlign: "left" }}>{dp.label}</div>
-                  {WEEKDAYS.map((_, wd) => {
+              {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
+              {WEEKDAYS.map((d, wd) => (
+                <Fragment key={wd}>
+                  <div className="day" style={{ textAlign: "left" }}>{d}</div>
+                  {DAYPARTS.map((dp) => {
                     const key = slotKey(wd, dp.value);
                     const pickKey = `${targetMonth || "soon"}|${key}`;
                     const n = slotCounts.get(key) ?? 0;
                     return (
-                      <button key={wd} type="button" className="cell" data-testid={`grg-pick-${wd}-${dp.value}`}
+                      <button key={dp.value} type="button" className="cell" data-testid={`grg-pick-${wd}-${dp.value}`}
                         onClick={() => {
                           const dt = nextDateOfWeekday(wd, DAYPART_HOUR[dp.value]);
                           if (dt) togglePick(pickKey, dt);
@@ -1504,7 +1509,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
         </div>
       )}
       <div className="row" style={{ gap: 6 }}>
-        <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid="general-finalize-time" value={when}
+        <input type="datetime-local" className="input" min={MIN_DT} data-testid="general-finalize-time" value={when}
           onChange={(ev) => setWhen(ev.target.value)} />
         {when !== "" && (
           <button type="button" className="btn ghost sm" data-testid="general-finalize-clear"
@@ -1513,7 +1518,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
       </div>
       {moreWhens.map((v, i) => (
         <div key={i} className="row" style={{ gap: 6 }}>
-          <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid={`general-finalize-time-${i + 1}`} value={v}
+          <input type="datetime-local" className="input" min={MIN_DT} data-testid={`general-finalize-time-${i + 1}`} value={v}
             onChange={(ev) => setMoreWhens((m) => m.map((x, j) => (j === i ? ev.target.value : x)))} />
           <button type="button" className="btn ghost sm" data-testid={`general-finalize-remove-${i + 1}`}
             onClick={() => setMoreWhens((m) => m.filter((_, j) => j !== i))}>✕</button>

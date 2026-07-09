@@ -105,7 +105,9 @@ test.describe("scheduler", () => {
     // Back in the host view, the aggregate reflects the pick.
     await page.getByTestId("preview-toggle").click();
     await expect(page.getByText("Group availability")).toBeVisible();
-    await expect(page.getByText("Evening")).toBeVisible();
+    // Flipped grid (days vertical, times horizontal): the Saturday-evening cell
+    // carries the single vote.
+    await expect(page.getByTestId("grg-pick-6-evening")).toHaveText("1");
 
     // Per-guest view: a responder dot appears; selecting it highlights that
     // person's picks, and "show everyone" clears the selection.
@@ -310,7 +312,10 @@ test.describe("scheduler", () => {
       await ensureUser(g, "fit2", "Fit Guest", "fit2");
       await g.goto("/profile");
       await g.getByTestId("avail-edit").click();
-      await g.getByTestId("avail-cell-1-evening").click();
+      const fitCell = g.getByTestId("avail-cell-1-evening");
+      if (!((await fitCell.getAttribute("class")) ?? "").includes("on")) {
+        await fitCell.click(); // idempotent across gate passes (shared DB)
+      }
       await g.getByTestId("save-availability").click();
       await expect(g.getByText("Availability saved ✓")).toBeVisible();
       await g.goto(`/e/${id}`);
@@ -415,8 +420,7 @@ test.describe("scheduler", () => {
     // Host sees the responder's real name on the dot, not "Guest".
     await page.reload();
     await expect(page.getByTestId("responder-dots")).toBeVisible();
-    const dot = page.locator('[data-testid^="responder-"]').first();
-    await expect(dot).toHaveAttribute("title", /Norah NoRsvp/);
+    await expect(page.getByTestId("responder-vn2")).toHaveAttribute("title", "Norah NoRsvp");
   });
 
   test("past events leave All and live under the Past filter", async ({ page }) => {

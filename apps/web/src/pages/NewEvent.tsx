@@ -5,6 +5,10 @@ import { CATEGORIES, CITY_OPTIONS, Event, EventType, Friend, getJSON, guessCity,
 import { EVENT_TYPES } from "../scheduler/questions";
 import { AddressInput, Avatar, useAsync } from "../ui";
 import { DEV_AUTH } from "../App";
+
+// Native min-validation would block dev/E2E backdating — server enforces the
+// same rule with the same dev exemption.
+const MIN_DT = DEV_AUTH ? undefined : toDatetimeLocal(new Date().toISOString());
 import { EVENTS, analytics } from "../analytics";
 
 // Event creation is a one-step-at-a-time wizard (à la Airtable forms): What →
@@ -302,17 +306,17 @@ export function NewEvent() {
 
             {schedulingMode === "fixed" && (
               <div className="stack" style={{ marginTop: 8 }}>
-                <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())}
+                <input type="datetime-local" className="input" min={MIN_DT}
                   data-testid="fixed-time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
                 <label className="field" style={{ marginBottom: 0 }}>Ends <span className="muted small">(optional)</span>
-                  <input type="datetime-local" className="input" min={startsAt || toDatetimeLocal(new Date().toISOString())}
+                  <input type="datetime-local" className="input" min={startsAt || MIN_DT}
                     data-testid="fixed-end" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
                 </label>
                 {/* Irregular series: stack more explicit dates (any days). Mutually
                     exclusive with a repeat pattern — picking dates clears it. */}
                 {moreStarts.map((d, i) => (
                   <div key={i} className="row" style={{ gap: 6 }}>
-                    <input type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid={`more-date-${i}`}
+                    <input type="datetime-local" className="input" min={MIN_DT} data-testid={`more-date-${i}`}
                       value={d} onChange={(e) => setMoreStarts((m) => m.map((x, j) => (j === i ? e.target.value : x)))} />
                     <button type="button" className="btn ghost sm" data-testid={`more-date-remove-${i}`}
                       onClick={() => setMoreStarts((m) => m.filter((_, j) => j !== i))}>✕</button>
@@ -345,7 +349,7 @@ export function NewEvent() {
             {schedulingMode === "poll" && (
               <div className="stack" style={{ marginTop: 8 }}>
                 {options.map((o, i) => (
-                  <input key={i} type="datetime-local" className="input" min={toDatetimeLocal(new Date().toISOString())} data-testid={`poll-option-${i}`}
+                  <input key={i} type="datetime-local" className="input" min={MIN_DT} data-testid={`poll-option-${i}`}
                     value={o} onChange={(e) => setOption(i, e.target.value)} />
                 ))}
                 <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
