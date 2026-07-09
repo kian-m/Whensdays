@@ -635,3 +635,11 @@ textarea.input { resize: vertical; min-height: 64px; }
    scrolls from headers, labels, and everything outside the grid */
 .grid.paintable { user-select: none; -webkit-user-select: none; }
 .grid.paintable .cell { touch-action: none; }
+
+/* add-to-homescreen steps: numbered chips + the real iOS glyphs */
+.a2hs-step {
+  width: 20px; height: 20px; border-radius: 999px; flex: none;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent); font-size: 0.72rem; font-weight: 800;
+  display: inline-grid; place-items: center;
+}

@@ -302,6 +302,28 @@ export function drawQR(url: string, color: string, style: QRStyle): string {
 // concept; also keeps desktop E2E flows untouched), never when already
 // installed. Android taps through to the NATIVE install dialog when the
 // browser offered one; iOS gets the share-sheet steps.
+// The exact glyphs iOS shows - recognition beats description.
+function ShareGlyph() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" />
+    </svg>
+  );
+}
+function PlusGlyph() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="4" y="4" width="16" height="16" rx="4" /><path d="M12 9v6M9 12h6" />
+    </svg>
+  );
+}
+
+// In-app browsers (Instagram/Facebook/TikTok/Twitter webviews) can't install
+// PWAs at all - the only honest guidance is "open in your real browser".
+function inAppBrowser(): boolean {
+  return /Instagram|FBAN|FBAV|Twitter|TikTok|Snapchat|Line\//i.test(navigator.userAgent);
+}
+
 export function HomescreenPrompt({ onClose }: { onClose: () => void }) {
   const native = deferredInstall;
   return createPortal(
@@ -312,14 +334,29 @@ export function HomescreenPrompt({ onClose }: { onClose: () => void }) {
         <p className="muted small" style={{ margin: 0 }}>
           Your plans, RSVPs, and polls on your home screen - it opens like an app.
         </p>
-        {!native && isIOS() && (
+        {!native && inAppBrowser() && (
           <p className="small" style={{ margin: 0 }}>
-            Tap the <strong>Share</strong> button below, then <strong>"Add to Home Screen"</strong>.
+            This in-app browser can't install it - open <strong>whensdays.com</strong> in
+            {isIOS() ? " Safari" : " your browser"} first (menu → open in browser).
           </p>
         )}
-        {!native && !isIOS() && (
+        {!native && !inAppBrowser() && isIOS() && (
+          <div className="stack" style={{ gap: 10 }}>
+            <span className="row" style={{ gap: 10 }}>
+              <span className="a2hs-step">1</span>
+              <ShareGlyph />
+              <span className="small">Tap <strong>Share</strong> in the bar below</span>
+            </span>
+            <span className="row" style={{ gap: 10 }}>
+              <span className="a2hs-step">2</span>
+              <PlusGlyph />
+              <span className="small">Scroll and tap <strong>Add to Home Screen</strong></span>
+            </span>
+          </div>
+        )}
+        {!native && !inAppBrowser() && !isIOS() && (
           <p className="small" style={{ margin: 0 }}>
-            Open your browser menu and choose <strong>"Add to Home screen"</strong>.
+            Open your browser menu (⋮) and choose <strong>"Add to Home screen"</strong>.
           </p>
         )}
         <div className="row" style={{ justifyContent: "flex-end" }}>
