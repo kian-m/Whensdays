@@ -325,6 +325,55 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("share-card-modal")).toHaveCount(0);
   });
 
+  test("slide-to-paint availability; poll picks sync to main availability", async ({ page }) => {
+    test.skip(!DEV_AUTH, "asserts via dev-header API reads");
+    await ensureUser(page, "slider", "Slide R", "slider");
+
+    // Drag across three cells on the profile availability grid - one gesture
+    // paints them all (When2meet-style).
+    await page.goto("/profile");
+    await page.getByTestId("avail-edit").click();
+    await expect(page.getByTestId("availability-grid")).toBeVisible();
+    await page.getByTestId("avail-cell-0-morning").hover();
+    await page.mouse.down();
+    await page.getByTestId("avail-cell-0-afternoon").hover();
+    await page.getByTestId("avail-cell-0-evening").hover();
+    await page.mouse.up();
+    for (const dp of ["morning", "afternoon", "evening"]) {
+      await expect(page.getByTestId(`avail-cell-0-${dp}`)).toHaveClass(/\bon\b/);
+    }
+
+    // Poll picks flow back into main availability: vote two week-scope cells,
+    // then the SAME cells show as free days on /api/availability/days.
+    await page.goto("/quick");
+    const title = `Sync ${test.info().testId}-${Date.now()}`;
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-mode-avail").click(); // week-scope poll
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const id = page.url().split("/e/")[1];
+
+    // The voting grid is guest-side (the host sees results), so vote via the
+    // API as a second user - the sync itself is server-side.
+    const day = new Date(Date.now() + 2 * 24 * 3600_000);
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    const d = `${day.getFullYear()}-${p2(day.getMonth() + 1)}-${p2(day.getDate())}`;
+    const synced = await page.evaluate(async ({ eid, d }) => {
+      const h = { "Content-Type": "application/json", "X-Dev-User": "slidee" };
+      await fetch("/api/profile", { method: "PUT", headers: h, body: JSON.stringify({ display_name: "Slide E", handle: "slidee" }) });
+      await fetch(`/api/events/${eid}/general-votes`, {
+        method: "POST", headers: h,
+        body: JSON.stringify({ day_slots: [{ day: d, daypart: "evening" }, { day: d, daypart: "night" }] }),
+      });
+      const res = await fetch("/api/availability/days", { headers: { "X-Dev-User": "slidee" } });
+      const b = await res.json();
+      return (b.days ?? []).filter((x: { day: string }) => x.day.startsWith(d))
+        .map((x: { daypart: string; status?: string }) => `${x.daypart}:${x.status ?? "free"}`);
+    }, { eid: id, d });
+    expect(synced).toContain("evening:free");
+    expect(synced).toContain("night:free");
+  });
+
   test("capacity: full events waitlist, freed spots auto-promote", async ({ page }) => {
     test.skip(!DEV_AUTH, "drives extra users via dev headers");
     await ensureUser(page, "caphost", "Cap Host", "caphost");

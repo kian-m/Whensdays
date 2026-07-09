@@ -1919,6 +1919,25 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Event
 	return i, err
 }
 
+const upsertAvailabilityDayFree = `-- name: UpsertAvailabilityDayFree :exec
+INSERT INTO availability_days (user_id, day, daypart, status)
+VALUES ($1, $2, $3, 'free')
+ON CONFLICT (user_id, day, daypart) DO UPDATE SET status = 'free'
+`
+
+type UpsertAvailabilityDayFreeParams struct {
+	UserID  string      `json:"user_id"`
+	Day     pgtype.Date `json:"day"`
+	Daypart string      `json:"daypart"`
+}
+
+// Poll picks flow back into MAIN availability: a concrete dayslot vote marks
+// that cell free (overwriting a stale busy - the guest just said they can).
+func (q *Queries) UpsertAvailabilityDayFree(ctx context.Context, arg UpsertAvailabilityDayFreeParams) error {
+	_, err := q.db.Exec(ctx, upsertAvailabilityDayFree, arg.UserID, arg.Day, arg.Daypart)
+	return err
+}
+
 const upsertPreferenceAnswer = `-- name: UpsertPreferenceAnswer :one
 
 INSERT INTO event_preference_answers (event_id, user_id, question_key, answer)

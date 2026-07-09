@@ -133,6 +133,23 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
     }
   }
 
+  // Slide-to-paint: the drag's operation is decided from its first cell; "on"
+  // paints the active brush color, "off" clears to unselected.
+  function paintCellTo(g: Grid, k: string, on: boolean) {
+    if (!on) {
+      mutate(g.setFree, (s) => s.delete(k));
+      mutate(g.setBusy, (s) => s.delete(k));
+      return;
+    }
+    if (paintMode === "free") {
+      mutate(g.setFree, (s) => s.add(k));
+      mutate(g.setBusy, (s) => s.delete(k));
+    } else {
+      mutate(g.setBusy, (s) => s.add(k));
+      mutate(g.setFree, (s) => s.delete(k));
+    }
+  }
+
   // Tap a row/date or column header: fill the whole line with the active brush,
   // or clear it if the line is already entirely that color. Locked cells are skipped.
   function paintLine(g: Grid, keys: string[]) {
@@ -336,13 +353,15 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
             summary line + the Edit button, so the profile stays compact. */}
         {editingAvail && (mode === "weekly" ? (
           <>
-            <p className="muted small">Tap a cell to mark it {paintMode}; tap again to clear it. A row/column header fills the whole line.</p>
+            <p className="muted small">Tap or slide across cells to mark them {paintMode}; tap a marked cell to clear it. A row/column header fills the whole line.</p>
             <DayGrid dates={WEEK_ROWS} free={week} busy={weekBusy} cols={WEEK_PARTS} idPrefix="wk"
-              onToggle={toggleWeekCell} onToggleRow={toggleWeekRow} onToggleCol={toggleWeekCol} testid="weekly-grid" />
+              onToggle={toggleWeekCell} onToggleRow={toggleWeekRow} onToggleCol={toggleWeekCol} testid="weekly-grid"
+              paintOn={paintMode === "free" ? week : weekBusy}
+              onPaint={(day, dp, on) => paintCellTo(weekGrid, `${day}:${dp}`, on)} />
           </>
         ) : (
           <>
-            <p className="muted small">Tap a cell to mark it {paintMode}; tap again to clear it. A date/column header fills the whole line.</p>
+            <p className="muted small">Tap or slide across cells to mark them {paintMode}; tap a marked cell to clear it. A date/column header fills the whole line.</p>
             <div className="row between" style={{ alignItems: "center" }}>
               <button type="button" className="btn ghost sm" data-testid="avail-earlier"
                 disabled={pageOffset === 0} onClick={() => setPageOffset((o) => Math.max(0, o - PAGE))}>← Earlier</button>
@@ -351,7 +370,9 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
                 disabled={pageOffset >= MAX_OFFSET} onClick={() => setPageOffset((o) => Math.min(MAX_OFFSET, o + PAGE))}>Later →</button>
             </div>
             <DayGrid dates={dates} free={free} busy={dayBusy} locked={busyCells}
-              onToggle={toggleCell} onToggleRow={toggleRow} onToggleCol={toggleCol} testid="availability-grid" />
+              onToggle={toggleCell} onToggleRow={toggleRow} onToggleCol={toggleCol} testid="availability-grid"
+              paintOn={paintMode === "free" ? free : dayBusy}
+              onPaint={(day, dp, on) => paintCellTo(dateGrid, `${day}:${dp}`, on)} />
           </>
         ))}
 

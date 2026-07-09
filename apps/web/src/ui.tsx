@@ -100,7 +100,7 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, testid }: {
 // hatched red and non-interactive (you can't edit what your calendar says).
 export function DayGrid({
   dates, free, busy, locked, cols = DAYPARTS, idPrefix = "avail",
-  onToggle, onToggleRow, onToggleCol, readOnly, testid,
+  onToggle, onToggleRow, onToggleCol, onPaint, paintOn, readOnly, testid,
 }: {
   dates: { value: string; label: string }[];
   free: Set<string>;
@@ -111,10 +111,47 @@ export function DayGrid({
   onToggle?: (day: string, dp: string) => void;
   onToggleRow?: (day: string) => void;
   onToggleCol?: (dp: string) => void;
+  // SLIDE-TO-PAINT (When2meet-style): when provided, a press decides the
+  // operation from the FIRST cell (in paintOn already? clear : set) and every
+  // cell the finger/pointer crosses gets the same operation once. paintOn is
+  // the set that defines "on" for that decision (the active brush's set on
+  // Profile, the selected set on poll grids). Taps go through the same path.
+  onPaint?: (day: string, dp: string, on: boolean) => void;
+  paintOn?: Set<string>;
   readOnly?: boolean;
   testid?: string;
 }) {
   const key = (day: string, dp: string) => `${day}:${dp}`;
+  // One drag = one operation applied to each cell at most once.
+  const drag = useRef<{ on: boolean; painted: Set<string> } | null>(null);
+  const applyAt = (el: Element | null) => {
+    if (!drag.current || !onPaint) return;
+    const cell = (el as HTMLElement | null)?.closest?.("[data-day]") as HTMLElement | null;
+    if (!cell || cell.hasAttribute("disabled")) return;
+    const day = cell.dataset.day!;
+    const dp = cell.dataset.dp!;
+    const k = key(day, dp);
+    if (drag.current.painted.has(k)) return;
+    drag.current.painted.add(k);
+    onPaint(day, dp, drag.current.on);
+  };
+  const paintHandlers = onPaint && !readOnly ? {
+    onPointerDown: (e: React.PointerEvent) => {
+      const cell = (e.target as HTMLElement).closest?.("[data-day]") as HTMLElement | null;
+      if (!cell || cell.hasAttribute("disabled")) return;
+      e.preventDefault();
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      const k = key(cell.dataset.day!, cell.dataset.dp!);
+      drag.current = { on: !(paintOn ?? free).has(k), painted: new Set() };
+      applyAt(cell);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (!drag.current) return;
+      applyAt(document.elementFromPoint(e.clientX, e.clientY));
+    },
+    onPointerUp: () => { drag.current = null; },
+    onPointerCancel: () => { drag.current = null; },
+  } : {};
   const cellClass = (k: string) => {
     if (locked?.has(k)) return "cell locked";
     if (free.has(k)) return "cell on";
@@ -128,7 +165,8 @@ export function DayGrid({
     return "not set";
   };
   return (
-    <div className="grid" style={{ gridTemplateColumns: `auto repeat(${cols.length}, 1fr)` }} data-testid={testid}>
+    <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
+      style={{ gridTemplateColumns: `auto repeat(${cols.length}, 1fr)` }} data-testid={testid} {...paintHandlers}>
       <div />
       {cols.map((dp) =>
         readOnly ? (
@@ -156,9 +194,15 @@ export function DayGrid({
               <div key={dp.value} className={cellClass(k)} title={cellTitle(k)} role="img" aria-label={label} />
             ) : (
               <button key={dp.value} type="button" data-testid={`${idPrefix}-cell-${i}-${dp.value}`}
+                data-day={d.value} data-dp={dp.value}
                 className={cellClass(k)} disabled={isLocked} title={cellTitle(k)}
                 aria-label={label} aria-pressed={free.has(k)}
-                onClick={() => onToggle?.(d.value, dp.value)} />
+                onClick={onPaint ? undefined : () => onToggle?.(d.value, dp.value)}
+                onKeyDown={onPaint ? (ev) => {
+                  if (ev.key !== "Enter" && ev.key !== " ") return;
+                  ev.preventDefault();
+                  onPaint(d.value, dp.value, !(paintOn ?? free).has(k));
+                } : undefined} />
             );
           })}
         </Fragment>

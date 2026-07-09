@@ -461,3 +461,10 @@ LIMIT 1;
 
 -- name: PromoteAttendee :exec
 UPDATE event_attendees SET rsvp = 'going' WHERE event_id = $1 AND user_id = $2 AND rsvp = 'waitlist';
+
+-- name: UpsertAvailabilityDayFree :exec
+-- Poll picks flow back into MAIN availability: a concrete dayslot vote marks
+-- that cell free (overwriting a stale busy - the guest just said they can).
+INSERT INTO availability_days (user_id, day, daypart, status)
+VALUES ($1, $2, $3, 'free')
+ON CONFLICT (user_id, day, daypart) DO UPDATE SET status = 'free';

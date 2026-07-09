@@ -1288,6 +1288,27 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Availability flows back: a concrete date+daypart pick on any poll also
+	// marks that cell free in the guest's MAIN availability (a poll answer IS
+	// an availability statement). Additive only - unpicked cells stay as they
+	// were, and 'free' overwrites a stale busy. Fuzzy general-scope picks
+	// (months / weekdays) don't map to concrete cells and are skipped.
+	for _, v := range rows {
+		if v.dimension != "dayslot" {
+			continue
+		}
+		parts := strings.SplitN(v.value, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		d, derr := time.Parse("2006-01-02", parts[0])
+		if derr != nil {
+			continue
+		}
+		_ = s.queries.UpsertAvailabilityDayFree(r.Context(), db.UpsertAvailabilityDayFreeParams{
+			UserID: uid, Day: pgtype.Date{Time: d, Valid: true}, Daypart: parts[1],
+		})
+	}
 	s.analytics.Capture(uid, "general_voted", map[string]any{
 		"event_id": r.PathValue("id"),
 		"scope":    ev.GeneralScope,

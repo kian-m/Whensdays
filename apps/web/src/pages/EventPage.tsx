@@ -629,24 +629,28 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
       {scope === "week" && (
         <div>
           <div className="row between" style={{ marginBottom: 6 }}>
-            <span className="muted small">Tap the times that work (a date or column header fills the line)</span>
+            <span className="muted small">Tap or slide across the times that work (a date or column header fills the line)</span>
             <button type="button" className="btn ghost sm" data-testid="gpw-clear"
               disabled={dayCells.size === 0} onClick={() => mutate(setDayCells, (s) => s.clear())}>Clear</button>
           </div>
           <DayGrid dates={weekDates} free={dayCells} idPrefix="gpw" testid="gp-week-grid"
-            onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleDayCol} />
+            onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleDayCol}
+            paintOn={dayCells}
+            onPaint={(day, dp, on) => mutate(setDayCells, (s) => (on ? s.add(`${day}:${dp}`) : s.delete(`${day}:${dp}`)))} />
         </div>
       )}
 
       {scope === "month" && (
         <div>
           <div className="row between" style={{ marginBottom: 6 }}>
-            <span className="muted small">Tap the times that work over the next 4 weeks (a date or column header fills the line)</span>
+            <span className="muted small">Tap or slide across the times that work over the next 4 weeks (a date or column header fills the line)</span>
             <button type="button" className="btn ghost sm" data-testid="gp-days-clear"
               disabled={dayCells.size === 0} onClick={() => mutate(setDayCells, (s) => s.clear())}>Clear</button>
           </div>
           <DayGrid dates={monthDates} free={dayCells} idPrefix="gpm" testid="gp-month-grid"
-            onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleMonthCol} />
+            onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleMonthCol}
+            paintOn={dayCells}
+            onPaint={(day, dp, on) => mutate(setDayCells, (s) => (on ? s.add(`${day}:${dp}`) : s.delete(`${day}:${dp}`)))} />
         </div>
       )}
 

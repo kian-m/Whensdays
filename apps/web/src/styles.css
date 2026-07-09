@@ -630,3 +630,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .addr-item:hover { background: var(--accent-soft); color: var(--accent); }
 .accent { color: var(--accent); font-weight: 600; }
+
+/* slide-to-paint grids: touches on cells paint (never scroll); the page still
+   scrolls from headers, labels, and everything outside the grid */
+.grid.paintable { user-select: none; -webkit-user-select: none; }
+.grid.paintable .cell { touch-action: none; }
