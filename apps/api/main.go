@@ -186,9 +186,7 @@ func main() {
 	mux.Handle("GET /api/calendar/events", auth(http.HandlerFunc(s.handleCalendarEvents)))
 	mux.Handle("GET /api/calendar/google/connect", auth(http.HandlerFunc(s.handleGoogleConnect)))
 	mux.Handle("POST /api/calendar/apple-caldav", auth(http.HandlerFunc(s.handleAppleCalDAVConnect)))
-	mux.Handle("GET /api/calendar/outlook/connect", auth(http.HandlerFunc(s.handleOutlookConnect)))
 	mux.HandleFunc("GET /api/calendar/google/callback", s.handleGoogleCallback)
-	mux.HandleFunc("GET /api/calendar/outlook/callback", s.handleOutlookCallback) // unauthenticated like Google's - identity in signed state
 	mux.Handle("POST /api/calendar/apple", auth(http.HandlerFunc(s.handleAppleConnect)))
 	mux.Handle("DELETE /api/calendar/connections/{provider}", auth(http.HandlerFunc(s.handleDisconnectCalendar)))
 	// Groups (see groups.go) - the recurring-circle wedge.

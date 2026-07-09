@@ -196,12 +196,11 @@ function DayList({ cursor, byDay, onOpen }: {
 // Connection management - rendered on the PROFILE page.
 // ---------------------------------------------------------------------------
 
-type CalendarResp = { connections: CalendarConnection[]; events: ImportedEvent[]; outlook_enabled: boolean };
+type CalendarResp = { connections: CalendarConnection[]; events: ImportedEvent[] };
 
 const PROVIDER_LABEL: Record<CalendarProvider, string> = {
   google: "Google Calendar",
   apple_caldav: "Apple Calendar",
-  outlook: "Outlook",
   apple_ical: "Published link (any calendar)",
 };
 
@@ -267,7 +266,7 @@ export function CalendarConnections() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function oauthConnect(provider: "google" | "outlook") {
+  async function oauthConnect(provider: "google") {
     analytics.capture(EVENTS.calendarConnectStarted, { provider });
     const res = await api(`/api/calendar/${provider}/connect`);
     if (!res.ok) return setMsg(`${PROVIDER_LABEL[provider]} isn't available right now.`);
@@ -336,11 +335,6 @@ export function CalendarConnections() {
           </form>
         )}
       </ProviderRow>
-      {data?.outlook_enabled && (
-        <ProviderRow icon="📆" label={PROVIDER_LABEL.outlook} connectedLabel={labelOf("outlook")}
-          connectTestid="connect-outlook" disconnectTestid="disconnect-outlook"
-          onConnect={() => oauthConnect("outlook")} onDisconnect={() => disconnect("outlook")} />
-      )}
       <ProviderRow icon="🔗" label={PROVIDER_LABEL.apple_ical} connectedLabel={labelOf("apple_ical")}
         connectTestid="connect-apple-open" disconnectTestid="disconnect-apple"
         onConnect={() => { setErr(null); setOpenForm(openForm === "ical" ? "" : "ical"); }}

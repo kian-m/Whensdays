@@ -83,7 +83,7 @@ test.describe("calendars (import)", () => {
     await expect(page.getByTestId("cal-title")).not.toHaveText(monthTitle ?? "");
   });
 
-  test("connect Apple privately (CalDAV) and Outlook (stub)", async ({ page }) => {
+  test("connect Apple privately (CalDAV, stub)", async ({ page }) => {
     await gotoCalendars(page, "calpriv");
 
     // Apple CalDAV: app-specific password form (idempotent across passes).
@@ -95,20 +95,13 @@ test.describe("calendars (import)", () => {
     }
     await expect(page.getByTestId("disconnect-apple-caldav")).toBeVisible({ timeout: 20000 });
 
-    // Outlook OAuth (stub short-circuits through /profile?connected=outlook).
-    if (await page.getByTestId("connect-outlook").isVisible().catch(() => false)) {
-      await page.getByTestId("connect-outlook").click();
-    }
-    await expect(page.getByTestId("disconnect-outlook")).toBeVisible({ timeout: 20000 });
-
-    // Both providers' stub events land on the month view (Aug 2026).
+    // The stub caldav event lands on the month view (Aug 2026).
     await page.goto("/calendars");
     await expect(page.getByTestId("cal-month")).toBeVisible();
     while (!(await page.getByTestId("cal-title").textContent())?.includes("August 2026")) {
       await page.getByTestId("cal-next").click();
     }
     await expect(page.getByText("Yoga class").first()).toBeVisible();
-    await expect(page.getByText("1:1 with Sam").first()).toBeVisible();
   });
 
   test("connect Apple via a published iCal URL (stub)", async ({ page }) => {
