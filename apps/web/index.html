@@ -81,8 +81,12 @@
     </script>
     <div id="root">
       <!-- Static content for crawlers without JavaScript (most AI bots).
-           React replaces this on mount; users never see it. -->
-      <main>
+           React replaces this on mount. Visually hidden (sr-only pattern,
+           inline so it applies before any CSS loads) - crawlers read the raw
+           HTML, so hiding it from human eyes costs nothing; without this the
+           block flashed on cold loads until the JS bundle executed. NOT
+           display:none - screen readers landing pre-mount can still read it. -->
+      <main style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">
         <h1>Whensdays - plans, minus the group-chat chaos</h1>
         <p>A free scheduling and availability app for friend groups and clubs.
         Poll everyone on when they're free and lock the time that works for
