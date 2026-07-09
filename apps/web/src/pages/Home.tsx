@@ -144,13 +144,18 @@ function EventRow({ e, pile, onClick, isNew, soon }: {
       <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={color} size={e.photo_url ? 72 : 46} />
       <div style={{ flex: 1 }}>
         <div className="row between">
-          <span className="title row" style={{ gap: 6 }}>
+          {/* Long titles wrap onto new lines instead of pushing the status pill
+              off the tile: NOT className="row" (the mobile .row.between > .row
+              rule would pin it at intrinsic width), and the pill is flex:none. */}
+          <span className="title" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
             {e.title}
             {isNew && <span className="dot-badge" data-testid="event-new" title="You haven't opened this yet">NEW</span>}
           </span>
-          {soon ? <Pill kind="scheduled">{soon}</Pill>
-            : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
-            : <Pill kind="scheduled">Set</Pill>}
+          <span style={{ flex: "none" }}>
+            {soon ? <Pill kind="scheduled">{soon}</Pill>
+              : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
+              : <Pill kind="scheduled">Set</Pill>}
+          </span>
         </div>
         <div className="muted small">
           {eventLabel(e)} · {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}

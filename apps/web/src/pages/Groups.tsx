@@ -154,9 +154,12 @@ export function GroupPage() {
 
       <div className="card stack">
         <div className="row between">
-          <span className="row" style={{ gap: 10 }}>
+          {/* flex:1 + minWidth:0 override the mobile .row.between > .row
+              flex:none rule so a long group name shrinks/wraps; the button is
+              flex:none so its label never spills past its edge. */}
+          <span className="row" style={{ gap: 10, flex: "1 1 auto", minWidth: 0 }}>
             <GroupIcon group={group} size={64} />
-            <span className="stack" style={{ gap: 4 }}>
+            <span className="stack" style={{ gap: 4, minWidth: 0 }}>
               <h1 data-testid="group-title">{group.name}</h1>
               {groupStreak(events) >= 2 && (
                 <span className="pill polling" data-testid="group-streak" style={{ alignSelf: "flex-start" }}>
@@ -168,6 +171,7 @@ export function GroupPage() {
           <button
             className="btn sm"
             data-testid="group-new-event"
+            style={{ flex: "none" }}
             onClick={() => nav(`/new?group=${group.id}`)}
           >
             + New event

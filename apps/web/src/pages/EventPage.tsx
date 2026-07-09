@@ -853,7 +853,10 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
             top-right corner even when a long title runs two lines (the mobile
             .row wrap rule would otherwise strand them mid-card). */}
         <div className="row" style={{ gap: "0.9rem", flexWrap: "nowrap", alignItems: "flex-start" }}>
-          <div className="emoji" style={{ fontSize: "1.8rem", width: 56, height: 56, flex: "none" }}>{eventEmoji(e)}</div>
+          {/* the cover/GIF is the visual once set - no type emoji beside the title */}
+          {!e.photo_url && (
+            <div className="emoji" style={{ fontSize: "1.8rem", width: 56, height: 56, flex: "none" }}>{eventEmoji(e)}</div>
+          )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 data-testid="event-title">{e.title}</h1>
             <p className="muted">{eventLabel(e)}</p>
