@@ -258,26 +258,28 @@ export function GroupPage() {
       {members.map((m) => {
         const isGroupOwner = m.user_id === group.owner_id;
         return (
-          <div key={m.user_id} className="card row between" data-testid="group-member">
-            <span className="row" style={{ gap: 8, flex: "1 1 auto", minWidth: 0 }}>
+          // Two rows so the action buttons can never collide with the name:
+          // identity on top, management actions right-aligned underneath.
+          <div key={m.user_id} className="card stack" style={{ gap: 8 }} data-testid="group-member">
+            <div className="row" style={{ gap: 8, minWidth: 0, flexWrap: "wrap" }}>
               <Avatar url={m.avatar_url} name={m.display_name} size={32} />
-              <span style={{ minWidth: 0 }}>
+              <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
                 {m.display_name || m.handle}
                 {m.handle && <span className="muted small"> @{m.handle}</span>}
               </span>
               {(isGroupOwner || m.role === "admin") && (
                 <span className="pill scheduled" data-testid={`member-admin-${m.handle}`}>{isGroupOwner ? "Owner" : "Admin"}</span>
               )}
-            </span>
+            </div>
             {canManage && !isGroupOwner && (
-              <span className="row" style={{ gap: 6, flex: "none" }}>
+              <div className="row" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
                 <button className="btn ghost sm" data-testid={`member-role-${m.handle}`}
                   onClick={() => setRole(m.user_id, m.role === "admin" ? "member" : "admin")}>
                   {m.role === "admin" ? "Remove admin" : "Make admin"}
                 </button>
                 <ConfirmButton label="Remove" confirmLabel="Tap again to remove" testid={`member-remove-${m.handle}`}
                   onConfirm={() => removeMember(m.user_id)} />
-              </span>
+              </div>
             )}
           </div>
         );
