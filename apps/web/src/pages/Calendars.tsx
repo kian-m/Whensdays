@@ -10,7 +10,7 @@ import {
   sendJSON,
   useApi,
 } from "../lib";
-import { Loading, useAsync } from "../ui";
+import { ConfirmButton, Loading, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 // ---------------------------------------------------------------------------
@@ -244,7 +244,9 @@ function ProviderRow({ icon, label, connectedLabel, connectTestid, disconnectTes
         {connected ? (
           <span className="row" style={{ gap: 10, flex: "0 1 auto", minWidth: 0, justifyContent: "flex-end" }}>
             <span className="muted small" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{connectedLabel}</span>
-            <button className="btn ghost sm" style={{ flex: "none" }} data-testid={disconnectTestid} onClick={onDisconnect}>Disconnect</button>
+            <span style={{ flex: "none" }}>
+              <ConfirmButton label="Disconnect" confirmLabel="Tap again" testid={disconnectTestid} onConfirm={onDisconnect} />
+            </span>
           </span>
         ) : (
           <button className="btn sm" style={{ flex: "none" }} data-testid={connectTestid} onClick={onConnect}>Connect</button>

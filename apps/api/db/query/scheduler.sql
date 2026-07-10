@@ -148,7 +148,7 @@ SELECT e.id, e.host_id, e.title, e.event_type, e.description,
        e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent, e.capacity
 FROM events e
 JOIN event_attendees a ON a.event_id = e.id
-WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled'
+WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled' AND e.status <> 'draft'
   AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = e.id AND ch.user_id = $1)
 ORDER BY e.created_at DESC;
 
@@ -473,3 +473,15 @@ ON CONFLICT (user_id, day, daypart) DO UPDATE SET status = 'free';
 -- The viewer's own rsvp per event - dashboard tiles use it to render
 -- Attended vs Passed on past events.
 SELECT event_id, rsvp FROM event_attendees WHERE user_id = $1;
+
+
+-- name: SetEventDraft :one
+-- Park / publish an event. Publishing derives the live status: a concrete
+-- start time means scheduled, otherwise the poll resumes.
+UPDATE events
+SET status = CASE WHEN $2::bool THEN 'draft'
+                  WHEN starts_at IS NOT NULL THEN 'scheduled'
+                  ELSE 'polling' END
+WHERE id = $1
+RETURNING id, host_id, title, event_type, description,
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity;

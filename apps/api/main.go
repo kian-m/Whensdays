@@ -166,6 +166,7 @@ func main() {
 	// One-tap RSVP from email (UNauthenticated - signed token; see engage.go)
 	// and the host's nudge-non-responders lever.
 	mux.Handle("GET /api/events/{id}/rsvp-link", readLimit(http.HandlerFunc(s.handleEmailRsvp)))
+	mux.Handle("POST /api/events/{id}/draft", auth(http.HandlerFunc(s.handleSetDraft)))
 	mux.Handle("POST /api/events/{id}/nudge", auth(http.HandlerFunc(s.handleNudge)))
 	// Public on purpose: the event id IS the invite capability (same fields the
 	// OG unfurl already serves), and a bare <a href> can't attach a bearer -
@@ -198,6 +199,7 @@ func main() {
 	mux.Handle("POST /api/groups/{id}/join", auth(http.HandlerFunc(s.handleJoinGroup)))
 	mux.Handle("PUT /api/groups/{id}/icon", auth(http.HandlerFunc(s.handleSetGroupIcon)))
 	mux.Handle("DELETE /api/groups/{id}/members/{userId}", auth(http.HandlerFunc(s.handleRemoveGroupMember)))
+	mux.Handle("PUT /api/groups/{id}/members/{userId}/role", auth(http.HandlerFunc(s.handleSetGroupMemberRole)))
 	mux.Handle("GET /api/friends", auth(http.HandlerFunc(s.handleListFriends)))
 	mux.Handle("POST /api/friends", auth(http.HandlerFunc(s.handleAddFriend)))
 	mux.Handle("POST /api/friends/{id}/accept", auth(http.HandlerFunc(s.handleAcceptFriend)))

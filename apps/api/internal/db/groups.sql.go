@@ -86,6 +86,27 @@ func (q *Queries) GetGroup(ctx context.Context, id pgtype.UUID) (Group, error) {
 	return i, err
 }
 
+const isGroupAdmin = `-- name: IsGroupAdmin :one
+SELECT EXISTS (
+    SELECT 1 FROM groups g WHERE g.id = $1 AND g.owner_id = $2
+    UNION
+    SELECT 1 FROM group_members m WHERE m.group_id = $1 AND m.user_id = $2 AND m.role = 'admin'
+)
+`
+
+type IsGroupAdminParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID string      `json:"user_id"`
+}
+
+// Owner counts as admin everywhere.
+func (q *Queries) IsGroupAdmin(ctx context.Context, arg IsGroupAdminParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isGroupAdmin, arg.ID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const isGroupMember = `-- name: IsGroupMember :one
 SELECT EXISTS (
     SELECT 1 FROM groups g
@@ -171,7 +192,7 @@ const listGroupEvents = `-- name: ListGroupEvents :many
 SELECT id, host_id, title, event_type, description,
        location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
 FROM events
-WHERE group_id = $1 AND status <> 'cancelled'
+WHERE group_id = $1 AND status <> 'cancelled' AND status <> 'draft'
 ORDER BY created_at DESC
 `
 
@@ -261,7 +282,7 @@ func (q *Queries) ListGroupMemberContacts(ctx context.Context, groupID pgtype.UU
 }
 
 const listGroupMembers = `-- name: ListGroupMembers :many
-SELECT m.user_id, m.created_at, p.display_name, p.handle, p.avatar_url
+SELECT m.user_id, m.created_at, m.role, p.display_name, p.handle, p.avatar_url
 FROM group_members m
 LEFT JOIN profiles p ON p.user_id = m.user_id
 WHERE m.group_id = $1
@@ -271,6 +292,7 @@ ORDER BY m.created_at
 type ListGroupMembersRow struct {
 	UserID      string             `json:"user_id"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Role        string             `json:"role"`
 	DisplayName pgtype.Text        `json:"display_name"`
 	Handle      pgtype.Text        `json:"handle"`
 	AvatarUrl   pgtype.Text        `json:"avatar_url"`
@@ -288,6 +310,7 @@ func (q *Queries) ListGroupMembers(ctx context.Context, groupID pgtype.UUID) ([]
 		if err := rows.Scan(
 			&i.UserID,
 			&i.CreatedAt,
+			&i.Role,
 			&i.DisplayName,
 			&i.Handle,
 			&i.AvatarUrl,
@@ -393,4 +416,19 @@ func (q *Queries) SetGroupIcon(ctx context.Context, arg SetGroupIconParams) (Gro
 		&i.IconUrl,
 	)
 	return i, err
+}
+
+const setGroupMemberRole = `-- name: SetGroupMemberRole :exec
+UPDATE group_members SET role = $3 WHERE group_id = $1 AND user_id = $2
+`
+
+type SetGroupMemberRoleParams struct {
+	GroupID pgtype.UUID `json:"group_id"`
+	UserID  string      `json:"user_id"`
+	Role    string      `json:"role"`
+}
+
+func (q *Queries) SetGroupMemberRole(ctx context.Context, arg SetGroupMemberRoleParams) error {
+	_, err := q.db.Exec(ctx, setGroupMemberRole, arg.GroupID, arg.UserID, arg.Role)
+	return err
 }

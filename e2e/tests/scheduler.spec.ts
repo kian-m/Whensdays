@@ -10,6 +10,24 @@ const DEV_AUTH = process.env.E2E_AUTH_MODE === "dev";
 // stubbed so no Clerk is needed. Idempotent: the dev DB persists across the
 // two-pass (baseline + assert) run, so we tolerate pre-existing profile/data.
 test.describe("scheduler", () => {
+  // Publish an event via the API - visibility/topic/city have no UI while
+  // Discover is out of the product, but the routes stay live for direct URLs.
+  const setVisibility = (page: import("@playwright/test").Page, eid: string, user: string,
+    visibility: string, topic = "", city = "") =>
+    page.evaluate(async ({ eid, user, visibility, topic, city }) => {
+      const h = { "Content-Type": "application/json", "X-Dev-User": user };
+      const d = await (await fetch(`/api/events/${eid}`, { headers: h })).json();
+      const e = d.event;
+      await fetch(`/api/events/${eid}`, {
+        method: "PUT", headers: h,
+        body: JSON.stringify({
+          title: e.title, description: e.description, location_mode: e.location_mode,
+          location_address: e.location_address, photo_url: e.photo_url, theme: e.theme,
+          visibility, topic, city,
+        }),
+      });
+    }, { eid, user, visibility, topic, city });
+
   // These tests share the dev stub user (demo-user) and its profile, so run them
   // in order rather than racing two workers over the same first-run setup.
   test.describe.configure({ mode: "serial" });
@@ -140,7 +158,8 @@ test.describe("scheduler", () => {
     // The saved chip is offered on the next create - delete it.
     await page.goto("/new");
     await expect(page.getByTestId("custom-jam sesh")).toBeVisible();
-    await page.getByTestId("custom-del-jam sesh").click();
+    await page.getByTestId("custom-del-jam sesh").click(); // arm
+    await page.getByTestId("custom-del-jam sesh").click(); // confirm
     await expect(page.getByTestId("custom-jam sesh")).toHaveCount(0);
   });
 
@@ -373,6 +392,50 @@ test.describe("scheduler", () => {
     expect(synced).toContain("night:free");
   });
 
+  test("group admins: promotion via UI, only admins create group events", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses dev headers for the second member");
+    await ensureUser(page, "adminboss", "Admin Boss", "adminboss");
+    const gname = `Ruled ${test.info().testId}-${Date.now()}`;
+    await page.goto("/groups");
+    await page.getByTestId("group-name").fill(gname);
+    await page.getByTestId("group-create").click();
+    await page.getByTestId("group-row").filter({ hasText: gname }).first().click();
+    await expect(page.getByTestId("group-title")).toHaveText(gname);
+    const gid = page.url().split("/g/")[1];
+
+    // A plain member joins via the API; they can NOT create group events.
+    const denied = await page.evaluate(async (g) => {
+      const h = { "Content-Type": "application/json", "X-Dev-User": "plainpeer" };
+      await fetch("/api/profile", { method: "PUT", headers: h, body: JSON.stringify({ display_name: "Plain Peer", handle: "plainpeer" }) });
+      await fetch(`/api/groups/${g}/join`, { method: "POST", headers: h });
+      const res = await fetch("/api/events", {
+        method: "POST", headers: h,
+        body: JSON.stringify({ title: "sneaky", event_type: "other", location_mode: "find_venue", scheduling_mode: "general", group_id: g }),
+      });
+      return res.status;
+    }, gid);
+    expect(denied).toBe(403);
+
+    // Owner promotes them from the member list; the pill + rights follow.
+    await page.reload();
+    await page.getByTestId("member-role-plainpeer").click();
+    await expect(page.getByTestId("member-admin-plainpeer")).toBeVisible();
+    const allowed = await page.evaluate(async (g) => {
+      const h = { "Content-Type": "application/json", "X-Dev-User": "plainpeer" };
+      const res = await fetch("/api/events", {
+        method: "POST", headers: h,
+        body: JSON.stringify({ title: "sanctioned", event_type: "other", location_mode: "find_venue", scheduling_mode: "general", group_id: g }),
+      });
+      return res.status;
+    }, gid);
+    expect(allowed).toBe(201);
+
+    // Removing a member is two-tap confirmed.
+    await page.getByTestId("member-remove-plainpeer").click(); // arm
+    await page.getByTestId("member-remove-plainpeer").click(); // confirm
+    await expect(page.getByTestId("member-remove-plainpeer")).toHaveCount(0);
+  });
+
   test("group invite link: a guest joins and sees the group's events", async ({ browser, page }) => {
     test.skip(!DEV_AUTH, "guest flow via the dev ?guest=1 hook");
     await ensureUser(page, "grpinv", "Group Inviter", "grpinv");
@@ -477,6 +540,114 @@ test.describe("scheduler", () => {
     // The promoted guest shows under Going on the guest list.
     await page.reload();
     await expect(page.getByTestId("guests")).toContainText("capb");
+  });
+
+  test("declining an event moves it from All to its own Can't-go section", async ({ page, browser }) => {
+    test.skip(!DEV_AUTH, "uses ?as for isolated users");
+    // Host creates; the decliner RSVPs Can't via the UI, then checks Home.
+    await ensureUser(page, "declhost", "Decl Host", "declhost");
+    const title = `Declinable ${test.info().testId}-${Date.now()}`;
+    const d = new Date(Date.now() + 8 * 24 * 3600_000);
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-when").fill(`${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T19:00`);
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const id = page.url().split("/e/")[1];
+
+    const ctx = await browser.newContext();
+    try {
+      const g = await ctx.newPage();
+      await ensureUser(g, "decliner", "Decl Iner", "decliner");
+      await g.goto(`/e/${id}`);
+      const done = g.waitForResponse((r) => r.url().includes("/rsvp") && r.request().method() === "POST");
+      await g.getByTestId("rsvp-declined").click();
+      await done;
+      await g.goto("/");
+      await g.getByTestId("filter-all").click();
+      await expect(g.getByTestId("event-list").getByText(title)).toHaveCount(0);
+      await g.getByTestId("filter-declined").click();
+      const row = g.getByTestId("event-row").filter({ hasText: title }).first();
+      await expect(row).toBeVisible();
+      await expect(row.getByText("Can't go")).toBeVisible();
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test("drafts: parked events hide from All and guests, publish restores", async ({ page }) => {
+    test.skip(!DEV_AUTH, "uses ?as + dev headers for the guest check");
+    await ensureUser(page, "drafter", "Draft Er", "drafter");
+    const title = `Parked ${test.info().testId}-${Date.now()}`;
+    const d = new Date(Date.now() + 6 * 24 * 3600_000);
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-when").fill(`${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T19:00`);
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const id = page.url().split("/e/")[1];
+
+    // Park it: banner appears, RSVPs 409, other users get a 404.
+    await page.getByTestId("draft-park").click();
+    await expect(page.getByTestId("draft-banner")).toBeVisible();
+    const guest = await page.evaluate(async (eid) => {
+      const h = { "Content-Type": "application/json", "X-Dev-User": "draftguest" };
+      await fetch("/api/profile", { method: "PUT", headers: h, body: JSON.stringify({ display_name: "Draft Guest", handle: "draftguest" }) });
+      const view = await fetch(`/api/events/${eid}`, { headers: h });
+      const rsvp = await fetch(`/api/events/${eid}/rsvp`, { method: "POST", headers: h, body: JSON.stringify({ rsvp: "going" }) });
+      return { view: view.status, rsvp: rsvp.status };
+    }, id);
+    expect(guest.view).toBe(404);
+    expect(guest.rsvp).toBe(409);
+
+    // Off All, on Drafts (with the Draft pill).
+    await page.goto("/");
+    await page.getByTestId("filter-all").click();
+    await expect(page.getByTestId("event-list").getByText(title)).toHaveCount(0);
+    await page.getByTestId("filter-drafts").click();
+    const row = page.getByTestId("event-row").filter({ hasText: title }).first();
+    await expect(row).toBeVisible();
+    await expect(row.getByText("Draft")).toBeVisible();
+
+    // Publish restores it - content intact, back on All, guests can load it.
+    await row.click();
+    await page.getByTestId("draft-publish").click();
+    await expect(page.getByTestId("draft-banner")).toHaveCount(0);
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+    const restored = await page.evaluate(async (eid) => {
+      const res = await fetch(`/api/events/${eid}`, { headers: { "X-Dev-User": "draftguest" } });
+      return res.status;
+    }, id);
+    expect(restored).toBe(200);
+  });
+
+  test("online events: clickable join link + links in descriptions work", async ({ page }) => {
+    await ensureProfile(page);
+    const title = `Online ${test.info().testId}-${Date.now()}`;
+    const d = new Date(Date.now() + 5 * 24 * 3600_000);
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    await page.goto("/new");
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-movie").click();
+    // A pasted link in the description must come out clickable.
+    await page.getByTestId("event-desc").fill("Trailer: https://example.com/trailer then hang out");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-virtual").click();
+    await page.getByTestId("meeting-url").fill("https://meet.google.com/abc-defg-hij");
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill(`${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T20:00`);
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    await expect(page.getByTestId("join-link")).toHaveAttribute("href", "https://meet.google.com/abc-defg-hij");
+    await expect(page.getByTestId("join-link")).toContainText("meet.google.com");
+    const descLink = page.locator("a[href='https://example.com/trailer']");
+    await expect(descLink).toBeVisible();
+    await expect(descLink).toHaveAttribute("rel", /noopener/);
   });
 
   test("poll deadline: shows the close date and stops votes after it", async ({ page }) => {
@@ -1131,14 +1302,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
-    // Creation no longer asks visibility (Discover is out of the nav) - the
-    // host publishes from the event page's Edit form.
-    await page.getByTestId("edit-event-open").click();
-    await page.getByTestId("edit-vis-public").click();
-    await page.getByTestId("edit-cat-streams").click();
-    await page.getByTestId("edit-city").fill("Portland");
-    await page.getByTestId("edit-save").click();
-    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
+    // Visibility has no UI while Discover is denavved - publish via the API.
+    await setVisibility(page, page.url().split("/e/")[1], "pubhost", "public", "streams", "Portland");
 
     // Another user finds it on Discover, filters by topic, follows the host.
     const fanCtx = await browser.newContext();
@@ -1218,7 +1383,8 @@ test.describe("scheduler", () => {
       await expect(other.getByText("Request sent ✓")).toBeVisible();
       await page.goto("/friends");
       await page.getByTestId("friend-handle").waitFor();
-      await page.getByTestId("decline-delfriend").click();
+      await page.getByTestId("decline-delfriend").click(); // arm
+      await page.getByTestId("decline-delfriend").click(); // confirm
       await expect(page.getByTestId("accept-delfriend")).toHaveCount(0);
 
       // Request again, accept this time, then unfriend.
@@ -1256,11 +1422,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
-    // Visibility moved off the wizard - set it from the edit form.
-    await page.getByTestId("edit-event-open").click();
-    await page.getByTestId("edit-vis-friends").click();
-    await page.getByTestId("edit-save").click();
-    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
+    await setVisibility(page, page.url().split("/e/")[1], "fv1", "friends");
 
     const otherCtx = await browser.newContext();
     try {
@@ -1321,7 +1483,7 @@ test.describe("scheduler", () => {
     }
   });
 
-  test("edit can take a private event public", async ({ page }) => {
+  test("the visibility API can take a private event public", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for an isolated user");
     await ensureUser(page, "editpub", "Edit Pub", "editpub");
     const title = `Went public ${test.info().testId}`;
@@ -1336,11 +1498,9 @@ test.describe("scheduler", () => {
     await page.getByTestId("create-event").click(); // private by default
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
-    // Edit → Public + a category → it appears on Discover.
-    await page.getByTestId("edit-event-open").click();
-    await page.getByTestId("edit-vis-public").click();
-    await page.getByTestId("edit-cat-gaming").click();
-    await page.getByTestId("edit-save").click();
+    // API → Public + a category → it appears on Discover (routes stay live
+    // for direct URLs even while the nav hides them).
+    await setVisibility(page, page.url().split("/e/")[1], "editpub", "public", "gaming");
     await page.goto("/discover");
     await expect(page.getByText(title).first()).toBeVisible(); // rail or browse
   });
@@ -1358,12 +1518,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
-    // Publish via the edit form (visibility moved off the wizard).
-    await page.getByTestId("edit-event-open").click();
-    await page.getByTestId("edit-vis-public").click();
-    await page.getByTestId("edit-cat-social").click();
-    await page.getByTestId("edit-save").click();
-    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
+    await setVisibility(page, page.url().split("/e/")[1], "pollpub", "public", "social");
 
     // The Discover filter starts EMPTY (no timezone prefill hiding results)
     // and time-less polls are listed.
@@ -1386,13 +1541,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
-    // Publish via the edit form (visibility moved off the wizard).
-    await page.getByTestId("edit-event-open").click();
-    await page.getByTestId("edit-vis-public").click();
-    await page.getByTestId("edit-cat-tech").click();
-    await page.getByTestId("edit-city").fill("Oakland");
-    await page.getByTestId("edit-save").click();
-    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
+    await setVisibility(page, page.url().split("/e/")[1], "regionist", "public", "tech", "Oakland");
 
     // Filtering by the metro region finds the member-city event.
     await page.goto("/discover");
@@ -1739,7 +1888,7 @@ test.describe("scheduler", () => {
       await a.goto("/friends");
       await a.getByTestId("friend-handle").waitFor();
       const leftover = a.getByTestId("cancel-req-recb");
-      if (await leftover.isVisible().catch(() => false)) await leftover.click();
+      if (await leftover.isVisible().catch(() => false)) { await leftover.click(); await leftover.click(); }
       await expect(a.getByTestId("suggest-add-recb")).toBeVisible();
       await a.getByTestId("suggest-add-recb").click();
       // A pending request now exists → B drops out of suggestions.

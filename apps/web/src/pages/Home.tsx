@@ -9,7 +9,7 @@ import { Avatar, EventThumb, Loading, Pill, useAsync } from "../ui";
 type Face = { name: string; avatar_url: string; is_friend: boolean };
 type Pile = { faces: Face[]; going: number };
 type EventsResp = { hosting: Event[]; attending: Event[]; unseen: string[]; faces?: Record<string, Pile>; my_rsvps?: Record<string, string> };
-type Filter = "all" | "upcoming" | "hosting" | "attending" | "past";
+type Filter = "all" | "upcoming" | "hosting" | "attending" | "past" | "drafts" | "declined";
 
 const DAY = 86_400_000;
 
@@ -59,23 +59,35 @@ export function Home() {
   const byId = new Map<string, Event>();
   [...hosting, ...attending].forEach((e) => byId.set(e.id, e));
   const union = [...byId.values()];
-  const past = union.filter(isPast);
-  const all = union.filter((e) => !isPast(e));
+  // Drafts live ONLY under their own filter - parked, not deleted. Same for
+  // events you said Can't-go to: out of the active views, in their own bucket.
+  const drafts = union.filter((e) => e.status === "draft");
+  const iDeclined = (e: Event) => data?.my_rsvps?.[e.id] === "declined" && !hostingIds.has(e.id);
+  const live = union.filter((e) => e.status !== "draft");
+  const past = live.filter(isPast);
+  const declined = live.filter((e) => !isPast(e) && iDeclined(e));
+  const all = live.filter((e) => !isPast(e) && !iDeclined(e));
   const upcoming = all.filter((e) => e.status === "scheduled" && e.starts_at && new Date(e.starts_at).getTime() >= now);
 
+  const activeHosting = hosting.filter((e) => e.status !== "draft" && !isPast(e));
+  const activeAttending = attending.filter((e) => e.status !== "draft" && !isPast(e) && !iDeclined(e));
   const counts: Record<Filter, number> = {
     all: all.length, upcoming: upcoming.length,
-    hosting: hosting.filter((e) => !isPast(e)).length,
-    attending: attending.filter((e) => !isPast(e)).length,
+    hosting: activeHosting.length,
+    attending: activeAttending.length,
     past: past.length,
+    drafts: drafts.length,
+    declined: declined.length,
   };
   const lists: Record<Filter, Event[]> = {
     all: [...all].sort(byWhen),
     upcoming: [...upcoming].sort(byWhen),
-    hosting: hosting.filter((e) => !isPast(e)).sort(byWhen),
-    attending: attending.filter((e) => !isPast(e)).sort(byWhen),
+    hosting: [...activeHosting].sort(byWhen),
+    attending: [...activeAttending].sort(byWhen),
     // Past reads newest-first - the most recent memory on top.
     past: [...past].sort((a, b) => new Date(b.starts_at!).getTime() - new Date(a.starts_at!).getTime()),
+    drafts: [...drafts].sort(byWhen),
+    declined: [...declined].sort(byWhen),
   };
   const shown = lists[filter];
 
@@ -85,6 +97,9 @@ export function Home() {
     { key: "hosting", label: "Hosting" },
     { key: "attending", label: "Attending" },
     { key: "past", label: "Past" },
+    // These only earn a chip once one exists - zero clutter otherwise.
+    ...(drafts.length > 0 ? [{ key: "drafts" as Filter, label: "Drafts" }] : []),
+    ...(declined.length > 0 ? [{ key: "declined" as Filter, label: "Can't go" }] : []),
   ];
 
   return (
@@ -124,13 +139,15 @@ export function Home() {
             : filter === "hosting" ? "You're not hosting anything right now."
             : filter === "past" ? "No past events yet - memories land here the day after."
             : filter === "all" ? "Nothing coming up - everything's in Past."
+            : filter === "drafts" ? "No drafts."
+            : filter === "declined" ? "Nothing you've declined."
             : "Nothing here - you haven't been added to any events."}
         </p>
       ) : (
         <div className="stack" data-testid="event-list">
           {shown.map((e) => (
             <EventRow key={e.id} e={e} pile={data?.faces?.[e.id]} isNew={unseen.has(e.id)}
-              past={isPast(e)} attended={attended(e)}
+              past={isPast(e)} attended={attended(e)} declinedByMe={iDeclined(e)}
               soon={!isPast(e) && e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
           ))}
         </div>
@@ -139,9 +156,9 @@ export function Home() {
   );
 }
 
-function EventRow({ e, pile, onClick, isNew, soon, past, attended }: {
+function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe }: {
   e: Event; pile?: Pile; onClick: () => void; isNew?: boolean; soon?: string;
-  past?: boolean; attended?: boolean;
+  past?: boolean; attended?: boolean; declinedByMe?: boolean;
 }) {
   const color = TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other;
   // Fit the row: show up to 5 faces, fold the rest into "+N more".
@@ -160,7 +177,9 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended }: {
             {isNew && <span className="dot-badge" data-testid="event-new" title="You haven't opened this yet">NEW</span>}
           </span>
           <span style={{ flex: "none" }}>
-            {past ? (attended ? <Pill kind="scheduled">Attended</Pill> : <Pill kind="">Passed</Pill>)
+            {e.status === "draft" ? <Pill kind="">Draft</Pill>
+              : declinedByMe && !past ? <Pill kind="declined">Can't go</Pill>
+              : past ? (attended ? <Pill kind="scheduled">Attended</Pill> : <Pill kind="">Passed</Pill>)
               : soon ? <Pill kind="scheduled">{soon}</Pill>
               : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
               : <Pill kind="scheduled">Set</Pill>}
@@ -170,7 +189,7 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended }: {
           {eventLabel(e)} · {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
         </div>
         <div className="muted small">
-          {e.location_mode === "find_venue" ? "📍 Location TBD" : `📍 ${e.location_address || "Host's place"}`}
+          {e.location_mode === "virtual" ? "💻 Online" : e.location_mode === "find_venue" ? "📍 Location TBD" : `📍 ${e.location_address || "Host's place"}`}
         </div>
         {faces.length > 0 && (
           <div className="facepile" data-testid="facepile">

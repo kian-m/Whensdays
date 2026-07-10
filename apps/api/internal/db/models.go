@@ -179,6 +179,7 @@ type GroupMember struct {
 	GroupID   pgtype.UUID        `json:"group_id"`
 	UserID    string             `json:"user_id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Role      string             `json:"role"`
 }
 
 type GroupStreakCongrat struct {

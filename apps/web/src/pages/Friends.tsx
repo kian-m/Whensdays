@@ -79,7 +79,8 @@ export function Friends() {
               <span>{r.display_name} <span className="muted small">@{r.handle}</span></span>
               <span className="row">
                 <button className="btn soft sm" data-testid={`accept-${r.handle}`} onClick={() => accept(r.id)}>Accept</button>
-                <button className="btn ghost sm" data-testid={`decline-${r.handle}`} onClick={() => remove(r.id)}>Decline</button>
+                <ConfirmButton label="Decline" confirmLabel="Tap again to decline" testid={`decline-${r.handle}`}
+                  onConfirm={() => remove(r.id)} />
               </span>
             </div>
           ))}
@@ -117,7 +118,8 @@ export function Friends() {
               <span>{r.display_name} <span className="muted small">@{r.handle}</span></span>
               <span className="row">
                 <span className="muted small">Awaiting reply</span>
-                <button className="btn ghost sm" data-testid={`cancel-req-${r.handle}`} onClick={() => remove(r.id)}>Cancel</button>
+                <ConfirmButton label="Cancel" confirmLabel="Tap again to cancel" testid={`cancel-req-${r.handle}`}
+                  onConfirm={() => remove(r.id)} />
               </span>
             </div>
           ))}

@@ -2,8 +2,6 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Attendee,
-  CATEGORIES,
-  CITY_OPTIONS,
   DAYPARTS,
   EventDetail,
   Friend,
@@ -32,7 +30,7 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, HomescreenPrompt, Loading, Pill, QRButton, fileToPhoto, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, HomescreenPrompt, Linkify, Loading, Pill, QRButton, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH } from "../App";
 
@@ -48,7 +46,8 @@ const MIN_DT = DEV_AUTH ? undefined : toDatetimeLocal(new Date().toISOString());
 
 export function EventPage() {
   const { id } = useParams();
-  const { data, loading, reload } = useAsync<EventDetail>((api) => getJSON(api, `/api/events/${id}`), [id]);
+  const api = useApi();
+  const { data, loading, reload } = useAsync<EventDetail>((a) => getJSON(a, `/api/events/${id}`), [id]);
   const [preview, setPreview] = useState(false);
   // Live theme preview while editing the hero card - reflects the whole page
   // before the edit is saved. null = show the saved theme.
@@ -92,6 +91,15 @@ export function EventPage() {
   return (
     <div className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
       {celebrate && <div className="fx-locked" data-testid="locked-banner">It&rsquo;s locked in 🎉</div>}
+      {data.event.status === "draft" && data.can_manage && (
+        <div className="card row between" data-testid="draft-banner">
+          <span className="small">📝 <strong>Draft</strong> - only you{data.cohosts.length > 0 ? " and cohosts" : ""} can see this. Guests, emails, and reminders are paused.</span>
+          <button className="btn sm" style={{ flex: "none" }} data-testid="draft-publish"
+            onClick={async () => { await sendJSON(api, "POST", `/api/events/${data.event.id}/draft`, { draft: false }); reload(); }}>
+            Publish
+          </button>
+        </div>
+      )}
       {showA2HS && <HomescreenPrompt onClose={() => { setShowA2HS(false); try { localStorage.setItem("whensdays.a2hs", "1"); sessionStorage.removeItem("whensdays.a2hs-pending"); } catch { /* private mode */ } }} />}
       <BackLink />
       <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} />
@@ -926,6 +934,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           </div>
           <span className="stack" style={{ alignItems: "flex-end", gap: 6, flex: "none" }}>
             {e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
+              : e.status === "draft" ? <Pill kind="">Draft</Pill>
               : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
               : <Pill kind="scheduled">Confirmed</Pill>}
             {canEdit && (
@@ -933,7 +942,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
             )}
           </span>
         </div>
-        {e.description && <p>{e.description}</p>}
+        {e.description && <p style={{ overflowWrap: "anywhere" }}><Linkify text={e.description} /></p>}
         {(data.series?.length ?? 0) > 1 ? (
           <div className="stack" style={{ gap: 2 }} data-testid="hero-dates">
             {data.series!.map((occ) => (
@@ -956,7 +965,14 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           </div>
         )}
         <div className="muted small">
-          {e.location_mode === "find_venue" ? "📍 Location to be decided"
+          {e.location_mode === "virtual" ? (
+            <span className="row" style={{ gap: 8 }}>
+              💻 <a href={e.location_address} target="_blank" rel="noopener noreferrer" className="accent"
+                style={{ textDecoration: "underline", overflowWrap: "anywhere" }} data-testid="join-link">
+                Join online{(() => { try { return ` (${new URL(e.location_address).host})`; } catch { return ""; } })()}
+              </a>
+            </span>
+          ) : e.location_mode === "find_venue" ? "📍 Location to be decided"
             : e.location_address ? (
               <span className="stack" style={{ gap: 2 }}>
                 <span>📍 {e.location_address}</span>
@@ -999,9 +1015,15 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           value={capacity} placeholder="Unlimited" onChange={(ev) => setCapacity(ev.target.value)} />
       </label>
       {e.status === "polling" && (
-        <label className="field">Poll closes <span className="muted small">(optional - "" removes it)</span>
-          <input type="datetime-local" className="input" min={MIN_DT} data-testid="edit-deadline"
-            value={deadline} onChange={(ev) => setDeadline(ev.target.value)} />
+        <label className="field">Poll closes <span className="muted small">(optional)</span>
+          <span className="row" style={{ gap: 6 }}>
+            <input type="datetime-local" className="input" min={MIN_DT} data-testid="edit-deadline"
+              value={deadline} onChange={(ev) => setDeadline(ev.target.value)} />
+            {deadline !== "" && (
+              <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="edit-deadline-clear"
+                onClick={() => setDeadline("")} title="Remove the close date">✕</button>
+            )}
+          </span>
         </label>
       )}
       {e.status === "scheduled" && (
@@ -1011,8 +1033,14 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
               value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
           </label>
           <label className="field">Ends <span className="muted small">(optional)</span>
-            <input type="datetime-local" className="input" min={startsAt || MIN_DT} data-testid="edit-end"
-              value={endsAt} onChange={(ev) => setEndsAt(ev.target.value)} />
+            <span className="row" style={{ gap: 6 }}>
+              <input type="datetime-local" className="input" min={startsAt || MIN_DT} data-testid="edit-end"
+                value={endsAt} onChange={(ev) => setEndsAt(ev.target.value)} />
+              {endsAt !== "" && (
+                <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="edit-end-clear"
+                  onClick={() => setEndsAt("")} title="Remove the end time">✕</button>
+              )}
+            </span>
           </label>
         </>
       )}
@@ -1045,38 +1073,25 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           )}
         </>
       )}
-      <div className="row" style={{ gap: 6 }}>
+      <div className="row wrap" style={{ gap: 6 }}>
         <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
           data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>
+        <button type="button" className={locMode === "virtual" ? "btn sm" : "btn ghost sm"}
+          data-testid="edit-loc-virtual" onClick={() => setLocMode("virtual")}>💻 Online</button>
         <button type="button" className={locMode === "find_venue" ? "btn sm" : "btn ghost sm"}
           data-testid="edit-loc-venue" onClick={() => setLocMode("find_venue")}>Set location later</button>
       </div>
       {locMode === "host_place" && (
         <AddressInput value={locAddr} onChange={setLocAddr} placeholder="Start typing an address…" testid="edit-address" />
       )}
-      <div className="row wrap" style={{ gap: 6 }}>
-        <span className="muted small">Who can find it:</span>
-        {([["private", "🔒 Invite-only"], ["friends", "🤝 Friends"], ["public", "🌎 Public"]] as const).map(([v, l]) => (
-          <button key={v} type="button" className={`chip sm ${visibility === v ? "on" : ""}`}
-            data-testid={`edit-vis-${v}`} onClick={() => setVisibility(v)}>{l}</button>
-        ))}
-      </div>
-      {visibility === "public" && (
-        <>
-          <div className="row wrap" style={{ gap: 4 }}>
-            {CATEGORIES.map((c) => (
-              <button key={c.slug} type="button" className={`chip sm ${topic === c.slug ? "on" : ""}`}
-                data-testid={`edit-cat-${c.slug}`}
-                onClick={() => setTopic(topic === c.slug ? "" : c.slug)}>{c.emoji} {c.label}</button>
-            ))}
-          </div>
-          <input className="input" data-testid="edit-city" list="edit-city-list" value={city}
-            placeholder="city (optional)" onChange={(ev) => setCity(ev.target.value)} />
-          <datalist id="edit-city-list">
-            {CITY_OPTIONS.map((c) => <option key={c} value={c} />)}
-          </datalist>
-        </>
+      {locMode === "virtual" && (
+        <input className="input" data-testid="edit-meeting-url" value={locAddr} inputMode="url"
+          placeholder="https://zoom.us/j/… or https://meet.google.com/…"
+          onChange={(ev) => setLocAddr(ev.target.value)} />
       )}
+      {/* Visibility/topic/city controls removed with Discover (App.tsx TABS
+          note) - the API keeps them and save re-sends the CURRENT values, so
+          existing public events keep their settings untouched. */}
       <div className="row wrap" style={{ gap: 6 }}>
         <span className="muted small">Theme:</span>
         {EVENT_THEMES.map((t) => (
@@ -1112,6 +1127,10 @@ function HostControls({ data, reload }: { data: EventDetail; reload: () => void 
     await sendJSON(api, "PUT", `/api/events/${e.id}/comments-enabled`, { enabled: !e.comments_enabled });
     reload();
   }
+  async function toDrafts() {
+    await sendJSON(api, "POST", `/api/events/${e.id}/draft`, { draft: true });
+    reload();
+  }
   async function addCohost(ev: React.FormEvent) {
     ev.preventDefault();
     setMsg(null);
@@ -1133,9 +1152,17 @@ function HostControls({ data, reload }: { data: EventDetail; reload: () => void 
       <h3 style={{ margin: 0 }}>Host controls</h3>
       <div className="row between">
         <span className="small">Comments are <strong>{e.comments_enabled ? "on" : "off"}</strong></span>
-        <button className="btn soft sm" data-testid="toggle-comments" onClick={toggleComments}>
-          {e.comments_enabled ? "Turn off" : "Turn on"}
-        </button>
+        <span className="row" style={{ gap: 6, flex: "none" }}>
+          {e.status !== "draft" && e.status !== "cancelled" && (
+            <button className="btn ghost sm" data-testid="draft-park" onClick={toDrafts}
+              title="Hide from guests and pause all emails - nothing is deleted">
+              📝 Move to drafts
+            </button>
+          )}
+          <button className="btn soft sm" data-testid="toggle-comments" onClick={toggleComments}>
+            {e.comments_enabled ? "Turn off" : "Turn on"}
+          </button>
+        </span>
       </div>
 
       <div className="section-h">Cohosts</div>
@@ -1143,7 +1170,8 @@ function HostControls({ data, reload }: { data: EventDetail; reload: () => void 
       {data.cohosts.map((c) => (
         <div key={c.user_id} className="row between" data-testid="cohost">
           <span>{c.display_name || c.handle} <span className="muted small">@{c.handle}</span></span>
-          <button className="btn ghost sm" data-testid={`cohost-remove-${c.handle}`} onClick={() => removeCohost(c.user_id)}>Remove</button>
+          <ConfirmButton label="Remove" confirmLabel="Tap again to remove" testid={`cohost-remove-${c.handle}`}
+            onConfirm={() => removeCohost(c.user_id)} />
         </div>
       ))}
       <form className="row" onSubmit={addCohost}>
@@ -1214,7 +1242,7 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
                       </span>
                     )}
                   </div>
-                  {c.body && <div className="comment-body">{c.body}</div>}
+                  {c.body && <div className="comment-body"><Linkify text={c.body} /></div>}
                   {c.gif_url && <img className="comment-gif" data-testid="comment-gif" src={c.gif_url} alt="gif" loading="lazy" />}
                 </div>
               </div>

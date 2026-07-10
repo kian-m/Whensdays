@@ -10,11 +10,11 @@ export type Event = {
   title: string;
   event_type: EventType;
   description: string;
-  location_mode: "host_place" | "find_venue";
+  location_mode: "host_place" | "find_venue" | "virtual";
   location_address: string;
   scheduling_mode: "fixed" | "poll" | "general";
   starts_at: string | null;
-  status: "polling" | "scheduled" | "cancelled";
+  status: "polling" | "scheduled" | "cancelled" | "draft";
   comments_enabled: boolean;
   group_id: string | null;
   series_id: string | null;
@@ -243,8 +243,8 @@ export function guessCity(): string {
 
 export type SeriesItem = { id: string; starts_at: string; status: string };
 export type Group = { id: string; owner_id: string; name: string; emoji: string; created_at: string; icon_url: string };
-export type GroupMember = { user_id: string; display_name: string | null; handle: string | null; avatar_url: string | null };
-export type GroupDetail = { group: Group; members: GroupMember[]; events: Event[]; is_owner: boolean };
+export type GroupMember = { role: "member" | "admin"; user_id: string; display_name: string | null; handle: string | null; avatar_url: string | null };
+export type GroupDetail = { group: Group; members: GroupMember[]; events: Event[]; is_owner: boolean; is_admin: boolean };
 
 export type Comment = {
   id: string;

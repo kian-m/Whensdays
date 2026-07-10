@@ -111,9 +111,10 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "list group events", err)
 		return
 	}
+	isAdmin, _ := s.queries.IsGroupAdmin(r.Context(), db.IsGroupAdminParams{ID: g.ID, UserID: uid})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"group": g, "members": members, "events": events,
-		"is_owner": g.OwnerID == uid,
+		"is_owner": g.OwnerID == uid, "is_admin": isAdmin,
 	})
 }
 
@@ -239,6 +240,43 @@ func (s *server) handleSetGroupIcon(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
+// handleSetGroupMemberRole grants/revokes admin (owner or admins; the owner's
+// implicit admin can't be touched). Admins manage members and are the only
+// ones who can create the group's events.
+func (s *server) handleSetGroupMemberRole(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	g, ok := s.loadGroupForMember(w, r)
+	if !ok {
+		return
+	}
+	isAdmin, _ := s.queries.IsGroupAdmin(r.Context(), db.IsGroupAdminParams{ID: g.ID, UserID: uid})
+	if !isAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admins only"})
+		return
+	}
+	target := r.PathValue("userId")
+	if target == g.OwnerID {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "the owner is always an admin"})
+		return
+	}
+	var in struct {
+		Role string `json:"role"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if !oneOf(in.Role, "member", "admin") {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "role must be member or admin"})
+		return
+	}
+	if err := s.queries.SetGroupMemberRole(r.Context(), db.SetGroupMemberRoleParams{GroupID: g.ID, UserID: target, Role: in.Role}); err != nil {
+		s.internal(w, "set member role", err)
+		return
+	}
+	s.analytics.Capture(uid, "group_role_set", map[string]any{"group_id": r.PathValue("id"), "role": in.Role})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *server) handleRemoveGroupMember(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	g, ok := s.loadGroupForMember(w, r)
@@ -246,9 +284,14 @@ func (s *server) handleRemoveGroupMember(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	target := r.PathValue("userId")
-	// Owner removes anyone; a member may remove themselves (leave).
-	if g.OwnerID != uid && target != uid {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "owner only"})
+	// Owner/admins remove anyone (except the owner); a member removes themselves (leave).
+	isAdmin, _ := s.queries.IsGroupAdmin(r.Context(), db.IsGroupAdminParams{ID: g.ID, UserID: uid})
+	if !isAdmin && target != uid {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admins only"})
+		return
+	}
+	if target == g.OwnerID && uid != g.OwnerID {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "the owner can't be removed"})
 		return
 	}
 	if err := s.queries.RemoveGroupMember(r.Context(), db.RemoveGroupMemberParams{GroupID: g.ID, UserID: target}); err != nil {

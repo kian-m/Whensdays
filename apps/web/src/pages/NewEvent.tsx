@@ -35,7 +35,7 @@ export function NewEvent() {
 
   useEffect(() => {
     if (!againId) return;
-    getJSON<{ event: { title: string; event_type: EventType; description: string; location_mode: "host_place" | "find_venue"; location_address: string } }>(
+    getJSON<{ event: { title: string; event_type: EventType; description: string; location_mode: "host_place" | "find_venue" | "virtual"; location_address: string } }>(
       api, `/api/events/${againId}`,
     ).then((d) => {
       if (repoll) setSchedulingMode("poll");
@@ -52,7 +52,7 @@ export function NewEvent() {
   const [title, setTitle] = useState("");
   const [type, setType] = useState<EventType>("dinner");
   const [description, setDescription] = useState("");
-  const [locationMode, setLocationMode] = useState<"host_place" | "find_venue">("host_place");
+  const [locationMode, setLocationMode] = useState<"host_place" | "find_venue" | "virtual">("host_place");
   const [address, setAddress] = useState("");
   const [schedulingMode, setSchedulingMode] = useState<"fixed" | "poll" | "general">("fixed");
   const [generalScope, setGeneralScope] = useState<"week" | "month" | "general">("general");
@@ -63,6 +63,7 @@ export function NewEvent() {
   // Irregular series: extra explicit dates (any days - recurring, no pattern).
   const [moreStarts, setMoreStarts] = useState<string[]>([]);
   const [pollDeadline, setPollDeadline] = useState("");
+  const [armedDel, setArmedDel] = useState<string | null>(null);
   const [capacity, setCapacity] = useState("");
   const [options, setOptions] = useState<string[]>([""]);
   const [invitees, setInvitees] = useState<Set<string>>(new Set());
@@ -127,7 +128,7 @@ export function NewEvent() {
       event_type: type,
       description,
       location_mode: locationMode,
-      location_address: locationMode === "host_place" ? address : "",
+      location_address: locationMode === "find_venue" ? "" : address.trim(),
       scheduling_mode: schedulingMode,
       timezone: hostTimezone(),
     };
@@ -235,13 +236,19 @@ export function NewEvent() {
                     {t.emoji} {t.label}
                     <button type="button" aria-label={`Delete ${t.label}`}
                       data-testid={`custom-del-${t.label.toLowerCase()}`}
-                      style={{ all: "unset", cursor: "pointer", opacity: 0.6, paddingLeft: 2 }}
+                      style={{ all: "unset", cursor: "pointer", paddingLeft: 2,
+                        opacity: armedDel === t.label ? 1 : 0.6,
+                        color: armedDel === t.label ? "var(--no)" : undefined,
+                        fontWeight: armedDel === t.label ? 800 : undefined }}
                       onClick={async (e) => {
                         e.stopPropagation();
+                        // Two-tap like every other remove: first arms, second deletes.
+                        if (armedDel !== t.label) { setArmedDel(t.label); return; }
+                        setArmedDel(null);
                         await api(`/api/event-types/${encodeURIComponent(t.label)}`, { method: "DELETE" });
                         if (custom?.label === t.label) setCustom(null);
                         reloadTypes();
-                      }}>✕</button>
+                      }}>{armedDel === t.label ? "✕?" : "✕"}</button>
                   </span>
                 ))}
                 <button type="button" className={`chip ${addingType ? "on" : ""}`} data-testid="type-add"
@@ -273,7 +280,7 @@ export function NewEvent() {
             </div>
             <div>
               <label className="field" htmlFor="d">Details <span className="muted small">(optional)</span></label>
-              <textarea id="d" className="input" value={description}
+              <textarea id="d" className="input" data-testid="event-desc" value={description}
                 onChange={(e) => setDescription(e.target.value)} placeholder="Anything guests should know" />
             </div>
           </>
@@ -285,14 +292,22 @@ export function NewEvent() {
             <div className="row wrap">
               <button type="button" className={`chip ${locationMode === "host_place" ? "on" : ""}`}
                 data-testid="loc-host" onClick={() => setLocationMode("host_place")}>📍 I’ll set the address</button>
+              <button type="button" className={`chip ${locationMode === "virtual" ? "on" : ""}`}
+                data-testid="loc-virtual" onClick={() => setLocationMode("virtual")}>💻 Online</button>
               <button type="button" className={`chip ${locationMode === "find_venue" ? "on" : ""}`}
                 data-testid="loc-venue" onClick={() => setLocationMode("find_venue")}>📍 Set location later</button>
             </div>
-            {locationMode === "host_place" ? (
+            {locationMode === "virtual" && (
+              <input className="input" style={{ marginTop: 8 }} data-testid="meeting-url" value={address} inputMode="url"
+                placeholder="https://zoom.us/j/… or https://meet.google.com/…"
+                onChange={(e) => setAddress(e.target.value)} />
+            )}
+            {locationMode === "host_place" && (
               <div style={{ marginTop: 8 }}>
                 <AddressInput value={address} onChange={setAddress} placeholder="Start typing an address…" testid="event-address" />
               </div>
-            ) : (
+            )}
+            {locationMode === "find_venue" && (
               <p className="muted small" style={{ marginTop: 8 }}>We'll help pick a spot once the group is set.</p>
             )}
           </div>
@@ -315,8 +330,14 @@ export function NewEvent() {
                 <input type="datetime-local" className="input" min={MIN_DT}
                   data-testid="fixed-time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
                 <label className="field" style={{ marginBottom: 0 }}>Ends <span className="muted small">(optional)</span>
-                  <input type="datetime-local" className="input" min={startsAt || MIN_DT}
-                    data-testid="fixed-end" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+                  <span className="row" style={{ gap: 6 }}>
+                    <input type="datetime-local" className="input" min={startsAt || MIN_DT}
+                      data-testid="fixed-end" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+                    {endsAt !== "" && (
+                      <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="fixed-end-clear"
+                        onClick={() => setEndsAt("")} title="Remove the end time">✕</button>
+                    )}
+                  </span>
                 </label>
                 {/* Irregular series: stack more explicit dates (any days). Mutually
                     exclusive with a repeat pattern - picking dates clears it. */}
@@ -364,8 +385,14 @@ export function NewEvent() {
             )}
             {schedulingMode !== "fixed" && (
               <label className="field" style={{ marginTop: 8 }}>Poll closes <span className="muted small">(optional - non-voters get a last-chance email, then you get the results)</span>
-                <input type="datetime-local" className="input" min={MIN_DT} data-testid="poll-deadline"
-                  value={pollDeadline} onChange={(e) => setPollDeadline(e.target.value)} />
+                <span className="row" style={{ gap: 6 }}>
+                  <input type="datetime-local" className="input" min={MIN_DT} data-testid="poll-deadline"
+                    value={pollDeadline} onChange={(e) => setPollDeadline(e.target.value)} />
+                  {pollDeadline !== "" && (
+                    <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="poll-deadline-clear"
+                      onClick={() => setPollDeadline("")} title="Remove the close date">✕</button>
+                  )}
+                </span>
               </label>
             )}
             {schedulingMode === "general" && (

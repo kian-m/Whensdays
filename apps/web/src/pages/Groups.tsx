@@ -171,6 +171,10 @@ export function GroupPage() {
     reload();
   }
 
+  async function setRole(userId: string, role: "member" | "admin") {
+    await sendJSON(api, "PUT", `/api/groups/${id}/members/${userId}/role`, { role });
+    reload();
+  }
   async function removeMember(userId: string) {
     await api(`/api/groups/${id}/members/${userId}`, { method: "DELETE" });
     reload();
@@ -181,7 +185,8 @@ export function GroupPage() {
   // capability - show a preview + Join instead of a wall.
   if (!data) return <GroupJoin id={id!} onJoined={reload} />;
 
-  const { group, members, events, is_owner } = data;
+  const { group, members, events, is_owner, is_admin } = data;
+  const canManage = is_owner || is_admin;
   const inviteURL = `${location.origin}/g/${group.id}`;
 
   return (
@@ -204,14 +209,16 @@ export function GroupPage() {
               )}
             </span>
           </span>
-          <button
-            className="btn sm"
-            data-testid="group-new-event"
-            style={{ flex: "none" }}
-            onClick={() => nav(`/new?group=${group.id}`)}
-          >
-            + New event
-          </button>
+          {canManage && (
+            <button
+              className="btn sm"
+              data-testid="group-new-event"
+              style={{ flex: "none" }}
+              onClick={() => nav(`/new?group=${group.id}`)}
+            >
+              + New event
+            </button>
+          )}
         </div>
         {/* Any member can grow the group - the link IS the invite. */}
         <div className="row wrap" style={{ gap: 6 }}>
@@ -248,28 +255,35 @@ export function GroupPage() {
 
       <div className="section-h">Members</div>
       {members.length === 0 && <p className="muted small">No members yet - add someone below.</p>}
-      {members.map((m) => (
-        <div key={m.user_id} className="card row between" data-testid="group-member">
-          <span className="row" style={{ gap: 8 }}>
-            <Avatar url={m.avatar_url} name={m.display_name} size={32} />
-            <span>
-              {m.display_name || m.handle}
-              {m.handle && <span className="muted small"> @{m.handle}</span>}
+      {members.map((m) => {
+        const isGroupOwner = m.user_id === group.owner_id;
+        return (
+          <div key={m.user_id} className="card row between" data-testid="group-member">
+            <span className="row" style={{ gap: 8, flex: "1 1 auto", minWidth: 0 }}>
+              <Avatar url={m.avatar_url} name={m.display_name} size={32} />
+              <span style={{ minWidth: 0 }}>
+                {m.display_name || m.handle}
+                {m.handle && <span className="muted small"> @{m.handle}</span>}
+              </span>
+              {(isGroupOwner || m.role === "admin") && (
+                <span className="pill scheduled" data-testid={`member-admin-${m.handle}`}>{isGroupOwner ? "Owner" : "Admin"}</span>
+              )}
             </span>
-          </span>
-          {is_owner && (
-            <button
-              className="btn ghost sm"
-              data-testid={`member-remove-${m.handle}`}
-              onClick={() => removeMember(m.user_id)}
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      ))}
+            {canManage && !isGroupOwner && (
+              <span className="row" style={{ gap: 6, flex: "none" }}>
+                <button className="btn ghost sm" data-testid={`member-role-${m.handle}`}
+                  onClick={() => setRole(m.user_id, m.role === "admin" ? "member" : "admin")}>
+                  {m.role === "admin" ? "Remove admin" : "Make admin"}
+                </button>
+                <ConfirmButton label="Remove" confirmLabel="Tap again to remove" testid={`member-remove-${m.handle}`}
+                  onConfirm={() => removeMember(m.user_id)} />
+              </span>
+            )}
+          </div>
+        );
+      })}
 
-      {is_owner && (
+      {canManage && (
         <form className="card stack" onSubmit={addMember}>
           <label className="field" htmlFor="mh">Add a member by handle</label>
           <div className="row">

@@ -137,6 +137,7 @@ test.describe("calendars (import)", () => {
       await page.goto("/profile"); // connections card lives on Profile now
     }
     await expect(page.getByTestId("disconnect-apple")).toBeVisible();
+    await page.getByTestId("disconnect-apple").click(); // arm (two-tap confirm)
     await Promise.all([
       page.waitForResponse((r) => r.url().includes("/api/calendar/connections/apple_ical") && r.ok()),
       page.getByTestId("disconnect-apple").click(),

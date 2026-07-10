@@ -25,7 +25,7 @@ SELECT EXISTS (
 );
 
 -- name: ListGroupMembers :many
-SELECT m.user_id, m.created_at, p.display_name, p.handle, p.avatar_url
+SELECT m.user_id, m.created_at, m.role, p.display_name, p.handle, p.avatar_url
 FROM group_members m
 LEFT JOIN profiles p ON p.user_id = m.user_id
 WHERE m.group_id = $1
@@ -43,7 +43,7 @@ DELETE FROM group_members WHERE group_id = $1 AND user_id = $2;
 SELECT id, host_id, title, event_type, description,
        location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
 FROM events
-WHERE group_id = $1 AND status <> 'cancelled'
+WHERE group_id = $1 AND status <> 'cancelled' AND status <> 'draft'
 ORDER BY created_at DESC;
 
 -- name: ListGoingAttendeeEmails :many
@@ -79,3 +79,15 @@ WHERE m.group_id = $1 AND p.email <> '';
 
 -- name: CountGroupMembers :one
 SELECT count(*)::int FROM group_members WHERE group_id = $1;
+
+
+-- name: IsGroupAdmin :one
+-- Owner counts as admin everywhere.
+SELECT EXISTS (
+    SELECT 1 FROM groups g WHERE g.id = sqlc.arg(id) AND g.owner_id = sqlc.arg(user_id)
+    UNION
+    SELECT 1 FROM group_members m WHERE m.group_id = sqlc.arg(id) AND m.user_id = sqlc.arg(user_id) AND m.role = 'admin'
+);
+
+-- name: SetGroupMemberRole :exec
+UPDATE group_members SET role = $3 WHERE group_id = $1 AND user_id = $2;

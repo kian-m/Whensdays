@@ -253,6 +253,47 @@ func (s *server) handleRemoveCohost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// handleSetDraft parks or publishes an event (manager-only). Drafts keep all
+// content but are hidden from guests and skipped by every email/cron.
+func (s *server) handleSetDraft(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	id, ok := parseUUID(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
+		return
+	}
+	current, role, err := s.eventAndRole(r.Context(), id, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err != nil {
+		s.internal(w, "set draft: load", err)
+		return
+	}
+	if !isManager(role) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not allowed"})
+		return
+	}
+	if current.Status == "cancelled" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "event is cancelled"})
+		return
+	}
+	var in struct {
+		Draft bool `json:"draft"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	ev, err := s.queries.SetEventDraft(r.Context(), db.SetEventDraftParams{ID: id, Column2: in.Draft})
+	if err != nil {
+		s.internal(w, "set draft", err)
+		return
+	}
+	s.analytics.Capture(uid, "event_draft_toggled", map[string]any{"event_id": r.PathValue("id"), "draft": in.Draft})
+	writeJSON(w, http.StatusOK, ev)
+}
+
 // handleUpdateEvent edits an event's details - host or cohost.
 func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
@@ -304,8 +345,12 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "title is required"})
 		return
 	}
-	if !oneOf(in.LocationMode, "host_place", "find_venue") {
+	if !oneOf(in.LocationMode, "host_place", "find_venue", "virtual") {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid location"})
+		return
+	}
+	if in.LocationMode == "virtual" && !validMeetingURL(in.LocationAddress) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "online events need an https meeting link"})
 		return
 	}
 	// Visibility is editable too (empty = keep). Non-public events carry no

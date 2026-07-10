@@ -44,7 +44,7 @@ func (q *Queries) CountPendingIncoming(ctx context.Context, addresseeID string) 
 const countUnseenInvites = `-- name: CountUnseenInvites :one
 SELECT count(*)::int FROM event_invites ei
 WHERE ei.user_id = $1 AND NOT ei.seen
-  AND EXISTS (SELECT 1 FROM events e WHERE e.id = ei.event_id AND e.status <> 'cancelled' AND e.host_id <> $1)
+  AND EXISTS (SELECT 1 FROM events e WHERE e.id = ei.event_id AND e.status <> 'cancelled' AND e.status <> 'draft' AND e.host_id <> $1)
   AND NOT EXISTS (SELECT 1 FROM event_attendees a WHERE a.event_id = ei.event_id AND a.user_id = $1)
   AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = ei.event_id AND ch.user_id = $1)
 `
@@ -106,7 +106,7 @@ SELECT e.id, e.host_id, e.title, e.event_type, e.description,
        e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent, e.capacity
 FROM events e
 JOIN event_invites i ON i.event_id = e.id
-WHERE i.user_id = $1 AND e.status <> 'cancelled' AND e.host_id <> $1
+WHERE i.user_id = $1 AND e.status <> 'cancelled' AND e.status <> 'draft' AND e.host_id <> $1
   AND NOT EXISTS (SELECT 1 FROM event_attendees a WHERE a.event_id = e.id AND a.user_id = $1)
   AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = e.id AND ch.user_id = $1)
 ORDER BY e.created_at DESC
@@ -167,7 +167,7 @@ func (q *Queries) ListEventsInvited(ctx context.Context, userID string) ([]Event
 const listUnseenInviteEventIDs = `-- name: ListUnseenInviteEventIDs :many
 SELECT ei.event_id FROM event_invites ei
 WHERE ei.user_id = $1 AND NOT ei.seen
-  AND EXISTS (SELECT 1 FROM events e WHERE e.id = ei.event_id AND e.status <> 'cancelled' AND e.host_id <> $1)
+  AND EXISTS (SELECT 1 FROM events e WHERE e.id = ei.event_id AND e.status <> 'cancelled' AND e.status <> 'draft' AND e.host_id <> $1)
   AND NOT EXISTS (SELECT 1 FROM event_attendees a WHERE a.event_id = ei.event_id AND a.user_id = $1)
   AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = ei.event_id AND ch.user_id = $1)
 `

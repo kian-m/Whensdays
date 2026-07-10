@@ -296,6 +296,26 @@ export function drawQR(url: string, color: string, style: QRStyle): string {
   return canvas.toDataURL("image/png");
 }
 
+// Render plain text with working links: https URLs become clickable anchors
+// (new tab, no referrer), everything else stays escaped text. Used for event
+// descriptions and comments - "if people paste links they should work".
+const URL_RE = /(https?:\/\/[^\s<>"')\]]+)/g;
+export function Linkify({ text }: { text: string }) {
+  const parts = text.split(URL_RE);
+  return (
+    <>
+      {parts.map((part, i) =>
+        /^https?:\/\//.test(part) ? (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="accent"
+            style={{ textDecoration: "underline", overflowWrap: "anywhere" }}>{part}</a>
+        ) : (
+          <Fragment key={i}>{part}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
 // One-time "add Whensdays to your home screen" prompt, shown right after a
 // user creates their FIRST event on this device (the moment they became a
 // host - peak motivation). Small screens only (a home screen is a phone

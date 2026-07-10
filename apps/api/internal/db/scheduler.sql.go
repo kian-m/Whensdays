@@ -833,7 +833,7 @@ SELECT e.id, e.host_id, e.title, e.event_type, e.description,
        e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent, e.capacity
 FROM events e
 JOIN event_attendees a ON a.event_id = e.id
-WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled'
+WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled' AND e.status <> 'draft'
   AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = e.id AND ch.user_id = $1)
 ORDER BY e.created_at DESC
 `
@@ -1813,6 +1813,62 @@ type SetCommentsEnabledParams struct {
 func (q *Queries) SetCommentsEnabled(ctx context.Context, arg SetCommentsEnabledParams) error {
 	_, err := q.db.Exec(ctx, setCommentsEnabled, arg.ID, arg.CommentsEnabled)
 	return err
+}
+
+const setEventDraft = `-- name: SetEventDraft :one
+UPDATE events
+SET status = CASE WHEN $2::bool THEN 'draft'
+                  WHEN starts_at IS NOT NULL THEN 'scheduled'
+                  ELSE 'polling' END
+WHERE id = $1
+RETURNING id, host_id, title, event_type, description,
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+`
+
+type SetEventDraftParams struct {
+	ID      pgtype.UUID `json:"id"`
+	Column2 bool        `json:"column_2"`
+}
+
+// Park / publish an event. Publishing derives the live status: a concrete
+// start time means scheduled, otherwise the poll resumes.
+func (q *Queries) SetEventDraft(ctx context.Context, arg SetEventDraftParams) (Event, error) {
+	row := q.db.QueryRow(ctx, setEventDraft, arg.ID, arg.Column2)
+	var i Event
+	err := row.Scan(
+		&i.ID,
+		&i.HostID,
+		&i.Title,
+		&i.EventType,
+		&i.Description,
+		&i.LocationMode,
+		&i.LocationAddress,
+		&i.SchedulingMode,
+		&i.StartsAt,
+		&i.Status,
+		&i.CreatedAt,
+		&i.CommentsEnabled,
+		&i.GroupID,
+		&i.SeriesID,
+		&i.Recurrence,
+		&i.ReminderSent,
+		&i.Visibility,
+		&i.Topic,
+		&i.City,
+		&i.CustomEmoji,
+		&i.CustomLabel,
+		&i.GeneralScope,
+		&i.PhotoUrl,
+		&i.Theme,
+		&i.Timezone,
+		&i.EndsAt,
+		&i.PollDeadline,
+		&i.PollReadySent,
+		&i.VoteReminderSent,
+		&i.QuorumSent,
+		&i.Capacity,
+	)
+	return i, err
 }
 
 const setProfileEmail = `-- name: SetProfileEmail :one

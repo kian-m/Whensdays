@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -130,6 +131,17 @@ const availabilityHorizonDays = 84
 func validMonth(s string) bool {
 	t, err := time.Parse("2006-01", s)
 	return err == nil && t.Year() >= 2000 && t.Year() <= 2100
+}
+
+// validMeetingURL: online events carry their meeting link in
+// location_address. https only (a javascript:/data: URL rendered as a "Join"
+// link would be an XSS/phishing gift), real host, sane length.
+func validMeetingURL(raw string) bool {
+	if len(raw) == 0 || len(raw) > 300 {
+		return false
+	}
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "https" && u.Host != ""
 }
 
 // slugify turns a display name into a handle-safe slug (a-z, 0-9, -), capped.
@@ -585,6 +597,10 @@ func (s *server) requireActiveEvent(w http.ResponseWriter, r *http.Request, id p
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "event is cancelled"})
 		return ev, false
 	}
+	if ev.Status == "draft" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "event is a draft"})
+		return ev, false
+	}
 	return ev, true
 }
 
@@ -645,8 +661,12 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	} else {
 		in.CustomEmoji = ""
 	}
-	if !oneOf(in.LocationMode, "host_place", "find_venue") {
+	if !oneOf(in.LocationMode, "host_place", "find_venue", "virtual") {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid location_mode"})
+		return
+	}
+	if in.LocationMode == "virtual" && !validMeetingURL(in.LocationAddress) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "online events need an https meeting link"})
 		return
 	}
 	if !oneOf(in.SchedulingMode, "fixed", "poll", "general") {
@@ -716,9 +736,9 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid group_id"})
 			return
 		}
-		member, err := s.queries.IsGroupMember(r.Context(), db.IsGroupMemberParams{ID: gid, UserID: uid})
-		if err != nil || !member {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a member of that group"})
+		admin, err := s.queries.IsGroupAdmin(r.Context(), db.IsGroupAdminParams{ID: gid, UserID: uid})
+		if err != nil || !admin {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only group admins can create its events"})
 			return
 		}
 		params.GroupID = gid
@@ -1033,6 +1053,12 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		"role":     role,
 		"status":   ev.Status,
 	})
+	// Drafts are invisible to everyone but managers - the invite link goes
+	// dark while parked (404, not 403: don't confirm existence).
+	if ev.Status == "draft" && !canManage {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
 	// Host identity for the invite hero ("Hosted by ...").
 	hostName, hostAvatar := "", ""
 	if hp, herr := s.queries.GetProfile(r.Context(), ev.HostID); herr == nil {
@@ -1422,8 +1448,8 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your event"})
 		return
 	}
-	if loaded.Status == "cancelled" {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "event is cancelled"})
+	if loaded.Status == "cancelled" || loaded.Status == "draft" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "event is " + loaded.Status + " - publish it first"})
 		return
 	}
 	ev, err := s.queries.FinalizeEvent(r.Context(), db.FinalizeEventParams{ID: id, StartsAt: ts})
