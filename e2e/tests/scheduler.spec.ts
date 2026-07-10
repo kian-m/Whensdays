@@ -1631,17 +1631,25 @@ test.describe("scheduler", () => {
     await page.getByTestId("general-finalize-clear").click();
     await expect(page.getByTestId("general-finalize-time")).toHaveValue("");
 
-    // Host can target a specific MONTH: pick next month, tap a weekday cell -
-    // the resolved date lands in that month (shown as a removable chip).
+    // Host targets a specific MONTH, taps a weekday cell - and gets EVERY
+    // matching date in that month to choose from (1st, 3rd, all of them).
     const nm = new Date(); nm.setMonth(nm.getMonth() + 1, 1);
     const nmValue = `${nm.getFullYear()}-${String(nm.getMonth() + 1).padStart(2, "0")}`;
     const nmShort = nm.toLocaleDateString("en-US", { month: "short" });
     await page.getByTestId(`target-month-${nmValue}`).click();
-    await page.getByTestId("grg-pick-1-evening").click();
+    await page.getByTestId("grg-pick-1-evening").click(); // expands the Mondays
+    const insts = page.getByTestId("inst-row").locator(`button[data-testid^="inst-${nmValue}"]`);
+    expect(await insts.count()).toBeGreaterThanOrEqual(4); // every Monday of the month
+    await insts.nth(0).click();
+    await insts.nth(2).click(); // 1st AND 3rd Monday
     await expect(page.getByTestId("picked-cells")).toContainText(nmShort);
-    // unpick - back to manual-only for the rest of this test
-    await page.getByTestId(`picked-${nmValue}|1:evening`).click();
+    await expect(page.getByTestId("picked-cells").locator("button")).toHaveCount(2);
+    // "All" fills the month; "None" clears it - back to manual for the rest.
+    await page.getByTestId("inst-all").click();
+    expect(await page.getByTestId("picked-cells").locator("button").count()).toBeGreaterThanOrEqual(4);
+    await page.getByTestId("inst-all").click(); // now reads None -> clears
     await expect(page.getByTestId("picked-cells")).toHaveCount(0);
+    await page.getByTestId("grg-pick-1-evening").click(); // collapse the strip
 
     // Host picks TWO winning dates from the group's availability.
     await page.getByTestId("general-finalize-time").fill(dt(3));

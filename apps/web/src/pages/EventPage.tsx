@@ -1474,20 +1474,36 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
       return { value: v, label: new Date(y, mo - 1).toLocaleDateString(undefined, { month: "short", year: "numeric" }) };
     });
   })();
-  const nextDateOfWeekday = (wd: number, hour: number): string | null => {
+  // Tapping a weekday cell EXPANDS its concrete dates ("every Tuesday of
+  // August") - the host picks the 1st, 3rd, all of them, whatever. One cell
+  // open at a time.
+  const [instCell, setInstCell] = useState<{ wd: number; dp: string } | null>(null);
+  const fmtYMD = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // Every future date of that weekday inside the target month, or the next 4
+  // occurrences from today when scheduling into "Soonest".
+  const weekdayInstances = (wd: number): string[] => {
+    const out: string[] = [];
     if (targetMonth) {
       const [y, mo] = targetMonth.split("-").map(Number);
-      const d = new Date(y, mo - 1, 1, hour, 0, 0, 0);
+      const d = new Date(y, mo - 1, 1);
       while (d.getDay() !== wd) d.setDate(d.getDate() + 1);
-      while (d.getTime() < Date.now() && d.getMonth() === mo - 1) d.setDate(d.getDate() + 7);
-      if (d.getMonth() !== mo - 1) return null; // that weekday has no future date left in the month
-      return toDatetimeLocal(d.toISOString());
+      for (; d.getMonth() === mo - 1; d.setDate(d.getDate() + 7)) {
+        if (d.getTime() >= Date.now() - 86_400_000) out.push(fmtYMD(d));
+      }
+      return out;
     }
     const d = new Date();
     do { d.setDate(d.getDate() + 1); } while (d.getDay() !== wd);
-    d.setHours(hour, 0, 0, 0);
-    return toDatetimeLocal(d.toISOString());
+    for (let i = 0; i < 4; i++) {
+      out.push(fmtYMD(d));
+      d.setDate(d.getDate() + 7);
+    }
+    return out;
   };
+  const instKey = (wd: number, dp: string, date: string) => `inst|${wd}:${dp}|${date}`;
+  const cellHasInstPicks = (wd: number, dp: string) =>
+    [...picked.keys()].some((k) => k.startsWith(`inst|${wd}:${dp}|`));
   async function finalize() {
     const all = [when, ...moreWhens, ...picked.values()].filter((v) => v.trim() !== "")
       .map((v) => new Date(v).toISOString()).sort();
@@ -1606,15 +1622,13 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                   <div className="day" style={{ textAlign: "left" }}>{d}</div>
                   {DAYPARTS.map((dp) => {
                     const key = slotKey(wd, dp.value);
-                    const pickKey = `${targetMonth || "soon"}|${key}`;
                     const n = slotCounts.get(key) ?? 0;
+                    const open = instCell?.wd === wd && instCell?.dp === dp.value;
+                    const hasPicks = cellHasInstPicks(wd, dp.value);
                     return (
                       <button key={dp.value} type="button" className="cell" data-testid={`grg-pick-${wd}-${dp.value}`}
-                        onClick={() => {
-                          const dt = nextDateOfWeekday(wd, DAYPART_HOUR[dp.value]);
-                          if (dt) togglePick(pickKey, dt);
-                        }}
-                        style={{ ...heatStyle(n, slotTop), ...pickedStyle(key), ...cellPickStyle(pickKey), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
+                        onClick={() => { if (canPick) setInstCell(open ? null : { wd, dp: dp.value }); }}
+                        style={{ ...heatStyle(n, slotTop), ...pickedStyle(key), ...(hasPicks || open ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative", zIndex: 2, opacity: open ? 1 : undefined } : {}), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
                         {n > 0 ? n : ""}
                       </button>
                     );
@@ -1622,6 +1636,37 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                 </Fragment>
               ))}
             </div>
+            {instCell && (() => {
+              const dates = weekdayInstances(instCell.wd);
+              const hour = String(DAYPART_HOUR[instCell.dp]).padStart(2, "0");
+              const dpLabel = DAYPARTS.find((x) => x.value === instCell.dp)?.short ?? instCell.dp;
+              const keys = dates.map((date) => instKey(instCell.wd, instCell.dp, date));
+              const allOn = dates.length > 0 && keys.every((k) => picked.has(k));
+              return (
+                <div className="row wrap" style={{ gap: 6, marginTop: 8 }} data-testid="inst-row">
+                  <span className="muted small">{WEEKDAYS[instCell.wd]} · {dpLabel}:</span>
+                  {dates.length === 0 && <span className="muted small">no dates left in that month</span>}
+                  {dates.map((date, i) => (
+                    <button key={date} type="button" className={`chip sm ${picked.has(keys[i]) ? "on" : ""}`}
+                      data-testid={`inst-${date}`}
+                      onClick={() => togglePick(keys[i], `${date}T${hour}:00`)}>
+                      {new Date(`${date}T12:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </button>
+                  ))}
+                  {dates.length > 1 && (
+                    <button type="button" className="chip sm" data-testid="inst-all"
+                      onClick={() => setPicked((m) => {
+                        const next = new Map(m);
+                        if (allOn) keys.forEach((k) => next.delete(k));
+                        else dates.forEach((date, i) => next.set(keys[i], `${date}T${hour}:00`));
+                        return next;
+                      })}>
+                      {allOn ? "None" : "All"}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </>
       )}
