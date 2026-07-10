@@ -165,7 +165,8 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe 
   const faces = (pile?.faces ?? []).slice(0, 5);
   const extra = (pile?.going ?? 0) - faces.length;
   return (
-    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : ""}`} data-testid="event-row" onClick={onClick} style={{ borderLeftColor: color }}>
+    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : "type-tile"}`} data-testid="event-row" onClick={onClick}
+      style={{ borderLeftColor: color, "--tile-accent": color } as React.CSSProperties}>
       <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={color} size={e.photo_url ? 72 : 46} />
       <div style={{ flex: 1 }}>
         <div className="row between">

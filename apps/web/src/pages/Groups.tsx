@@ -318,9 +318,9 @@ export function GroupPage() {
 function GroupEventRow({ event, onClick }: { event: Event; onClick: () => void }) {
   return (
     <div
-      className={`card ev tile ${event.theme ? `theme-tile theme-${event.theme}` : ""}`}
+      className={`card ev tile ${event.theme ? `theme-tile theme-${event.theme}` : "type-tile"}`}
       data-testid="group-event"
-      style={{ cursor: "pointer", borderLeftColor: TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other }}
+      style={{ cursor: "pointer", borderLeftColor: TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other, "--tile-accent": TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other } as React.CSSProperties}
       onClick={onClick}
     >
       <EventThumb photo={event.photo_url} emoji={eventEmoji(event)} color={TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other} size={event.photo_url ? 64 : 46} />

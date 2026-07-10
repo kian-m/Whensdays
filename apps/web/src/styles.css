@@ -482,6 +482,18 @@ textarea.input { resize: vertical; min-height: 64px; }
 .theme-tile.theme-neon   { background: linear-gradient(135deg, rgba(255,45,148,0.36), rgba(0,229,255,0.20) 62%), var(--glass); box-shadow: 0 0 22px -4px #ff2d94; }
 .theme-tile.theme-cozy   { background: linear-gradient(135deg, rgba(223,128,56,0.34), rgba(120,60,30,0.18) 62%), var(--glass); }
 
+/* Non-themed tiles glow with their TYPE color (--tile-accent, set inline) so
+   every tile on the events lists reads as one family - same border/glow
+   language as .theme-tile, tinted by type instead of theme. */
+.type-tile {
+  --tile-accent: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--tile-accent) 55%, var(--glass-line));
+  border-left-width: 5px !important;
+  box-shadow: 0 8px 26px -6px color-mix(in srgb, var(--tile-accent) 65%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tile-accent) 16%, transparent), transparent 62%), var(--glass);
+}
+.type-tile .title { color: var(--ink); font-weight: 700; }
+
 /* facepile: overlapping avatar stack on event tiles ("who's going") */
 .facepile { display: flex; align-items: center; margin-top: 6px; }
 .facepile .face { display: inline-flex; margin-left: -7px; border-radius: 50%; }
