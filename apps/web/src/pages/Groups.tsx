@@ -71,7 +71,7 @@ export function Groups() {
           <input
             id="gn"
             className="input"
-            data-testid="group-name"
+            maxLength={80} data-testid="group-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Crew name"
@@ -292,7 +292,7 @@ export function GroupPage() {
             <input
               id="mh"
               className="input"
-              data-testid="member-handle"
+              maxLength={40} data-testid="member-handle"
               value={handle}
               onChange={(e) => setHandle(e.target.value)}
               placeholder="handle"

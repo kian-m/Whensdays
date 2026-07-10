@@ -286,7 +286,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
         </div>
         <div>
           <label className="field" htmlFor="dn">Name</label>
-          <input id="dn" className="input" data-testid="profile-name" value={displayName}
+          <input id="dn" className="input" maxLength={80} data-testid="profile-name" value={displayName}
             onChange={(e) => setDisplayName(e.target.value)} />
         </div>
         <div>
@@ -296,7 +296,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
               @{handle || "…"} - <strong>sign up</strong> to claim your own handle.
             </p>
           ) : (
-            <input id="hd" className="input" data-testid="profile-handle" value={handle}
+            <input id="hd" className="input" maxLength={40} data-testid="profile-handle" value={handle}
               onChange={(e) => setHandle(e.target.value)} />
           )}
         </div>

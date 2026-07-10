@@ -326,9 +326,9 @@ export function CalendarConnections() {
               <a href="https://account.apple.com/account/manage" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline" }}>account.apple.com</a>{" "}
               (Sign-In &amp; Security → App-Specific Passwords). We store it encrypted and only ever read.
             </p>
-            <input className="input" data-testid="apple-caldav-id" value={appleId} autoComplete="username"
+            <input className="input" maxLength={120} data-testid="apple-caldav-id" value={appleId} autoComplete="username"
               placeholder="Apple ID (email)" onChange={(e) => setAppleId(e.target.value)} />
-            <input className="input" type="password" data-testid="apple-caldav-password" value={appPw} autoComplete="off"
+            <input className="input" type="password" maxLength={100} data-testid="apple-caldav-password" value={appPw} autoComplete="off"
               placeholder="App-specific password (xxxx-xxxx-xxxx-xxxx)" onChange={(e) => setAppPw(e.target.value)} />
             <div className="row">
               <button className="btn sm" data-testid="connect-apple-caldav" disabled={busy}>{busy ? "Checking…" : "Connect"}</button>
@@ -347,7 +347,7 @@ export function CalendarConnections() {
               Fallback for any calendar that can publish a link. iCloud: share a calendar as <strong>Public</strong> (the URL is unguessable but anyone holding it can read that calendar). Outlook: Settings → Shared calendars → Publish.
             </p>
             <div className="row">
-              <input className="input" data-testid="apple-url" value={icalUrl} onChange={(e) => setIcalUrl(e.target.value)}
+              <input className="input" maxLength={500} data-testid="apple-url" value={icalUrl} onChange={(e) => setIcalUrl(e.target.value)}
                 placeholder="webcal://p01.icloud.com/published/…" />
               <button className="btn sm" data-testid="connect-apple" style={{ flex: "none" }}>Add</button>
             </div>

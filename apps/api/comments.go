@@ -349,6 +349,14 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid location"})
 		return
 	}
+	if len(in.Description) > 2000 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "details: max 2000 characters"})
+		return
+	}
+	if in.LocationMode != "virtual" && len(in.LocationAddress) > 200 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "address: max 200 characters"})
+		return
+	}
 	if in.LocationMode == "virtual" && !validMeetingURL(in.LocationAddress) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "online events need an https meeting link"})
 		return

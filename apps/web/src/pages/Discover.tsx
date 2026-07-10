@@ -88,7 +88,7 @@ export function Discover() {
         ))}
       </div>
       <div className="row">
-        <input className="input" data-testid="disc-city" list="disc-city-list" value={city}
+        <input className="input" maxLength={60} data-testid="disc-city" list="disc-city-list" value={city}
           placeholder="city" onChange={(e) => setCity(e.target.value)} />
         <datalist id="disc-city-list">
           {CITY_OPTIONS.map((c) => <option key={c} value={c} />)}

@@ -291,6 +291,10 @@ func (s *server) handleAppleConnect(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &in) {
 		return
 	}
+	if len(in.IcalURL) > 500 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "calendar URL too long"})
+		return
+	}
 	u := normalizeICalURL(in.IcalURL)
 	if !s.calendar.stub() {
 		if err := validateExternalURL(u); err != nil {

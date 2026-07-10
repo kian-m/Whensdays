@@ -59,7 +59,7 @@ export function Quick() {
       <h1>⚡ Quick plan</h1>
       <p className="muted small">Name it, pick how you'll set the time - share the link, done.</p>
       <form className="card stack" onSubmit={go}>
-        <input className="input" data-testid="quick-title" value={title} autoFocus
+        <input className="input" maxLength={140} data-testid="quick-title" value={title} autoFocus
           placeholder="Pizza night, study session, pickup game…" onChange={(e) => setTitle(e.target.value)} />
         <div className="row" style={{ gap: 6 }}>
           <button type="button" className={`chip sm ${mode === "fixed" ? "on" : ""}`}

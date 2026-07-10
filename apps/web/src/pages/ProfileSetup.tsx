@@ -35,7 +35,7 @@ export function ProfileSetup({ onDone, prefillName }: { onDone: (p: Profile) => 
           <input
             id="dn"
             className="input"
-            data-testid="setup-name"
+            maxLength={80} data-testid="setup-name"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Alex Rivera"
@@ -46,7 +46,7 @@ export function ProfileSetup({ onDone, prefillName }: { onDone: (p: Profile) => 
           <input
             id="hd"
             className="input"
-            data-testid="setup-handle"
+            maxLength={40} data-testid="setup-handle"
             value={handle}
             onChange={(e) => setHandle(e.target.value)}
             placeholder="alex"

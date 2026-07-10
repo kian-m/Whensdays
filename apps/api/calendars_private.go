@@ -36,6 +36,10 @@ func (s *server) handleAppleCalDAVConnect(w http.ResponseWriter, r *http.Request
 	}
 	in.AppleID = strings.TrimSpace(in.AppleID)
 	in.AppPassword = strings.TrimSpace(in.AppPassword)
+	if len(in.AppleID) > 120 || len(in.AppPassword) > 100 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "credentials too long"})
+		return
+	}
 	if in.AppleID == "" || (in.AppPassword == "" && !s.calendar.stub()) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Apple ID and app-specific password are required"})
 		return

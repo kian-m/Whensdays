@@ -628,7 +628,7 @@ export function GifPicker({ onPick }: { onPick: (url: string) => void }) {
   return (
     <div className="stack" style={{ gap: 6 }}>
       <div className="row">
-        <input className="input" data-testid="gif-q" value={q}
+        <input className="input" maxLength={100} data-testid="gif-q" value={q}
           placeholder="Search GIFs, or scroll the trending picks"
           onChange={(ev) => onType(ev.target.value)}
           onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); searchNow(); } }} />
@@ -687,7 +687,7 @@ export function AddressInput({ value, onChange, placeholder, testid }: {
 
   return (
     <div style={{ position: "relative" }}>
-      <input className="input" data-testid={testid} value={value} placeholder={placeholder}
+      <input className="input" maxLength={200} data-testid={testid} value={value} placeholder={placeholder}
         autoComplete="off"
         onChange={(e) => query(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}

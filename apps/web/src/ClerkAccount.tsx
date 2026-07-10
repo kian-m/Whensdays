@@ -93,7 +93,7 @@ export function ClerkAccountCard() {
       )}
       {mode === "entering" && (
         <div className="row">
-          <input className="input" type="email" data-testid="new-email" value={email}
+          <input className="input" type="email" maxLength={254} data-testid="new-email" value={email}
             placeholder="new@email.com" onChange={(e) => setEmail(e.target.value)} />
           <button className="btn sm" data-testid="send-code" disabled={busy || !email.trim()} onClick={sendCode}>
             {busy ? "…" : "Send code"}
@@ -103,7 +103,7 @@ export function ClerkAccountCard() {
       )}
       {mode === "verifying" && (
         <div className="row">
-          <input className="input" data-testid="email-code" value={code} inputMode="numeric"
+          <input className="input" maxLength={8} data-testid="email-code" value={code} inputMode="numeric"
             placeholder="6-digit code" onChange={(e) => setCode(e.target.value)} />
           <button className="btn sm" data-testid="verify-code" disabled={busy || !code.trim()} onClick={verify}>
             {busy ? "…" : "Verify"}

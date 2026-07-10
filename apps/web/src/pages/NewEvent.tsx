@@ -202,7 +202,7 @@ export function NewEvent() {
           <>
             <div>
               <label className="field" htmlFor="t">What's the plan?</label>
-              <input id="t" className="input" data-testid="event-title" value={title}
+              <input id="t" className="input" maxLength={140} data-testid="event-title" value={title}
                 onChange={(e) => setTitle(e.target.value)} placeholder="Friday dinner" autoFocus />
             </div>
             <div>
@@ -280,7 +280,7 @@ export function NewEvent() {
             </div>
             <div>
               <label className="field" htmlFor="d">Details <span className="muted small">(optional)</span></label>
-              <textarea id="d" className="input" data-testid="event-desc" value={description}
+              <textarea id="d" className="input" maxLength={2000} data-testid="event-desc" value={description}
                 onChange={(e) => setDescription(e.target.value)} placeholder="Anything guests should know" />
             </div>
           </>
@@ -298,7 +298,7 @@ export function NewEvent() {
                 data-testid="loc-venue" onClick={() => setLocationMode("find_venue")}>📍 Set location later</button>
             </div>
             {locationMode === "virtual" && (
-              <input className="input" style={{ marginTop: 8 }} data-testid="meeting-url" value={address} inputMode="url"
+              <input className="input" style={{ marginTop: 8 }} maxLength={300} data-testid="meeting-url" value={address} inputMode="url"
                 placeholder="https://zoom.us/j/… or https://meet.google.com/…"
                 onChange={(e) => setAddress(e.target.value)} />
             )}

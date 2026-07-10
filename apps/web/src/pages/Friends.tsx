@@ -64,7 +64,7 @@ export function Friends() {
       <form className="card stack" onSubmit={add}>
         <label className="field" htmlFor="h">Add a friend by handle</label>
         <div className="row">
-          <input id="h" className="input" data-testid="friend-handle" value={handle}
+          <input id="h" className="input" maxLength={40} data-testid="friend-handle" value={handle}
             onChange={(e) => setHandle(e.target.value)} placeholder="alex" />
           <button className="btn" data-testid="add-friend">Add</button>
         </div>

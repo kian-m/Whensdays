@@ -211,7 +211,7 @@ function GuestJoin({ eventId, onJoined }: { eventId: string | null; onJoined: (a
             : "Tell us your name and you can set something up and share the link - no account needed."}
         </p>
         <form className="row" style={{ maxWidth: 360, width: "100%" }} onSubmit={join}>
-          <input className="input" data-testid="guest-name" value={name} placeholder="Your name"
+          <input className="input" maxLength={80} data-testid="guest-name" value={name} placeholder="Your name"
             onChange={(e) => setName(e.target.value)} />
           <button className="btn" data-testid="guest-join">Join</button>
         </form>

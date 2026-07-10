@@ -763,7 +763,7 @@ function PrefFlow({ eventId, type, answers, reload }: {
       </div>
       <div>
         <label className="field" htmlFor="pf">{q.prompt}</label>
-        <input id="pf" className="input" data-testid="pref-input" placeholder={q.placeholder}
+        <input id="pf" className="input" maxLength={400} data-testid="pref-input" placeholder={q.placeholder}
           value={draft[q.key] ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [q.key]: e.target.value }))} />
       </div>
       <div className="row">
@@ -1008,8 +1008,8 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         )}
       </div>
       <GifPicker onPick={(url) => setPhoto(url)} />
-      <input className="input" data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
-      <textarea className="input" data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
+      <input className="input" maxLength={140} data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
+      <textarea className="input" maxLength={2000} data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
       <label className="field">Max spots <span className="muted small">(optional - beyond it people join a waitlist)</span>
         <input type="number" min={0} max={500} inputMode="numeric" className="input" data-testid="edit-capacity"
           value={capacity} placeholder="Unlimited" onChange={(ev) => setCapacity(ev.target.value)} />
@@ -1085,7 +1085,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         <AddressInput value={locAddr} onChange={setLocAddr} placeholder="Start typing an address…" testid="edit-address" />
       )}
       {locMode === "virtual" && (
-        <input className="input" data-testid="edit-meeting-url" value={locAddr} inputMode="url"
+        <input className="input" maxLength={300} data-testid="edit-meeting-url" value={locAddr} inputMode="url"
           placeholder="https://zoom.us/j/… or https://meet.google.com/…"
           onChange={(ev) => setLocAddr(ev.target.value)} />
       )}
@@ -1175,7 +1175,7 @@ function HostControls({ data, reload }: { data: EventDetail; reload: () => void 
         </div>
       ))}
       <form className="row" onSubmit={addCohost}>
-        <input className="input" data-testid="cohost-handle" value={handle} onChange={(ev) => setHandle(ev.target.value)} placeholder="friend's handle" />
+        <input className="input" maxLength={40} data-testid="cohost-handle" value={handle} onChange={(ev) => setHandle(ev.target.value)} placeholder="friend's handle" />
         <button className="btn sm" data-testid="cohost-add">Add cohost</button>
       </form>
       {msg && <p className="muted small">{msg}</p>}
@@ -1259,7 +1259,7 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
             </span>
           )}
           <div className="row">
-            <input className="input" data-testid="comment-input" value={body} placeholder="Say something…"
+            <input className="input" maxLength={2000} data-testid="comment-input" value={body} placeholder="Say something…"
               onChange={(ev) => setBody(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && post()} />
             <button type="button" className="btn ghost sm" data-testid="comment-gif-open"
               onClick={() => setPicking((p) => !p)}>GIF</button>
