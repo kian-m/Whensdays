@@ -100,7 +100,7 @@ function ConsentBanner() {
     <div className="consent-bar" data-testid="consent-banner" role="dialog" aria-label="Cookie consent">
       <span className="small" style={{ minWidth: 0 }}>
         🍪 We use analytics cookies (PostHog) to understand what to improve - no ads, nothing sold.{" "}
-        <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy</a>{" · "}<a href="/terms/" style={{ textDecoration: "underline" }}>Terms</a>
+        <a href="/cookies/" style={{ textDecoration: "underline" }}>Cookie policy</a>
       </span>
       <span className="row" style={{ gap: 6, flex: "none" }}>
         <button className="btn ghost sm" data-testid="consent-decline" onClick={() => { denyConsent(); setOpen(false); }}>Decline</button>
@@ -327,7 +327,9 @@ function Landing() {
         {/* Visible privacy link on the homepage - required for Google OAuth
             app verification (a crawler-only link doesn't count). */}
         <p className="muted small" style={{ textAlign: "center", marginTop: "2rem" }}>
-          <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy policy</a>
+          <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy policy</a>{" · "}
+          <a href="/terms/" style={{ textDecoration: "underline" }}>Terms</a>{" · "}
+          <a href="/cookies/" style={{ textDecoration: "underline" }}>Cookies</a>
         </p>
       </div>
     </div>

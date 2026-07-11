@@ -1,0 +1,24 @@
+# Cloudflare Pages headers. The API sets its own (Go securityHeaders); these
+# cover the static web origin.
+
+/*
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Content-Security-Policy: frame-ancestors 'none'
+
+# Vite content-hashed bundles: safe to cache forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Stable public images/icons: a day at the edge, background revalidate.
+/icon.svg
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/hensdays.svg
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/apple-touch-icon.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/og-card.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
