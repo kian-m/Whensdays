@@ -22,6 +22,12 @@ updates:
     groups:
       js-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # Playwright's package version must move in LOCKSTEP with the pinned
+      # runner images (compose.e2e.yaml, compose.docs.yaml, Makefile) - a
+      # mismatched bump fails with missing browser binaries. Updated manually.
+      - dependency-name: "@playwright/test"
+      - dependency-name: playwright
 
   - package-ecosystem: "github-actions"
     directory: "/"
