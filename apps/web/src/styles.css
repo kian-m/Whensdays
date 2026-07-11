@@ -655,3 +655,15 @@ textarea.input { resize: vertical; min-height: 64px; }
   color: var(--accent); font-size: 0.72rem; font-weight: 800;
   display: inline-grid; place-items: center;
 }
+
+/* EU cookie-consent bar: fixed glass strip above the tab bar */
+.consent-bar {
+  position: fixed; left: 10px; right: 10px; z-index: 80;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 0.7rem 0.9rem; border-radius: var(--radius);
+  background: var(--glass); border: 1px solid var(--glass-line);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: var(--shadow); max-width: 700px; margin: 0 auto;
+}
+@media (min-width: 641px) { .consent-bar { bottom: 16px; } }

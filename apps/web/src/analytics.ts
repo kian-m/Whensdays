@@ -38,7 +38,61 @@ let ph: PostHog | null = null;
 let pending: Array<(p: PostHog) => void> = [];
 const run = (fn: (p: PostHog) => void) => {
   if (ph) fn(ph);
-  else if (KEY) pending.push(fn);
+  // Nothing queues while consent is pending/denied - pre-consent activity is
+  // never collected, not just never sent.
+  else if (KEY && !consentBlocked()) pending.push(fn);
+};
+
+// --- region-based consent (GDPR/ePrivacy) ---------------------------------
+// PostHog sets cookies + a persistent id (+ masked replay), which needs PRIOR
+// consent in the EU/UK. The US doesn't require a banner for analytics, so:
+// EU-ish visitors (timezone heuristic - zero network, slightly over-inclusive
+// which is the safe direction) get an Accept/Decline bar and PostHog stays
+// unloaded until they accept; everyone else loads as before. The choice
+// persists in localStorage; declined = analytics never load on this device.
+const CONSENT_KEY = "whensdays.consent";
+
+function inConsentRegion(): boolean {
+  try {
+    if (new URLSearchParams(location.search).get("consent") === "force") return true; // E2E/dev hook
+    return Intl.DateTimeFormat().resolvedOptions().timeZone.startsWith("Europe/");
+  } catch {
+    return false;
+  }
+}
+
+function storedConsent(): string {
+  try {
+    return localStorage.getItem(CONSENT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+// needsConsent: the banner renders while this is true.
+export function needsConsent(): boolean {
+  return !!KEY && inConsentRegion() && storedConsent() === "";
+}
+
+export function grantConsent() {
+  try { localStorage.setItem(CONSENT_KEY, "granted"); } catch { /* private mode */ }
+  loadPosthog(); // start now; anything queued flushes in order
+}
+
+export function denyConsent() {
+  try { localStorage.setItem(CONSENT_KEY, "denied"); } catch { /* private mode */ }
+  pending = []; // drop anything queued - it will never be sent
+}
+
+function consentBlocked(): boolean { return inConsentRegion() && storedConsent() !== "granted"; }
+
+const loadPosthog = async () => {
+  if (ph || !KEY || consentBlocked()) return;
+  const { default: posthog } = await import("posthog-js");
+  init(posthog);
+  ph = posthog;
+  pending.forEach((fn) => fn(posthog));
+  pending = [];
 };
 
 export function initAnalytics() {
@@ -46,15 +100,9 @@ export function initAnalytics() {
     console.info("[analytics] disabled (no VITE_PUBLIC_POSTHOG_KEY)");
     return;
   }
-  const load = async () => {
-    const { default: posthog } = await import("posthog-js");
-    init(posthog);
-    ph = posthog;
-    pending.forEach((fn) => fn(posthog));
-    pending = [];
-  };
-  if ("requestIdleCallback" in window) requestIdleCallback(() => void load(), { timeout: 3000 });
-  else setTimeout(() => void load(), 1500);
+  if (consentBlocked()) return; // the banner's Accept triggers loading instead
+  if ("requestIdleCallback" in window) requestIdleCallback(() => void loadPosthog(), { timeout: 3000 });
+  else setTimeout(() => void loadPosthog(), 1500);
 }
 
 function init(posthog: PostHog) {

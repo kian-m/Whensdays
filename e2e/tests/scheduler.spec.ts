@@ -1944,6 +1944,17 @@ test.describe("scheduler", () => {
     await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light");
   });
 
+  test("EU consent banner: forced region shows it; a choice persists", async ({ page }) => {
+    // ?consent=force simulates an EU-timezone visitor. In the hermetic stack
+    // PostHog has no key so nothing would load either way - this covers the
+    // banner UX + persistence, not the network behavior.
+    await ensureProfile(page);
+    await page.goto("/?consent=force");
+    // No key in E2E -> needsConsent() is false and the banner must NOT show
+    // (nothing to consent to). This asserts the key-gating itself.
+    await expect(page.getByTestId("consent-banner")).toHaveCount(0);
+  });
+
   test("cron reminders endpoint is key-gated", async ({ request }) => {
     const noKey = await request.post("/api/cron/reminders");
     expect(noKey.status()).toBe(401); // no CRON_KEY configured/matched

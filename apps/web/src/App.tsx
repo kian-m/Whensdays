@@ -9,7 +9,7 @@ import {
 import "./styles.css";
 import { ApiContext, ApiFn, Badges, Profile, ProfileContext, useApi, useProfile } from "./lib";
 import { Avatar } from "./ui";
-import { analytics, EVENTS } from "./analytics";
+import { analytics, EVENTS, denyConsent, grantConsent, needsConsent } from "./analytics";
 import { Home } from "./pages/Home";
 import { ProfileSetup } from "./pages/ProfileSetup";
 import { Loading } from "./ui";
@@ -90,10 +90,31 @@ export function GuestSignupButton({ testid, label = "Sign up", source }: { testi
   );
 }
 
+// GDPR/ePrivacy banner - only renders for EU-timezone visitors with no stored
+// choice (see analytics.ts). Accept starts PostHog; Decline keeps this device
+// analytics-free for good. US visitors never see it.
+function ConsentBanner() {
+  const [open, setOpen] = useState(needsConsent);
+  if (!open) return null;
+  return (
+    <div className="consent-bar" data-testid="consent-banner" role="dialog" aria-label="Cookie consent">
+      <span className="small" style={{ minWidth: 0 }}>
+        🍪 We use analytics cookies (PostHog) to understand what to improve - no ads, nothing sold.{" "}
+        <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy</a>
+      </span>
+      <span className="row" style={{ gap: 6, flex: "none" }}>
+        <button className="btn ghost sm" data-testid="consent-decline" onClick={() => { denyConsent(); setOpen(false); }}>Decline</button>
+        <button className="btn sm" data-testid="consent-accept" onClick={() => { grantConsent(); setOpen(false); }}>Accept</button>
+      </span>
+    </div>
+  );
+}
+
 export function App() {
   useEffect(() => warmRouteChunks(), []);
   return (
     <BrowserRouter>
+      <ConsentBanner />
       <AnalyticsPageviews />
       {DEV_AUTH ? (
         DEV_GUEST ? (
