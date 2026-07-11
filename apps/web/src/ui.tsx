@@ -700,6 +700,10 @@ export function AddressInput({ value, onChange, placeholder, testid }: {
               {r.label}
             </button>
           ))}
+          {/* ODbL requires attribution wherever OSM-derived results render. */}
+          <div className="addr-attrib">
+            © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors
+          </div>
         </div>
       )}
     </div>

@@ -100,7 +100,7 @@ function ConsentBanner() {
     <div className="consent-bar" data-testid="consent-banner" role="dialog" aria-label="Cookie consent">
       <span className="small" style={{ minWidth: 0 }}>
         🍪 We use analytics cookies (PostHog) to understand what to improve - no ads, nothing sold.{" "}
-        <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy</a>
+        <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy</a>{" · "}<a href="/terms/" style={{ textDecoration: "underline" }}>Terms</a>
       </span>
       <span className="row" style={{ gap: 6, flex: "none" }}>
         <button className="btn ghost sm" data-testid="consent-decline" onClick={() => { denyConsent(); setOpen(false); }}>Decline</button>
@@ -250,6 +250,10 @@ function GuestJoin({ eventId, onJoined }: { eventId: string | null; onJoined: (a
           {eventId
             ? "Tell us your name and you can RSVP, vote on times, and chat - no account needed."
             : "Tell us your name and you can set something up and share the link - no account needed."}
+        </p>
+        <p className="muted small" style={{ maxWidth: 360, margin: 0 }}>
+          By joining you agree to the <a href="/terms/" style={{ textDecoration: "underline" }}>Terms</a> and{" "}
+          <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy Policy</a> and confirm you're at least 13.
         </p>
         <form className="row" style={{ maxWidth: 360, width: "100%" }} onSubmit={join}>
           <input className="input" maxLength={80} data-testid="guest-name" value={name} placeholder="Your name"

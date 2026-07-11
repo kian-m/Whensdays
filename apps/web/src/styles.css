@@ -667,3 +667,7 @@ textarea.input { resize: vertical; min-height: 64px; }
   box-shadow: var(--shadow); max-width: 700px; margin: 0 auto;
 }
 @media (min-width: 641px) { .consent-bar { bottom: 16px; } }
+
+/* OSM attribution line under address suggestions (ODbL) */
+.addr-attrib { padding: 6px 12px; font-size: 0.68rem; color: var(--muted); border-top: 1px solid var(--glass-line); }
+.addr-attrib a { text-decoration: underline; }

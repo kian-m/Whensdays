@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"fmt"
 	"html"
 	"strings"
@@ -259,8 +260,14 @@ func renderEmail(c emailContent) string {
 	if c.unsubURL != "" {
 		unsub = fmt.Sprintf(`<br><a href="%s" style="color:%s;text-decoration:underline">Mute notifications for this event</a>`, esc(c.unsubURL), emailMuted)
 	}
-	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0"><tr><td style="padding:18px 24px;text-align:center;font-size:12px;line-height:1.5;color:%s">You're receiving this because you're part of this plan on Whensdays.<br>Whensdays - scheduling that actually happens.%s</td></tr></table>`,
-		emailMuted, unsub)
+	// CAN-SPAM: commercial email needs a physical postal address. Optional
+	// (EMAIL_POSTAL_ADDRESS env - a PO box works); renders nothing when unset.
+	postal := ""
+	if pa := os.Getenv("EMAIL_POSTAL_ADDRESS"); pa != "" {
+		postal = "<br>" + esc(pa)
+	}
+	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0"><tr><td style="padding:18px 24px;text-align:center;font-size:12px;line-height:1.5;color:%s">You're receiving this because you're part of this plan on Whensdays.<br>Whensdays - scheduling that actually happens.%s%s</td></tr></table>`,
+		emailMuted, postal, unsub)
 
 	b.WriteString(`</td></tr></table></div>`)
 	return b.String()
