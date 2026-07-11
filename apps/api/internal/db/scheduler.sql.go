@@ -328,6 +328,36 @@ func (q *Queries) CountInvitedNonVoters(ctx context.Context, eventID pgtype.UUID
 	return column_1, err
 }
 
+const countNewRegisteredBetween = `-- name: CountNewRegisteredBetween :one
+SELECT count(*)::int FROM profiles
+WHERE email <> '' AND user_id NOT LIKE 'guest#_%' ESCAPE '#'
+  AND created_at >= $1 AND created_at < $2
+`
+
+type CountNewRegisteredBetweenParams struct {
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+}
+
+func (q *Queries) CountNewRegisteredBetween(ctx context.Context, arg CountNewRegisteredBetweenParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countNewRegisteredBetween, arg.CreatedAt, arg.CreatedAt_2)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countRegisteredUsers = `-- name: CountRegisteredUsers :one
+SELECT count(*)::int FROM profiles WHERE email <> '' AND user_id NOT LIKE 'guest#_%' ESCAPE '#'
+`
+
+// The digest's hero stat: real signups (email on file, not a guest id).
+func (q *Queries) CountRegisteredUsers(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, countRegisteredUsers)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createEvent = `-- name: CreateEvent :one
 
 INSERT INTO events (
@@ -1918,6 +1948,53 @@ type SetSeriesParams struct {
 func (q *Queries) SetSeries(ctx context.Context, arg SetSeriesParams) error {
 	_, err := q.db.Exec(ctx, setSeries, arg.ID, arg.SeriesID, arg.Recurrence)
 	return err
+}
+
+const topHostsSince = `-- name: TopHostsSince :many
+SELECT e.host_id,
+       count(*)::int AS events_created,
+       coalesce((SELECT count(*) FROM event_invites i WHERE i.inviter_id = e.host_id AND i.created_at >= $1), 0)::int AS invites_sent,
+       coalesce(p.display_name, '') AS display_name
+FROM events e
+LEFT JOIN profiles p ON p.user_id = e.host_id
+WHERE e.created_at >= $1
+GROUP BY e.host_id, p.display_name
+ORDER BY events_created DESC, invites_sent DESC
+LIMIT 5
+`
+
+type TopHostsSinceRow struct {
+	HostID        string `json:"host_id"`
+	EventsCreated int32  `json:"events_created"`
+	InvitesSent   int32  `json:"invites_sent"`
+	DisplayName   string `json:"display_name"`
+}
+
+// Digest leaderboard: who created events in the window and how many people
+// they pulled in (invites sent).
+func (q *Queries) TopHostsSince(ctx context.Context, createdAt pgtype.Timestamptz) ([]TopHostsSinceRow, error) {
+	rows, err := q.db.Query(ctx, topHostsSince, createdAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TopHostsSinceRow{}
+	for rows.Next() {
+		var i TopHostsSinceRow
+		if err := rows.Scan(
+			&i.HostID,
+			&i.EventsCreated,
+			&i.InvitesSent,
+			&i.DisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateEvent = `-- name: UpdateEvent :one

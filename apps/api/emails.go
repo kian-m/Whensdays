@@ -44,6 +44,25 @@ func campaignURL(base, campaign string) string {
 // emailMetaRow is a labelled fact shown in the event summary block (When / Where).
 type emailMetaRow struct{ label, value string }
 
+// emailHero: one giant centered stat (the analytics digest's lead widget).
+type emailHero struct{ number, label, sub string }
+
+// emailFunnelStep: a labeled count with a proportional bar; width is % of the
+// first step, drop annotates loss vs the previous step ("" on the first).
+type emailFunnelStep struct {
+	label string
+	count int
+	width int
+	drop  string
+}
+
+// emailBoardRow: leaderboard line - rank badge, name, right-aligned value.
+type emailBoardRow struct {
+	rank  int
+	name  string
+	value string
+}
+
 // emailItem is one row of a digest list (e.g. "your events tomorrow"): a title
 // with its own links and (optionally) the event's cover/GIF as a thumbnail.
 type emailItem struct {
@@ -93,6 +112,11 @@ type emailContent struct {
 	coverURL  string      // optional event cover/GIF banner (https only - mail clients block data: URIs)
 	theme     string      // optional event theme - tints the header/CTA to match the event page
 	items     []emailItem // optional digest list (e.g. multiple events tomorrow)
+	hero      *emailHero        // optional giant stat tile
+	funnel    []emailFunnelStep // optional drop-off funnel with bars
+	funnelT   string            // funnel section title
+	board     []emailBoardRow   // optional leaderboard
+	boardT    string            // leaderboard section title
 }
 
 func esc(s string) string { return html.EscapeString(s) }
@@ -137,6 +161,53 @@ func renderEmail(c emailContent) string {
 
 	for _, ln := range c.lines {
 		fmt.Fprintf(&b, `<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:%s">%s</p>`, emailInk, esc(ln))
+	}
+
+	if c.hero != nil {
+		sub := ""
+		if c.hero.sub != "" {
+			sub = fmt.Sprintf(`<div style="font-size:14px;font-weight:600;color:%s;margin-top:8px">%s</div>`, emailInk, esc(c.hero.sub))
+		}
+		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px"><tr><td align="center" style="padding:24px 16px;background:%s;border:1px solid %s;border-top:3px solid %s;border-radius:12px">`+
+			`<div style="font-size:48px;font-weight:800;letter-spacing:-0.03em;color:%s;line-height:1">%s</div>`+
+			`<div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:%s;margin-top:8px">%s</div>%s</td></tr></table>`,
+			emailBG, emailLine, accent, accent, esc(c.hero.number), emailMuted, esc(c.hero.label), sub)
+	}
+
+	if len(c.funnel) > 0 {
+		if c.funnelT != "" {
+			fmt.Fprintf(&b, `<div style="font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:%s;margin:0 0 8px">%s</div>`, emailMuted, esc(c.funnelT))
+		}
+		b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px">`)
+		for _, f := range c.funnel {
+			drop := ""
+			if f.drop != "" {
+				drop = fmt.Sprintf(` <span style="font-weight:600;color:%s;font-size:12px">%s</span>`, emailMuted, esc(f.drop))
+			}
+			w := f.width
+			if w < 2 {
+				w = 2
+			}
+			fmt.Fprintf(&b, `<tr><td style="padding:8px 0 4px;font-size:13px;color:%s">%s</td><td align="right" style="padding:8px 0 4px;font-size:13px;font-weight:700;color:%s;white-space:nowrap">%d%s</td></tr>`,
+				emailInk, esc(f.label), emailInk, f.count, drop)
+			fmt.Fprintf(&b, `<tr><td colspan="2"><table role="presentation" width="100%%" cellpadding="0" cellspacing="0"><tr><td style="background:%s;border-radius:5px;height:8px;font-size:0;line-height:0"><table role="presentation" width="%d%%" cellpadding="0" cellspacing="0"><tr><td style="background:%s;border-radius:5px;height:8px;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table></td></tr>`,
+				emailLine, w, accent)
+		}
+		b.WriteString(`</table>`)
+	}
+
+	if len(c.board) > 0 {
+		if c.boardT != "" {
+			fmt.Fprintf(&b, `<div style="font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:%s;margin:0 0 8px">%s</div>`, emailMuted, esc(c.boardT))
+		}
+		b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px">`)
+		for _, r := range c.board {
+			fmt.Fprintf(&b, `<tr><td style="padding:6px 0;width:30px"><span style="display:inline-block;width:22px;height:22px;border-radius:50%%;background:%s;color:#fff;font-size:12px;font-weight:800;text-align:center;line-height:22px">%d</span></td>`+
+				`<td style="padding:6px 8px;font-size:14px;font-weight:600;color:%s">%s</td>`+
+				`<td align="right" style="padding:6px 0;font-size:13px;color:%s;white-space:nowrap">%s</td></tr>`,
+				accent, r.rank, emailInk, esc(r.name), emailMuted, esc(r.value))
+		}
+		b.WriteString(`</table>`)
 	}
 
 	if c.quote != "" {

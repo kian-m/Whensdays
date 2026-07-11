@@ -485,3 +485,26 @@ SET status = CASE WHEN $2::bool THEN 'draft'
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
           location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity;
+
+-- name: CountRegisteredUsers :one
+-- The digest's hero stat: real signups (email on file, not a guest id).
+SELECT count(*)::int FROM profiles WHERE email <> '' AND user_id NOT LIKE 'guest#_%' ESCAPE '#';
+
+-- name: CountNewRegisteredBetween :one
+SELECT count(*)::int FROM profiles
+WHERE email <> '' AND user_id NOT LIKE 'guest#_%' ESCAPE '#'
+  AND created_at >= $1 AND created_at < $2;
+
+-- name: TopHostsSince :many
+-- Digest leaderboard: who created events in the window and how many people
+-- they pulled in (invites sent).
+SELECT e.host_id,
+       count(*)::int AS events_created,
+       coalesce((SELECT count(*) FROM event_invites i WHERE i.inviter_id = e.host_id AND i.created_at >= $1), 0)::int AS invites_sent,
+       coalesce(p.display_name, '') AS display_name
+FROM events e
+LEFT JOIN profiles p ON p.user_id = e.host_id
+WHERE e.created_at >= $1
+GROUP BY e.host_id, p.display_name
+ORDER BY events_created DESC, invites_sent DESC
+LIMIT 5;

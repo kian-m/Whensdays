@@ -10,6 +10,10 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/clsandbox/api/internal/db"
 )
 
 // analytics_digest.go - the owner's daily numbers, emailed. A second Cloud
@@ -70,9 +74,74 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 	dau, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
 		`select count(distinct distinct_id) from events where timestamp >= '%s' and timestamp < '%s' and event != 'api_request'`, from, until))
 
-	// Same branded template as every Whensdays email, in the analytics-only
-	// teal: headline stat as the lead line, then the funnel as tidy label/value
-	// meta rows (the When/Where table style) instead of a text wall.
+	// HERO - real signups from OUR database (email on file, not a guest id):
+	// the number that actually matters, PostHog only decorates it.
+	registered, _ := s.queries.CountRegisteredUsers(r.Context())
+	newReg, _ := s.queries.CountNewRegisteredBetween(r.Context(), db.CountNewRegisteredBetweenParams{
+		CreatedAt: pgtype.Timestamptz{Time: dayStart, Valid: true}, CreatedAt_2: pgtype.Timestamptz{Time: dayEnd, Valid: true},
+	})
+
+	// FUNNEL - unique people per stage yesterday, one grouped HogQL query.
+	stages, _ := s.hogql(r.Context(), phKey, project, fmt.Sprintf(
+		`select uniqIf(distinct_id, event = '$pageview'),
+		        uniqIf(distinct_id, event = 'invite_opened'),
+		        uniqIf(distinct_id, event in ('rsvp_submitted','poll_voted','general_voted')),
+		        uniqIf(distinct_id, event = 'guest_joined'),
+		        uniqIf(distinct_id, event = 'event_created')
+		 from events where timestamp >= '%s' and timestamp < '%s'`, from, until))
+	stage := func(i int) int {
+		if len(stages) == 1 && i < len(stages[0]) {
+			if n, ok := stages[0][i].(float64); ok {
+				return int(n)
+			}
+		}
+		return 0
+	}
+	rawFunnel := []struct {
+		label string
+		count int
+	}{
+		{"Visited", stage(0)},
+		{"Opened an invite", stage(1)},
+		{"Voted or RSVP'd", stage(2)},
+		{"Joined as guest", stage(3)},
+		{"Signed up", int(newReg)},
+		{"Created an event", stage(4)},
+	}
+	first := rawFunnel[0].count
+	funnel := make([]emailFunnelStep, 0, len(rawFunnel))
+	prev := 0
+	for i, f := range rawFunnel {
+		st := emailFunnelStep{label: f.label, count: f.count}
+		if first > 0 {
+			st.width = f.count * 100 / first
+		}
+		if i > 0 && prev > 0 {
+			st.drop = fmt.Sprintf("-%d%%", (prev-f.count)*100/prev)
+			if f.count >= prev {
+				st.drop = "±0%"
+			}
+		}
+		prev = f.count
+		funnel = append(funnel, st)
+	}
+
+	// LEADERBOARD - top hosts of the last 7 days: events created + people invited.
+	board := []emailBoardRow{}
+	if hosts, herr := s.queries.TopHostsSince(r.Context(), pgtype.Timestamptz{Time: now.AddDate(0, 0, -7), Valid: true}); herr == nil {
+		for i, h := range hosts {
+			name := h.DisplayName
+			if name == "" {
+				name = "(no name)"
+			}
+			board = append(board, emailBoardRow{
+				rank: i + 1, name: name,
+				value: fmt.Sprintf("%d %s · invited %d", h.EventsCreated, pluralWord(int(h.EventsCreated), "event", "events"), h.InvitesSent),
+			})
+		}
+	}
+
+	// Everything else from yesterday, compact.
 	total := 0
 	meta := make([]emailMetaRow, 0, len(digestMetrics))
 	for _, m := range digestMetrics {
@@ -81,26 +150,34 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 			total += n
 		}
 	}
-	people := "people"
-	if dau == 1 {
-		people = "person"
-	}
-	lines := []string{fmt.Sprintf("👥 %d %s active · %d actions", dau, people, total)}
-	if total == 0 && dau == 0 {
-		lines = append(lines, "A quiet day - nothing recorded. Tomorrow's a new one.")
+	sub := "steady"
+	if newReg > 0 {
+		sub = fmt.Sprintf("+%d yesterday 🎉", newReg)
 	}
 	body := renderEmail(emailContent{
-		preheader: fmt.Sprintf("%d active · %d actions yesterday.", dau, total),
+		preheader: fmt.Sprintf("%d registered (+%d) · %d visitors · %d actions.", registered, newReg, stage(0), total),
 		heading:   "📊 " + dayStart.Format("Monday, Jan 2"),
-		lines:     lines,
+		hero:      &emailHero{number: fmt.Sprintf("%d", registered), label: "Registered users", sub: sub},
+		funnelT:   "Yesterday's funnel",
+		funnel:    funnel,
+		boardT:    "Top hosts · last 7 days",
+		board:     board,
+		lines:     []string{fmt.Sprintf("👥 %d unique people did something yesterday.", dau)},
 		meta:      meta,
 		ctaLabel:  "Open PostHog",
 		ctaURL:    "https://us.posthog.com/project/" + project,
 		logoURL:   s.logoURL(),
 		theme:     "analytics",
 	})
-	s.notify.Send([]string{to}, fmt.Sprintf("Whensdays daily: %d active, %d actions", dau, total), body)
-	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "dau": dau, "actions": total})
+	s.notify.Send([]string{to}, fmt.Sprintf("Whensdays daily: %d registered (+%d), %d visitors", registered, newReg, stage(0)), body)
+	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "registered": registered, "new": newReg, "visitors": stage(0), "actions": total})
+}
+
+func pluralWord(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // hogqlEventCounts: one grouped query for every digest metric.
