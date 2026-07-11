@@ -1,0 +1,44 @@
+# Dependabot: weekly version updates + security alerts for every ecosystem in
+# the monorepo. Minor/patch updates are GROUPED into one PR per ecosystem
+# (each PR runs the full CI incl. the hermetic e2e, so updates land tested);
+# majors stay individual - they deserve their own review.
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+    groups:
+      go-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+    groups:
+      web-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/e2e"
+    schedule:
+      interval: "weekly"
+    groups:
+      e2e-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Base images in the multi-stage Dockerfiles (golang, nginx, node).
+  - package-ecosystem: "docker"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
