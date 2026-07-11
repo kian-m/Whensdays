@@ -32,7 +32,7 @@ import {
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
 import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, HomescreenPrompt, Linkify, Loading, Pill, QRButton, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
-import { DEV_AUTH } from "../App";
+import { DEV_AUTH, GuestSignupButton } from "../App";
 
 // A poll with a close date stops taking votes after it (server-enforced too).
 function pollClosed(e: { status: string; poll_deadline: string | null }): boolean {
@@ -388,7 +388,7 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
   return (
     <div className="stack">
       <WhosIn data={data} />
-      <Rsvp eventId={e.id} current={myRsvp} reload={reload} />
+      <Rsvp eventId={e.id} current={myRsvp} reload={reload} isGuest={data.viewer_id.startsWith("guest_")} />
       {pollClosed(e) && (
         <div className="card" data-testid="poll-closed">
           <span className="muted small">🗳️ This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
@@ -445,7 +445,7 @@ function WhosIn({ data }: { data: EventDetail }) {
   );
 }
 
-function Rsvp({ eventId, current, reload }: { eventId: string; current?: string; reload: () => void }) {
+function Rsvp({ eventId, current, reload, isGuest }: { eventId: string; current?: string; reload: () => void; isGuest?: boolean }) {
   const api = useApi();
   // OPTIMISTIC: the tap flips the selection instantly - waiting on the POST
   // plus a full event refetch before showing the choice felt broken (Cloud Run
@@ -482,6 +482,19 @@ function Rsvp({ eventId, current, reload }: { eventId: string; current?: string;
         <p className="muted small" style={{ margin: 0 }} data-testid="waitlist-note">
           ⏳ The event is full - you're on the waitlist. If a spot opens you're bumped in automatically (and emailed).
         </p>
+      )}
+      {/* The honest post-commit nudge: guests have no email on file, so
+          without an account the reminder and any time change never reach
+          them. Peak-intent moment - right after they said yes. */}
+      {isGuest && (active === "going" || active === "maybe") && (
+        <div className="row between" style={{ gap: 10 }} data-testid="rsvp-signup-nudge">
+          <span className="muted small" style={{ minWidth: 0 }}>
+            🔔 You're in - but guests don't get emails. Sign up (free) so the reminder and any time changes reach you.
+          </span>
+          <span style={{ flex: "none" }}>
+            <GuestSignupButton testid="rsvp-signup" source="post_rsvp" />
+          </span>
+        </div>
       )}
     </div>
   );

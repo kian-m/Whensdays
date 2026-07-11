@@ -70,6 +70,26 @@ function resolveDevGuest(): boolean {
 }
 const DEV_GUEST = resolveDevGuest();
 
+// One signup affordance for guests, reused by the shell banner and in-flow
+// nudges: dev mode simulates conversion (drop the guest flag, reload as the
+// dev user); Clerk mode opens the real modal.
+export function GuestSignupButton({ testid, label = "Sign up", source }: { testid: string; label?: string; source: string }) {
+  if (DEV_AUTH) {
+    return (
+      <button className="btn sm" data-testid={testid}
+        onClick={() => { analytics.capture(EVENTS.guestSignupClicked, { mode: "dev", source }); sessionStorage.removeItem("clsandbox.devGuest"); location.href = "/"; }}>
+        {label}
+      </button>
+    );
+  }
+  return (
+    <SignInButton mode="modal">
+      <button className="btn sm" data-testid={testid}
+        onClick={() => analytics.capture(EVENTS.guestSignupClicked, { mode: "clerk", source })}>{label}</button>
+    </SignInButton>
+  );
+}
+
 export function App() {
   useEffect(() => warmRouteChunks(), []);
   return (
@@ -414,16 +434,7 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
           <span className="row" style={{ gap: 6 }}>
             <button className="btn ghost sm" data-testid="guest-reset"
               onClick={() => { localStorage.removeItem(GUEST_KEY); location.href = "/"; }}>Start over</button>
-            {DEV_AUTH ? (
-              /* Dev has no Clerk modal - simulate the conversion (guest → signed-in dev user). */
-              <button className="btn sm" data-testid="guest-signup"
-                onClick={() => { analytics.capture(EVENTS.guestSignupClicked, { mode: "dev" }); sessionStorage.removeItem("clsandbox.devGuest"); location.href = "/"; }}>Sign up</button>
-            ) : (
-              <SignInButton mode="modal">
-                <button className="btn sm" data-testid="guest-signup"
-                  onClick={() => analytics.capture(EVENTS.guestSignupClicked, { mode: "clerk" })}>Sign up</button>
-              </SignInButton>
-            )}
+            <GuestSignupButton testid="guest-signup" source="banner" />
           </span>
         </div>
       )}

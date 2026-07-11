@@ -2045,6 +2045,10 @@ test.describe("scheduler", () => {
       await expect(guest.getByTestId("guest-banner")).toBeVisible();
       await expect(guest.getByTestId("guest-signup")).toBeVisible(); // conversion CTA
       await guest.getByTestId("rsvp-going").click();
+      // Post-commit nudge: guests get no emails - the sign-up ask lands at
+      // peak intent, right after they said yes.
+      await expect(guest.getByTestId("rsvp-signup-nudge")).toBeVisible();
+      await expect(guest.getByTestId("rsvp-signup")).toBeVisible();
       await guest.getByTestId("comment-input").fill("So excited!");
       await guest.getByTestId("comment-post").click();
       await expect(guest.getByText("So excited!")).toBeVisible();
