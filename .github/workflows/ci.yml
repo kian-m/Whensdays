@@ -74,7 +74,7 @@ jobs:
           else
             echo "screenshots are up to date"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: feature-screenshots
@@ -119,7 +119,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: make e2e-docker
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
