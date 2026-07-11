@@ -98,7 +98,7 @@ jobs:
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
           VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST }}
           VITE_PUBLIC_POSTHOG_RECORD: ${{ vars.VITE_PUBLIC_POSTHOG_RECORD }}
-      - uses: cloudflare/wrangler-action@v3
+      - uses: cloudflare/wrangler-action@v4
         with:
           packageManager: npm # isolate wrangler's own install from the pnpm workspace
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
