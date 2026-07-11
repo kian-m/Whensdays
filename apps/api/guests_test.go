@@ -1,6 +1,7 @@
 package main
 
 import (
+	"time"
 	"strings"
 	"testing"
 
@@ -216,5 +217,27 @@ func TestStreakLen(t *testing.T) {
 		if got := streakLen(c.months, c.cur); got != c.want {
 			t.Errorf("%s: streakLen = %d, want %d", c.name, got, c.want)
 		}
+	}
+}
+
+func TestAlerterThrottle(t *testing.T) {
+	a := newAlerter()
+	t0 := time.Now()
+	if ok, n := a.shouldSend("create event", t0); !ok || n != 0 {
+		t.Fatalf("first alert should send (ok=%v n=%d)", ok, n)
+	}
+	for i := 0; i < 5; i++ {
+		if ok, _ := a.shouldSend("create event", t0.Add(time.Duration(i)*time.Minute)); ok {
+			t.Fatal("inside the window must suppress")
+		}
+	}
+	// A different topic is independent.
+	if ok, _ := a.shouldSend("upsert profile", t0.Add(time.Minute)); !ok {
+		t.Fatal("other topics alert independently")
+	}
+	// Window reopens carrying the suppressed count.
+	ok, n := a.shouldSend("create event", t0.Add(alertWindow+time.Second))
+	if !ok || n != 5 {
+		t.Fatalf("window reopen: ok=%v suppressed=%d (want 5)", ok, n)
 	}
 }

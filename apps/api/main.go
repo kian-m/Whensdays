@@ -49,6 +49,7 @@ type server struct {
 	klipyKey  string
 	klipyStub bool
 	geoStub   bool
+	alerts    *alerter
 }
 
 func main() {
@@ -88,6 +89,7 @@ func main() {
 		calendar:  loadCalendarConfig(logger),
 		guests:    newGuestSigner(logger),
 		notify:    notify.New(os.Getenv("EMAIL_API_KEY"), os.Getenv("EMAIL_FROM"), logger),
+		alerts:    newAlerter(),
 		appOrigin: strings.TrimRight(os.Getenv("APP_ORIGIN"), "/"),
 		klipyKey:  os.Getenv("KLIPY_API_KEY"),
 		klipyStub: os.Getenv("KLIPY_MODE") == "stub",

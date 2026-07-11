@@ -221,6 +221,9 @@ func decodeJSONLimit(w http.ResponseWriter, r *http.Request, dst any, limit int6
 
 func (s *server) internal(w http.ResponseWriter, what string, err error) {
 	s.logger.Error(what, "err", err)
+	// Every 500 emails the owner (throttled per topic in alerts.go) - a failed
+	// event creation or signup should never be silent.
+	s.alert(what, err)
 	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 }
 
