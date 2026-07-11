@@ -10,6 +10,6 @@
   },
   "devDependencies": {
     "@clerk/testing": "^1.0.0",
-    "@playwright/test": "1.55.1"
+    "@playwright/test": "1.61.1"
   }
 }
