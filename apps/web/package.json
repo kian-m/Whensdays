@@ -10,7 +10,7 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.0.0",
+    "@clerk/clerk-react": "^5.61.6",
     "posthog-js": "^1.395.0",
     "qrcode-generator": "^2.0.4",
     "react": "^19.0.0",

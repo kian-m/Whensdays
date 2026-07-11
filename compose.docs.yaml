@@ -39,7 +39,7 @@ services:
       - api
 
   shots:
-    image: mcr.microsoft.com/playwright:v1.49.1-jammy
+    image: mcr.microsoft.com/playwright:v1.55.1-jammy
     working_dir: /work
     volumes:
       - ./e2e:/work
