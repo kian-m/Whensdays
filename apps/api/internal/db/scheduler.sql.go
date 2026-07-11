@@ -485,6 +485,18 @@ func (q *Queries) CreateFriendRequest(ctx context.Context, arg CreateFriendReque
 	return i, err
 }
 
+const databaseSizeBytes = `-- name: DatabaseSizeBytes :one
+SELECT pg_database_size(current_database())::bigint
+`
+
+// Digest tier-runway: how close the (image-heavy) database is to the plan cap.
+func (q *Queries) DatabaseSizeBytes(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, databaseSizeBytes)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteFriendship = `-- name: DeleteFriendship :exec
 DELETE FROM friendships WHERE id = $1
 `

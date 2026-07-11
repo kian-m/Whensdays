@@ -141,6 +141,53 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// FREE-TIER RUNWAY - where usage sits against each service's cliff, so the
+	// upgrade happens BEFORE the silent failure. Limits are current published
+	// tiers; update alongside pricing pages.
+	const (
+		resendDayLimit  = 100       // Resend free: emails/day
+		resendMonLimit  = 3000      // Resend free: emails/month
+		neonBytesLimit  = 512 << 20 // Neon free: 0.5 GB storage
+		posthogMonLimit = 1_000_000 // PostHog free: events/month
+		cfDayLimit      = 100_000   // Cloudflare Workers free: proxy requests/day
+		klipyHourLimit  = 100       // Klipy TEST key: requests/hour
+		clerkMAULimit   = 10_000    // Clerk free: monthly active (signed-in) users
+	)
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc).UTC().Format("2006-01-02 15:04:05")
+	nowUTC := now.UTC().Format("2006-01-02 15:04:05")
+	emailsDay, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
+		`select sum(coalesce(toInt64OrNull(toString(properties.recipients)), 1)) from events where event = 'email_sent' and timestamp >= '%s' and timestamp < '%s'`, from, until))
+	emailsMonth, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
+		`select sum(coalesce(toInt64OrNull(toString(properties.recipients)), 1)) from events where event = 'email_sent' and timestamp >= '%s' and timestamp < '%s'`, monthStart, nowUTC))
+	phMonth, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
+		`select count() from events where timestamp >= '%s' and timestamp < '%s'`, monthStart, nowUTC))
+	apiDay, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
+		`select count() from events where event = 'api_request' and timestamp >= '%s' and timestamp < '%s'`, from, until))
+	klipyPeak, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
+		`select count() as c from events where event = 'api_request' and toString(properties.path) like '%%/api/gifs/%%' and timestamp >= '%s' and timestamp < '%s' group by toStartOfHour(timestamp) order by c desc limit 1`, from, until))
+	dbBytes, _ := s.queries.DatabaseSizeBytes(r.Context())
+
+	tierStep := func(label string, used, limit int, unit string) emailFunnelStep {
+		pct := 0
+		if limit > 0 {
+			pct = used * 100 / limit
+		}
+		return emailFunnelStep{
+			label: label, count: used, width: pct,
+			drop: fmt.Sprintf("· %d%% of %s", pct, unit),
+			warn: pct >= 80,
+		}
+	}
+	tiers := []emailFunnelStep{
+		tierStep("Emails · yesterday", emailsDay, resendDayLimit, "100/day"),
+		tierStep("Emails · this month", emailsMonth, resendMonLimit, "3k/mo"),
+		tierStep("Database", int(dbBytes>>20), int(neonBytesLimit>>20), "512 MB"),
+		tierStep("PostHog events · month", phMonth, posthogMonLimit, "1M/mo"),
+		tierStep("API requests · yesterday", apiDay, cfDayLimit, "100k/day"),
+		tierStep("GIF searches · peak hour", klipyPeak, klipyHourLimit, "100/hr (test key)"),
+		tierStep("Registered users", int(registered), clerkMAULimit, "10k MAU"),
+	}
+
 	// Everything else from yesterday, compact.
 	total := 0
 	meta := make([]emailMetaRow, 0, len(digestMetrics))
@@ -162,6 +209,8 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 		funnel:    funnel,
 		boardT:    "Top hosts · last 7 days",
 		board:     board,
+		tiersT:    "Free-tier runway",
+		tiers:     tiers,
 		lines:     []string{fmt.Sprintf("👥 %d unique people did something yesterday.", dau)},
 		meta:      meta,
 		ctaLabel:  "Open PostHog",

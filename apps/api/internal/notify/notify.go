@@ -19,6 +19,9 @@ type Client struct {
 	url    string
 	logger *slog.Logger
 	http   *http.Client
+	// OnSend, when set, observes every successful hand-off (recipient count) -
+	// the analytics digest uses it to track email volume vs the provider tier.
+	OnSend func(recipients int)
 }
 
 // New reads config; empty apiKey or from → disabled no-op client. A bare
@@ -48,6 +51,9 @@ func Payload(from string, to []string, subject, html string) map[string]any {
 func (c *Client) Send(to []string, subject, html string) {
 	if !c.Enabled() || len(to) == 0 {
 		return
+	}
+	if c.OnSend != nil {
+		c.OnSend(len(to))
 	}
 	go func() {
 		body, _ := json.Marshal(Payload(c.from, to, subject, html))

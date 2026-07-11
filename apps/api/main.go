@@ -95,6 +95,9 @@ func main() {
 		klipyStub: os.Getenv("KLIPY_MODE") == "stub",
 		geoStub:   os.Getenv("GEO_MODE") == "stub",
 	}
+	// Email volume telemetry: every send becomes a PostHog event so the daily
+	// digest can show usage against the provider's free tier.
+	s.notify.OnSend = func(n int) { s.analytics.CaptureServer("email_sent", map[string]any{"recipients": n}) }
 	auth := s.authMiddleware()
 
 	// Per-IP rate limiters for the unauthenticated attack surface. Writes (guest

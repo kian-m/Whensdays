@@ -508,3 +508,7 @@ WHERE e.created_at >= $1
 GROUP BY e.host_id, p.display_name
 ORDER BY events_created DESC, invites_sent DESC
 LIMIT 5;
+
+-- name: DatabaseSizeBytes :one
+-- Digest tier-runway: how close the (image-heavy) database is to the plan cap.
+SELECT pg_database_size(current_database())::bigint;

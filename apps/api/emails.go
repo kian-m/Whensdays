@@ -55,6 +55,42 @@ type emailFunnelStep struct {
 	count int
 	width int
 	drop  string
+	warn  bool // draw the bar in the danger color (tier usage past 80%)
+}
+
+// renderBars writes a titled section of labeled proportional bars - the
+// digest uses it for the drop-off funnel and the free-tier runway. A step
+// with warn=true draws its bar in the danger color.
+func renderBars(b *strings.Builder, accent, title string, steps []emailFunnelStep) {
+	if len(steps) == 0 {
+		return
+	}
+	if title != "" {
+		fmt.Fprintf(b, `<div style="font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:%s;margin:0 0 8px">%s</div>`, emailMuted, esc(title))
+	}
+	b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px">`)
+	for _, f := range steps {
+		drop := ""
+		if f.drop != "" {
+			drop = fmt.Sprintf(` <span style="font-weight:600;color:%s;font-size:12px">%s</span>`, emailMuted, esc(f.drop))
+		}
+		w := f.width
+		if w < 2 {
+			w = 2
+		}
+		if w > 100 {
+			w = 100
+		}
+		bar := accent
+		if f.warn {
+			bar = "#e2606e"
+		}
+		fmt.Fprintf(b, `<tr><td style="padding:8px 0 4px;font-size:13px;color:%s">%s</td><td align="right" style="padding:8px 0 4px;font-size:13px;font-weight:700;color:%s;white-space:nowrap">%d%s</td></tr>`,
+			emailInk, esc(f.label), emailInk, f.count, drop)
+		fmt.Fprintf(b, `<tr><td colspan="2"><table role="presentation" width="100%%" cellpadding="0" cellspacing="0"><tr><td style="background:%s;border-radius:5px;height:8px;font-size:0;line-height:0"><table role="presentation" width="%d%%" cellpadding="0" cellspacing="0"><tr><td style="background:%s;border-radius:5px;height:8px;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table></td></tr>`,
+			emailLine, w, bar)
+	}
+	b.WriteString(`</table>`)
 }
 
 // emailBoardRow: leaderboard line - rank badge, name, right-aligned value.
@@ -116,6 +152,8 @@ type emailContent struct {
 	hero      *emailHero        // optional giant stat tile
 	funnel    []emailFunnelStep // optional drop-off funnel with bars
 	funnelT   string            // funnel section title
+	tiers     []emailFunnelStep // optional second bar section (free-tier runway)
+	tiersT    string
 	board     []emailBoardRow   // optional leaderboard
 	boardT    string            // leaderboard section title
 }
@@ -175,27 +213,8 @@ func renderEmail(c emailContent) string {
 			emailBG, emailLine, accent, accent, esc(c.hero.number), emailMuted, esc(c.hero.label), sub)
 	}
 
-	if len(c.funnel) > 0 {
-		if c.funnelT != "" {
-			fmt.Fprintf(&b, `<div style="font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:%s;margin:0 0 8px">%s</div>`, emailMuted, esc(c.funnelT))
-		}
-		b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px">`)
-		for _, f := range c.funnel {
-			drop := ""
-			if f.drop != "" {
-				drop = fmt.Sprintf(` <span style="font-weight:600;color:%s;font-size:12px">%s</span>`, emailMuted, esc(f.drop))
-			}
-			w := f.width
-			if w < 2 {
-				w = 2
-			}
-			fmt.Fprintf(&b, `<tr><td style="padding:8px 0 4px;font-size:13px;color:%s">%s</td><td align="right" style="padding:8px 0 4px;font-size:13px;font-weight:700;color:%s;white-space:nowrap">%d%s</td></tr>`,
-				emailInk, esc(f.label), emailInk, f.count, drop)
-			fmt.Fprintf(&b, `<tr><td colspan="2"><table role="presentation" width="100%%" cellpadding="0" cellspacing="0"><tr><td style="background:%s;border-radius:5px;height:8px;font-size:0;line-height:0"><table role="presentation" width="%d%%" cellpadding="0" cellspacing="0"><tr><td style="background:%s;border-radius:5px;height:8px;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table></td></tr>`,
-				emailLine, w, accent)
-		}
-		b.WriteString(`</table>`)
-	}
+	renderBars(&b, accent, c.funnelT, c.funnel)
+	renderBars(&b, accent, c.tiersT, c.tiers)
 
 	if len(c.board) > 0 {
 		if c.boardT != "" {
