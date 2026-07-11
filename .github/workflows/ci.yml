@@ -23,7 +23,8 @@ jobs:
   docs:
     # Flag PRs that change app code without updating the docs. Bypass with
     # "[skip-docs]" in the PR title when a change genuinely needs no doc update.
-    if: github.event_name == 'pull_request'
+    # Dependabot can't update the docs - its PRs are exempt.
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

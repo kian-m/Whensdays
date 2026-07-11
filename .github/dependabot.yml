@@ -12,20 +12,15 @@ updates:
       go-minor-patch:
         update-types: ["minor", "patch"]
 
+  # pnpm WORKSPACE: the lockfile lives at the repo root, so npm updates must
+  # target "/" (per-app directories edit package.json without the root
+  # lockfile and break --frozen-lockfile installs).
   - package-ecosystem: "npm"
-    directory: "/apps/web"
+    directory: "/"
     schedule:
       interval: "weekly"
     groups:
-      web-minor-patch:
-        update-types: ["minor", "patch"]
-
-  - package-ecosystem: "npm"
-    directory: "/e2e"
-    schedule:
-      interval: "weekly"
-    groups:
-      e2e-minor-patch:
+      js-minor-patch:
         update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
