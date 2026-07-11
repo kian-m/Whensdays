@@ -66,6 +66,10 @@ func themeAccent(theme string) (string, string) {
 		return "#ff2d94", "#b01c67"
 	case "cozy":
 		return "#df8038", "#b05f22"
+	case "analytics":
+		// Owner digest only - a cool teal no event theme uses, so the daily
+		// numbers are recognizable in the inbox at a glance.
+		return "#2a9d8f", "#1d7268"
 	}
 	return emailAccent, emailAccnt2
 }

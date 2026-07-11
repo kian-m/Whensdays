@@ -1938,6 +1938,7 @@ test.describe("scheduler", () => {
   test("cron reminders endpoint is key-gated", async ({ request }) => {
     const noKey = await request.post("/api/cron/reminders");
     expect(noKey.status()).toBe(401); // no CRON_KEY configured/matched
+    expect((await request.post("/api/cron/analytics")).status()).toBe(401);
   });
 
   test("intent links on scheduled events", async ({ page }) => {
