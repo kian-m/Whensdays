@@ -695,25 +695,18 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
             </div>
           </div>
           <div>
-            <div className="muted small" style={{ marginBottom: 6 }}>Times that work (tap a day or row label to fill it)</div>
-            <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }}>
-              <div />
-              {DAYPARTS.map((dp) => (
-                <button key={dp.value} type="button" className="hd gp-head" data-testid={`gp-row-${dp.value}`}
-                  onClick={() => toggleRow(dp.value)}>{dp.short}</button>
-              ))}
-              {WEEKDAYS.map((d, wd) => (
-                <Fragment key={wd}>
-                  <button type="button" className="day gp-head" style={{ textAlign: "left" }}
-                    data-testid={`gp-col-${wd}`} onClick={() => toggleColumn(wd)}>{d}</button>
-                  {DAYPARTS.map((dp) => {
-                    const k = slotKey(wd, dp.value);
-                    return <button key={dp.value} type="button" data-testid={`gp-cell-${wd}-${dp.value}`}
-                      className={`cell ${cells.has(k) ? "on" : ""}`} onClick={() => toggleCell(k)} />;
-                  })}
-                </Fragment>
-              ))}
-            </div>
+            <div className="muted small" style={{ marginBottom: 6 }}>Times that work - tap or slide across cells (a day or column header fills the line)</div>
+            {/* The shared DayGrid (weekday rows × dayparts) so slide-to-paint
+                works here exactly like every other availability grid. Row
+                index = weekday, so gp-cell-<wd>-<part> testids are preserved. */}
+            <DayGrid
+              dates={WEEKDAYS.map((d, wd) => ({ value: String(wd), label: d }))}
+              free={cells} idPrefix="gp" testid="gp-general-grid"
+              onToggle={(day, dp) => toggleCell(`${day}:${dp}`)}
+              onToggleRow={(day) => toggleColumn(Number(day))}
+              onToggleCol={(dp) => toggleRow(dp)}
+              paintOn={cells}
+              onPaint={(day, dp, on) => mutate(setCells, (m) => (on ? m.add(`${day}:${dp}`) : m.delete(`${day}:${dp}`)))} />
           </div>
         </>
       )}

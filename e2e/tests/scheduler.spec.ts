@@ -118,6 +118,15 @@ test.describe("scheduler", () => {
     await page.getByTestId("rsvp-going").click();
     await page.getByTestId("gp-month-0").click();
     await page.getByTestId("gp-cell-6-evening").click();
+    // Slide-to-paint works on poll grids too: one drag marks a row of cells.
+    await page.getByTestId("gp-cell-5-morning").hover();
+    await page.mouse.down();
+    await page.getByTestId("gp-cell-5-noon").hover();
+    await page.getByTestId("gp-cell-5-afternoon").hover();
+    await page.mouse.up();
+    for (const dp of ["morning", "noon", "afternoon"]) {
+      await expect(page.getByTestId(`gp-cell-5-${dp}`)).toHaveClass(/\bon\b/);
+    }
     await page.getByTestId("save-general").click();
 
     // Back in the host view, the aggregate reflects the pick.
