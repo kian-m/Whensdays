@@ -309,10 +309,12 @@ test.describe("scheduler", () => {
     // The last date is within 3 weeks → the host sees the re-poll entry, which
     // opens a prefilled poll that will re-invite everyone.
     await page.getByTestId("series-repoll").click();
-    // The wizard route is lazy-loaded: until its chunk renders, "event-title"
-    // still resolves to the event page's H1 (not an input). Anchor on the URL
-    // first so the assertion targets the wizard's input.
+    // The wizard route is lazy-loaded and React Router keeps the OLD page
+    // rendered while the chunk loads - "event-title" stays the event page's
+    // H1 until the wizard mounts. Anchor on the wizard's own heading (slow on
+    // 2-core CI runners under parallel workers), THEN assert the input.
     await expect(page).toHaveURL(/\/new/);
+    await expect(page.getByText("What's the plan?")).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId("event-title")).toHaveValue(newTitle, { timeout: 15000 });
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("wiz-next").click();
