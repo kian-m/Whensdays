@@ -167,12 +167,13 @@ type Friendship struct {
 }
 
 type Group struct {
-	ID        pgtype.UUID        `json:"id"`
-	OwnerID   string             `json:"owner_id"`
-	Name      string             `json:"name"`
-	Emoji     string             `json:"emoji"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	IconUrl   string             `json:"icon_url"`
+	ID          pgtype.UUID        `json:"id"`
+	OwnerID     string             `json:"owner_id"`
+	Name        string             `json:"name"`
+	Emoji       string             `json:"emoji"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	IconUrl     string             `json:"icon_url"`
+	Description string             `json:"description"`
 }
 
 type GroupMember struct {

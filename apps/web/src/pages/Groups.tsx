@@ -37,18 +37,20 @@ export function Groups() {
   const nav = useNavigate();
   const { data, loading, reload } = useAsync<GroupsResp>((a) => getJSON(a, "/api/groups"));
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [emoji, setEmoji] = useState("👥");
   const [msg, setMsg] = useState<string | null>(null);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    const res = await sendJSON(api, "POST", "/api/groups", { name, emoji });
+    const res = await sendJSON(api, "POST", "/api/groups", { name, description, emoji });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
       return setMsg(b.error || "could not create");
     }
     setName("");
+    setDescription("");
     setEmoji("👥");
     reload();
   }
@@ -78,6 +80,8 @@ export function Groups() {
           />
           <button className="btn" data-testid="group-create">Create</button>
         </div>
+        <textarea className="input" maxLength={500} data-testid="group-desc" value={description} rows={2}
+          placeholder="What's this group about? (optional)" onChange={(e) => setDescription(e.target.value)} />
         <p className="muted small">Pick an emoji - or upload a photo from the group page after creating.</p>
         {msg && <p className="muted small">{msg}</p>}
       </form>
@@ -104,7 +108,7 @@ export function Groups() {
   );
 }
 
-type GroupPreview = { id: string; name: string; emoji: string; icon_url: string; member_count: number; is_member: boolean };
+type GroupPreview = { id: string; name: string; description: string; emoji: string; icon_url: string; member_count: number; is_member: boolean };
 
 // The join view anyone (guests included) sees when they open a group link
 // they're not a member of yet.
@@ -128,6 +132,7 @@ function GroupJoin({ id, onJoined }: { id: string; onJoined: () => void }) {
         {data.icon_url ? <Avatar url={data.icon_url} name={data.name} size={72} /> : <span style={{ fontSize: "3rem" }}>{data.emoji || "👥"}</span>}
         <h1>{data.name}</h1>
         <p className="muted small">{data.member_count} {data.member_count === 1 ? "member" : "members"} · you're invited to join</p>
+        {data.description && <p className="muted small" style={{ maxWidth: 420 }}>{data.description}</p>}
         <button className="btn" data-testid="group-join" disabled={busy} onClick={join}>
           {busy ? "Joining…" : "Join the group"}
         </button>
@@ -171,6 +176,16 @@ export function GroupPage() {
     reload();
   }
 
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  async function saveGroup(e: React.FormEvent) {
+    e.preventDefault();
+    const res = await sendJSON(api, "PUT", `/api/groups/${id}`, { name: editName, description: editDesc });
+    if (!res.ok) { const b = await res.json().catch(() => ({})); return setAddMsg(b.error || "could not save"); }
+    setEditing(false);
+    reload();
+  }
   async function setRole(userId: string, role: "member" | "admin") {
     await sendJSON(api, "PUT", `/api/groups/${id}/members/${userId}/role`, { role });
     reload();
@@ -209,17 +224,32 @@ export function GroupPage() {
               )}
             </span>
           </span>
-          {canManage && (
-            <button
-              className="btn sm"
-              data-testid="group-new-event"
-              style={{ flex: "none" }}
-              onClick={() => nav(`/new?group=${group.id}`)}
-            >
-              + New event
-            </button>
-          )}
+          <span className="row" style={{ gap: 6, flex: "none" }}>
+            {canManage && !editing && (
+              <button type="button" className="btn ghost sm" data-testid="group-edit"
+                onClick={() => { setEditName(group.name); setEditDesc(group.description); setEditing(true); }}>✎ Edit</button>
+            )}
+            {canManage && (
+              <button className="btn sm" data-testid="group-new-event" style={{ flex: "none" }}
+                onClick={() => nav(`/new?group=${group.id}`)}>+ New event</button>
+            )}
+          </span>
         </div>
+        {group.description && !editing && (
+          <p className="muted" data-testid="group-description" style={{ overflowWrap: "anywhere" }}>{group.description}</p>
+        )}
+        {editing && (
+          <form className="stack" style={{ gap: 8 }} onSubmit={saveGroup} data-testid="group-edit-form">
+            <input className="input" maxLength={80} data-testid="group-edit-name" value={editName}
+              placeholder="Group name" onChange={(e) => setEditName(e.target.value)} />
+            <textarea className="input" maxLength={500} data-testid="group-edit-desc" value={editDesc} rows={2}
+              placeholder="What's this group about? (optional)" onChange={(e) => setEditDesc(e.target.value)} />
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn sm" data-testid="group-edit-save">Save</button>
+              <button type="button" className="btn ghost sm" data-testid="group-edit-cancel" onClick={() => setEditing(false)}>Cancel</button>
+            </div>
+          </form>
+        )}
         {/* Any member can grow the group - the link IS the invite. */}
         <div className="row wrap" style={{ gap: 6 }}>
           <button type="button" className="btn soft sm" data-testid="group-invite-copy"

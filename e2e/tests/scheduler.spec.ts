@@ -1205,13 +1205,19 @@ test.describe("scheduler", () => {
       const testId = test.info().testId;
       const groupName = `Crew ${testId}-${Date.now()}`;
       await ownerPage.getByTestId("group-name").fill(groupName);
+      await ownerPage.getByTestId("group-desc").fill("Weekly board game night crew");
       await ownerPage.getByTestId("group-create").click();
 
       // Click the new group row by text.
       await ownerPage.getByText(groupName).first().click();
 
-      // Group title is visible.
+      // Group title + description are visible; the owner can edit both.
       await expect(ownerPage.getByTestId("group-title")).toBeVisible();
+      await expect(ownerPage.getByTestId("group-description")).toHaveText("Weekly board game night crew");
+      await ownerPage.getByTestId("group-edit").click();
+      await ownerPage.getByTestId("group-edit-desc").fill("Now Thursdays, bring snacks");
+      await ownerPage.getByTestId("group-edit-save").click();
+      await expect(ownerPage.getByTestId("group-description")).toHaveText("Now Thursdays, bring snacks");
 
       // Add the member by handle.
       await ownerPage.getByTestId("member-handle").fill("gmem");

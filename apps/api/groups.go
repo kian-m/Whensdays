@@ -34,15 +34,21 @@ func validEmoji(s string) bool {
 func (s *server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	var in struct {
-		Name  string `json:"name"`
-		Emoji string `json:"emoji"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Emoji       string `json:"emoji"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
 	in.Name = strings.TrimSpace(in.Name)
+	in.Description = strings.TrimSpace(in.Description)
 	if in.Name == "" || len(in.Name) > 80 {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "name is required (max 80)"})
+		return
+	}
+	if len(in.Description) > 500 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "description: max 500 characters"})
 		return
 	}
 	if in.Emoji == "" {
@@ -51,7 +57,7 @@ func (s *server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "icon must be an emoji"})
 		return
 	}
-	g, err := s.queries.CreateGroup(r.Context(), db.CreateGroupParams{OwnerID: uid, Name: in.Name, Emoji: in.Emoji})
+	g, err := s.queries.CreateGroup(r.Context(), db.CreateGroupParams{OwnerID: uid, Name: in.Name, Description: in.Description, Emoji: in.Emoji})
 	if err != nil {
 		s.internal(w, "create group", err)
 		return
@@ -205,6 +211,44 @@ func (s *server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
 
 // handleSetGroupIcon uploads a picture icon (owner only) - same contract as
 // profile avatars: small data URL or https, replaces the emoji when set.
+// handleUpdateGroup edits a group's name + description (owner/admins only).
+func (s *server) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	g, ok := s.loadGroupForMember(w, r)
+	if !ok {
+		return
+	}
+	isAdmin, _ := s.queries.IsGroupAdmin(r.Context(), db.IsGroupAdminParams{ID: g.ID, UserID: uid})
+	if !isAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admins only"})
+		return
+	}
+	var in struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	in.Name = strings.TrimSpace(in.Name)
+	in.Description = strings.TrimSpace(in.Description)
+	if in.Name == "" || len(in.Name) > 80 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "name is required (max 80)"})
+		return
+	}
+	if len(in.Description) > 500 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "description: max 500 characters"})
+		return
+	}
+	updated, err := s.queries.UpdateGroupDetails(r.Context(), db.UpdateGroupDetailsParams{ID: g.ID, Name: in.Name, Description: in.Description})
+	if err != nil {
+		s.internal(w, "update group", err)
+		return
+	}
+	s.analytics.Capture(uid, "group_edited", map[string]any{"group_id": r.PathValue("id")})
+	writeJSON(w, http.StatusOK, updated)
+}
+
 func (s *server) handleSetGroupIcon(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	g, ok := s.loadGroupForMember(w, r)

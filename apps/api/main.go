@@ -209,6 +209,7 @@ func main() {
 	mux.Handle("POST /api/groups/{id}/members", auth(http.HandlerFunc(s.handleAddGroupMember)))
 	mux.Handle("GET /api/groups/{id}/preview", auth(http.HandlerFunc(s.handleGroupPreview)))
 	mux.Handle("POST /api/groups/{id}/join", auth(http.HandlerFunc(s.handleJoinGroup)))
+	mux.Handle("PUT /api/groups/{id}", auth(http.HandlerFunc(s.handleUpdateGroup)))
 	mux.Handle("PUT /api/groups/{id}/icon", auth(http.HandlerFunc(s.handleSetGroupIcon)))
 	mux.Handle("DELETE /api/groups/{id}/members/{userId}", auth(http.HandlerFunc(s.handleRemoveGroupMember)))
 	mux.Handle("PUT /api/groups/{id}/members/{userId}/role", auth(http.HandlerFunc(s.handleSetGroupMemberRole)))

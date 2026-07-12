@@ -242,7 +242,7 @@ export function guessCity(): string {
 }
 
 export type SeriesItem = { id: string; starts_at: string; status: string };
-export type Group = { id: string; owner_id: string; name: string; emoji: string; created_at: string; icon_url: string };
+export type Group = { id: string; owner_id: string; name: string; description: string; emoji: string; created_at: string; icon_url: string };
 export type GroupMember = { role: "member" | "admin"; user_id: string; display_name: string | null; handle: string | null; avatar_url: string | null };
 export type GroupDetail = { group: Group; members: GroupMember[]; events: Event[]; is_owner: boolean; is_admin: boolean };
 

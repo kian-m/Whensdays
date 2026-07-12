@@ -40,20 +40,26 @@ func (q *Queries) CountGroupMembers(ctx context.Context, groupID pgtype.UUID) (i
 
 const createGroup = `-- name: CreateGroup :one
 
-INSERT INTO groups (owner_id, name, emoji)
-VALUES ($1, $2, $3)
-RETURNING id, owner_id, name, emoji, created_at, icon_url
+INSERT INTO groups (owner_id, name, description, emoji)
+VALUES ($1, $2, $3, $4)
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description
 `
 
 type CreateGroupParams struct {
-	OwnerID string `json:"owner_id"`
-	Name    string `json:"name"`
-	Emoji   string `json:"emoji"`
+	OwnerID     string `json:"owner_id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Emoji       string `json:"emoji"`
 }
 
 // ============================ groups ==============================
 func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (Group, error) {
-	row := q.db.QueryRow(ctx, createGroup, arg.OwnerID, arg.Name, arg.Emoji)
+	row := q.db.QueryRow(ctx, createGroup,
+		arg.OwnerID,
+		arg.Name,
+		arg.Description,
+		arg.Emoji,
+	)
 	var i Group
 	err := row.Scan(
 		&i.ID,
@@ -62,12 +68,13 @@ func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (Group
 		&i.Emoji,
 		&i.CreatedAt,
 		&i.IconUrl,
+		&i.Description,
 	)
 	return i, err
 }
 
 const getGroup = `-- name: GetGroup :one
-SELECT id, owner_id, name, emoji, created_at, icon_url
+SELECT id, owner_id, name, emoji, created_at, icon_url, description
 FROM groups
 WHERE id = $1
 `
@@ -82,6 +89,7 @@ func (q *Queries) GetGroup(ctx context.Context, id pgtype.UUID) (Group, error) {
 		&i.Emoji,
 		&i.CreatedAt,
 		&i.IconUrl,
+		&i.Description,
 	)
 	return i, err
 }
@@ -326,7 +334,7 @@ func (q *Queries) ListGroupMembers(ctx context.Context, groupID pgtype.UUID) ([]
 }
 
 const listMyGroups = `-- name: ListMyGroups :many
-SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url
+SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url, g.description
 FROM groups g
 LEFT JOIN group_members m ON m.group_id = g.id
 WHERE g.owner_id = $1 OR m.user_id = $1
@@ -349,6 +357,7 @@ func (q *Queries) ListMyGroups(ctx context.Context, ownerID string) ([]Group, er
 			&i.Emoji,
 			&i.CreatedAt,
 			&i.IconUrl,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -396,7 +405,7 @@ func (q *Queries) RemoveGroupMember(ctx context.Context, arg RemoveGroupMemberPa
 const setGroupIcon = `-- name: SetGroupIcon :one
 UPDATE groups SET icon_url = $2
 WHERE id = $1
-RETURNING id, owner_id, name, emoji, created_at, icon_url
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description
 `
 
 type SetGroupIconParams struct {
@@ -414,6 +423,7 @@ func (q *Queries) SetGroupIcon(ctx context.Context, arg SetGroupIconParams) (Gro
 		&i.Emoji,
 		&i.CreatedAt,
 		&i.IconUrl,
+		&i.Description,
 	)
 	return i, err
 }
@@ -431,4 +441,30 @@ type SetGroupMemberRoleParams struct {
 func (q *Queries) SetGroupMemberRole(ctx context.Context, arg SetGroupMemberRoleParams) error {
 	_, err := q.db.Exec(ctx, setGroupMemberRole, arg.GroupID, arg.UserID, arg.Role)
 	return err
+}
+
+const updateGroupDetails = `-- name: UpdateGroupDetails :one
+UPDATE groups SET name = $2, description = $3 WHERE id = $1
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description
+`
+
+type UpdateGroupDetailsParams struct {
+	ID          pgtype.UUID `json:"id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+}
+
+func (q *Queries) UpdateGroupDetails(ctx context.Context, arg UpdateGroupDetailsParams) (Group, error) {
+	row := q.db.QueryRow(ctx, updateGroupDetails, arg.ID, arg.Name, arg.Description)
+	var i Group
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Emoji,
+		&i.CreatedAt,
+		&i.IconUrl,
+		&i.Description,
+	)
+	return i, err
 }

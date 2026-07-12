@@ -1,17 +1,17 @@
 -- ============================ groups ==============================
 
 -- name: CreateGroup :one
-INSERT INTO groups (owner_id, name, emoji)
-VALUES ($1, $2, $3)
-RETURNING id, owner_id, name, emoji, created_at, icon_url;
+INSERT INTO groups (owner_id, name, description, emoji)
+VALUES ($1, $2, $3, $4)
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description;
 
 -- name: GetGroup :one
-SELECT id, owner_id, name, emoji, created_at, icon_url
+SELECT id, owner_id, name, emoji, created_at, icon_url, description
 FROM groups
 WHERE id = $1;
 
 -- name: ListMyGroups :many
-SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url
+SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url, g.description
 FROM groups g
 LEFT JOIN group_members m ON m.group_id = g.id
 WHERE g.owner_id = $1 OR m.user_id = $1
@@ -55,7 +55,7 @@ WHERE a.event_id = $1 AND a.rsvp = 'going' AND p.email <> '';
 -- name: SetGroupIcon :one
 UPDATE groups SET icon_url = $2
 WHERE id = $1
-RETURNING id, owner_id, name, emoji, created_at, icon_url;
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description;
 
 -- name: ListGroupEventMonths :many
 -- Start times of every HAPPENED scheduled group event - the cron computes
@@ -91,3 +91,8 @@ SELECT EXISTS (
 
 -- name: SetGroupMemberRole :exec
 UPDATE group_members SET role = $3 WHERE group_id = $1 AND user_id = $2;
+
+
+-- name: UpdateGroupDetails :one
+UPDATE groups SET name = $2, description = $3 WHERE id = $1
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description;
