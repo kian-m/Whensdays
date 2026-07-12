@@ -39,7 +39,25 @@
       "applicationCategory": "SchedulingApplication",
       "operatingSystem": "Web",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-      "description": "Free scheduling and availability app for friend groups and clubs. Guests RSVP and vote on times from one invite link - no account needed. Availability polls, recurring series, group streaks, calendar sync, and one-tap RSVP email."
+      "description": "Free scheduling and availability app for friend groups and clubs. Guests RSVP and vote on times from one invite link - no account needed. Availability polls, recurring series, group streaks, calendar sync, and one-tap RSVP email.",
+      "publisher": { "@type": "Organization", "name": "Whensdays LLC" }
+    }
+    </script>
+    <!-- Organization entity: declares "Whensdays" as a real thing to search/AI.
+         sameAs links the brand to its authoritative profiles - AI cross-checks
+         these to decide an entity exists. Add each URL here AS the profile goes
+         live (Product Hunt, AlternativeTo, LinkedIn, X, Crunchbase); an empty
+         sameAs helps far less than one pointing at real corroborating pages. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Whensdays",
+      "legalName": "Whensdays LLC",
+      "url": "%VITE_APP_ORIGIN%/",
+      "logo": "%VITE_APP_ORIGIN%/apple-touch-icon.png",
+      "description": "Whensdays is a free group-scheduling app: poll everyone on when they're free, lock in the best time, and invite people with one link - no account needed to RSVP. Built for friend groups and clubs that meet again and again.",
+      "sameAs": []
     }
     </script>
     <script type="application/ld+json">
