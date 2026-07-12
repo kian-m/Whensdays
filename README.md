@@ -1,10 +1,16 @@
-# Whensdays (clSandbox app)
+# Whensdays — free group scheduling app · [whensdays.com](https://whensdays.com)
 
-**Plans, minus the group-chat chaos.** A minimal scheduling assistant for any
-get-together — dinner, drinks, movie night, camping, trips, parties. Host an event at
-your place or get help finding a venue, set a time or let everyone vote on
-availability, answer a couple of quick preference questions tuned to the event
-type, add friends, and see when they're free.
+**Whensdays is a free group-scheduling and availability app** for friend groups
+and clubs, live at **https://whensdays.com**. Poll everyone on when they're free,
+lock in the time that works for the whole group, and invite people with **one
+link — no account needed to RSVP**. A free alternative to When2meet, Doodle,
+LettuceMeet, and Timeful, built for groups that meet again and again: availability
+polls, recurring series, group streaks, calendar sync (Google + Apple), and
+one-tap RSVP straight from email.
+
+**Plans, minus the group-chat chaos.** Host an event at your place or find a
+venue, set a time or let everyone vote on availability, answer a couple of quick
+preference questions tuned to the event type, add friends, and see when they're free.
 
 Built on the **clSandbox** template — **React + Go + Postgres**, containerized
 end to end, where every feature ships with a visual end-to-end test. Secure,
