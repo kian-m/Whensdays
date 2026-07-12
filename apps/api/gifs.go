@@ -21,13 +21,25 @@ var eventThemes = []string{"", "party", "beach", "forest", "night", "neon", "coz
 
 func validEventTheme(t string) bool { return oneOf(t, eventThemes...) }
 
-// validCoverURL accepts an uploaded image (data URL) or a Klipy CDN asset -
-// never an arbitrary remote URL (no hotlink/SSRF surface).
+// safeImageDataURL: an uploaded image data URL restricted to RASTER formats.
+// SVG is deliberately excluded - it can carry <script>, and while browsers
+// disable scripts for SVG in an <img>, allowing it stores an XSS payload that
+// becomes live the moment any code path renders it as a background, <object>,
+// or a direct link. Raster-only removes the landmine entirely.
+func safeImageDataURL(u string) bool {
+	return strings.HasPrefix(u, "data:image/png;") ||
+		strings.HasPrefix(u, "data:image/jpeg;") ||
+		strings.HasPrefix(u, "data:image/gif;") ||
+		strings.HasPrefix(u, "data:image/webp;")
+}
+
+// validCoverURL accepts an uploaded raster image (data URL) or a Klipy CDN
+// asset - never an arbitrary remote URL (no hotlink/SSRF surface), never SVG.
 func validCoverURL(u string) bool {
 	if u == "" {
 		return true
 	}
-	if strings.HasPrefix(u, "data:image/") {
+	if safeImageDataURL(u) {
 		return len(u) <= coverMaxBody
 	}
 	return strings.HasPrefix(u, "https://static.klipy.com/") && len(u) <= 500
@@ -39,9 +51,9 @@ func validGifURL(u string) bool {
 	if u == "" {
 		return true
 	}
-	// Comment images: a Klipy CDN gif, the E2E stub, or an uploaded photo as a
-	// data URL (client-downscaled; the request body cap bounds its size).
-	if strings.HasPrefix(u, "data:image/") {
+	// Comment images: a Klipy CDN gif, the E2E stub, or an uploaded raster
+	// photo (client-downscaled; the request body cap bounds its size). No SVG.
+	if safeImageDataURL(u) {
 		return true
 	}
 	return (strings.HasPrefix(u, "https://static.klipy.com/") || strings.HasPrefix(u, "/gif-stub/")) && len(u) <= 500

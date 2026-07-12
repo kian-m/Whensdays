@@ -100,6 +100,25 @@ func (s *server) handleEventOGImage(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(buf.Bytes())
 }
 
+// maxCoverPixels caps decode dimensions: bytes are already bounded, but a tiny
+// compressed image can decode to gigapixels (a decompression/pixel bomb) and
+// spike memory. 25MP (e.g. 5000×5000) is far above any real cover.
+const maxCoverPixels = 25_000_000
+
+// safeDecode checks the header dimensions BEFORE allocating the full pixel
+// buffer, rejecting oversized images.
+func safeDecode(b []byte) image.Image {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(b))
+	if err != nil || cfg.Width*cfg.Height > maxCoverPixels || cfg.Width <= 0 || cfg.Height <= 0 {
+		return nil
+	}
+	img, _, err := image.Decode(bytes.NewReader(b))
+	if err != nil {
+		return nil
+	}
+	return img
+}
+
 // loadCover decodes an event cover: an uploaded data URL, or a Klipy CDN gif
 // (first frame). Any failure returns nil → the branded fallback card.
 func (s *server) loadCover(u string) image.Image {
@@ -113,11 +132,7 @@ func (s *server) loadCover(u string) image.Image {
 		if err != nil {
 			return nil
 		}
-		img, _, err := image.Decode(bytes.NewReader(raw))
-		if err != nil {
-			return nil
-		}
-		return img
+		return safeDecode(raw)
 	case strings.HasPrefix(u, "https://static.klipy.com/"):
 		client := safeHTTPClient(5 * time.Second)
 		resp, err := client.Get(u)
@@ -129,14 +144,13 @@ func (s *server) loadCover(u string) image.Image {
 		if err != nil {
 			return nil
 		}
-		if img, err := gif.Decode(bytes.NewReader(body)); err == nil {
-			return img // first frame
+		// Bound gif dimensions the same way before decoding all frames.
+		if cfg, err := gif.DecodeConfig(bytes.NewReader(body)); err == nil && cfg.Width*cfg.Height <= maxCoverPixels {
+			if img, err := gif.Decode(bytes.NewReader(body)); err == nil {
+				return img // first frame
+			}
 		}
-		img, _, err := image.Decode(bytes.NewReader(body))
-		if err != nil {
-			return nil
-		}
-		return img
+		return safeDecode(body)
 	}
 	return nil
 }

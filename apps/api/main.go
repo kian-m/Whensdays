@@ -108,9 +108,14 @@ func main() {
 	// stays deterministic - mirrors the CALENDAR/KLIPY/GEO stub pattern.
 	writeLimit := func(h http.Handler) http.Handler { return h }
 	readLimit := func(h http.Handler) http.Handler { return h }
+	proxyLimit := func(h http.Handler) http.Handler { return h }
 	if os.Getenv("AUTH_MODE") != "dev" {
 		writeLimit = newIPLimiter(30, 15).middleware  // ~30/min, burst 15
 		readLimit = newIPLimiter(300, 100).middleware // ~300/min, burst 100
+		// Outbound proxies (Klipy/Photon): per-USER cap protects upstream
+		// free-tier quotas from a single actor. ~40/min covers debounced
+		// typeahead + GIF search; abuse hits 429 well before the quota.
+		proxyLimit = newIPLimiter(40, 20).perUserMiddleware
 	}
 
 	mux := http.NewServeMux()
@@ -154,8 +159,8 @@ func main() {
 	mux.Handle("POST /api/events/{id}/preferences", auth(http.HandlerFunc(s.handlePreferences)))
 	mux.Handle("POST /api/events/{id}/finalize", auth(http.HandlerFunc(s.handleFinalize)))
 	mux.Handle("PUT /api/events/{id}", auth(http.HandlerFunc(s.handleUpdateEvent)))
-	mux.Handle("GET /api/gifs/search", auth(http.HandlerFunc(s.handleGifSearch)))
-	mux.Handle("GET /api/geo/search", auth(http.HandlerFunc(s.handleGeoSearch)))
+	mux.Handle("GET /api/gifs/search", auth(proxyLimit(http.HandlerFunc(s.handleGifSearch))))
+	mux.Handle("GET /api/geo/search", auth(proxyLimit(http.HandlerFunc(s.handleGeoSearch))))
 	mux.Handle("DELETE /api/events/{id}", auth(http.HandlerFunc(s.handleCancelEvent)))
 	mux.Handle("DELETE /api/groups/{id}", auth(http.HandlerFunc(s.handleDeleteGroup)))
 	mux.Handle("DELETE /api/friends/{id}", auth(http.HandlerFunc(s.handleDeleteFriendship)))

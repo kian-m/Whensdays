@@ -135,3 +135,22 @@ func (l *ipLimiter) middleware(next http.Handler) http.Handler {
 	})
 }
 
+// perUserMiddleware limits by the AUTHENTICATED user id (falling back to IP).
+// Used on the outbound-proxy routes (Klipy/Photon) - they're behind auth, but
+// guests are cheap-to-mint users, so a per-user bucket stops one actor from
+// burning the upstream free-tier quota (denial-of-wallet) for everyone.
+func (l *ipLimiter) perUserMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := clientIP(r)
+		if uid, ok := userIDFrom(r.Context()); ok && uid != "" {
+			key = "u:" + uid
+		}
+		if !l.allow(key, time.Now()) {
+			w.Header().Set("Retry-After", "60")
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+

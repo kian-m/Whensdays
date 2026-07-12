@@ -1961,6 +1961,17 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("consent-banner")).toHaveCount(0);
   });
 
+  test("security: SVG avatars are rejected (stored-XSS vector)", async ({ page }) => {
+    await ensureProfile(page);
+    const status = await page.evaluate(async () => {
+      const h = { "Content-Type": "application/json", "X-Dev-User": "demo-user" };
+      const svg = "data:image/svg+xml;base64," + btoa("<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>");
+      const res = await fetch("/api/profile/avatar", { method: "PUT", headers: h, body: JSON.stringify({ avatar_url: svg }) });
+      return res.status;
+    });
+    expect(status).toBe(422); // raster-only; svg refused server-side
+  });
+
   test("cron reminders endpoint is key-gated", async ({ request }) => {
     const noKey = await request.post("/api/cron/reminders");
     expect(noKey.status()).toBe(401); // no CRON_KEY configured/matched

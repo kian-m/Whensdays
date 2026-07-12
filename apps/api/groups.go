@@ -228,7 +228,7 @@ func (s *server) handleSetGroupIcon(w http.ResponseWriter, r *http.Request) {
 	}
 	// Same policy as event covers: uploads or the Klipy CDN (validGifURL also
 	// admits the stub sentinel in test stacks) - never arbitrary remotes.
-	if in.IconURL != "" && !strings.HasPrefix(in.IconURL, "data:image/") && !validGifURL(in.IconURL) {
+	if in.IconURL != "" && !safeImageDataURL(in.IconURL) && !validGifURL(in.IconURL) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "icon must be an uploaded image or a Klipy gif"})
 		return
 	}

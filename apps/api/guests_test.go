@@ -241,3 +241,30 @@ func TestAlerterThrottle(t *testing.T) {
 		t.Fatalf("window reopen: ok=%v suppressed=%d (want 5)", ok, n)
 	}
 }
+
+func TestSafeImageDataURL(t *testing.T) {
+	ok := []string{
+		"data:image/png;base64,iVBOR",
+		"data:image/jpeg;base64,/9j/4",
+		"data:image/gif;base64,R0lGOD",
+		"data:image/webp;base64,UklGR",
+	}
+	bad := []string{
+		"data:image/svg+xml;base64,PHN2Zz48c2NyaXB0Pg==", // XSS vector
+		"data:image/svg+xml,<svg onload=alert(1)>",
+		"data:text/html;base64,PGh0bWw+",
+		"javascript:alert(1)",
+		"https://evil.example/x.png",
+		"data:image/png", // no payload separator
+	}
+	for _, u := range ok {
+		if !safeImageDataURL(u) {
+			t.Errorf("should accept raster: %q", u)
+		}
+	}
+	for _, u := range bad {
+		if safeImageDataURL(u) {
+			t.Errorf("should REJECT: %q", u)
+		}
+	}
+}
