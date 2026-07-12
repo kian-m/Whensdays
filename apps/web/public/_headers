@@ -8,6 +8,12 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
   Content-Security-Policy: frame-ancestors 'none'
+  # REPORT-ONLY (does not block anything) - collects violations at
+  # /api/csp-report so the enforcing allowlist is built from real traffic.
+  # Clerk + PostHog load scripts at runtime; report-only reveals their exact
+  # hosts before we enforce. style 'unsafe-inline' stays (the app uses inline
+  # style={} pervasively - low risk). Flip to enforcing after the bake.
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.com https://js.clerk.com https://challenges.cloudflare.com https://clerk.whensdays.com https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.whensdays.com https://*.posthog.com https://*.i.posthog.com; worker-src 'self' blob:; frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; report-uri /api/csp-report
 
 # Vite content-hashed bundles: safe to cache forever.
 /assets/*

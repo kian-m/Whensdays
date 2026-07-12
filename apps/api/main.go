@@ -121,6 +121,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	// Unauthenticated by design: the event id is the capability (invite link).
+	mux.Handle("POST /api/csp-report", readLimit(http.HandlerFunc(s.handleCSPReport))) // browser CSP beacon
 	mux.Handle("POST /api/guest/join", writeLimit(http.HandlerFunc(s.handleGuestJoin)))
 	mux.Handle("POST /api/guest/merge", auth(http.HandlerFunc(s.handleGuestMerge)))
 	// Full-page loads of /e/{id} are proxied here by nginx for link unfurls.
