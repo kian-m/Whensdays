@@ -11,6 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimEventRecap = `-- name: ClaimEventRecap :one
+INSERT INTO event_recaps (event_id) VALUES ($1)
+ON CONFLICT DO NOTHING
+RETURNING event_id
+`
+
+// Atomic once-gate (multi-instance + retry safe): a row back means THIS call
+// inserted the recap marker and owns the send; no row = already recapped, skip.
+func (q *Queries) ClaimEventRecap(ctx context.Context, eventID pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, claimEventRecap, eventID)
+	var event_id pgtype.UUID
+	err := row.Scan(&event_id)
+	return event_id, err
+}
+
 const listEventsNeedingRecap = `-- name: ListEventsNeedingRecap :many
 
 SELECT id, host_id, title, event_type, description,
@@ -76,13 +91,4 @@ func (q *Queries) ListEventsNeedingRecap(ctx context.Context) ([]Event, error) {
 		return nil, err
 	}
 	return items, nil
-}
-
-const markRecapSent = `-- name: MarkRecapSent :exec
-INSERT INTO event_recaps (event_id) VALUES ($1) ON CONFLICT DO NOTHING
-`
-
-func (q *Queries) MarkRecapSent(ctx context.Context, eventID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, markRecapSent, eventID)
-	return err
 }

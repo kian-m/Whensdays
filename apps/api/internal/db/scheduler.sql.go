@@ -219,6 +219,21 @@ func (q *Queries) CancelSeries(ctx context.Context, seriesID pgtype.UUID) error 
 	return err
 }
 
+const claimPollReady = `-- name: ClaimPollReady :one
+UPDATE events SET poll_ready_sent = true
+WHERE id = $1 AND poll_ready_sent = false
+RETURNING id
+`
+
+// Atomic once-gate (multi-instance + retry safe): a row back means THIS call
+// owns the poll-ready send; no row = already sent, skip.
+func (q *Queries) ClaimPollReady(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, claimPollReady, id)
+	var id_2 pgtype.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const claimQuorumSent = `-- name: ClaimQuorumSent :one
 UPDATE events SET quorum_sent = true
 WHERE id = $1 AND quorum_sent = false
@@ -228,6 +243,21 @@ RETURNING id
 // Atomic once-gate (multi-instance safe): no row back = already claimed.
 func (q *Queries) ClaimQuorumSent(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, claimQuorumSent, id)
+	var id_2 pgtype.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const claimVoteReminder = `-- name: ClaimVoteReminder :one
+UPDATE events SET vote_reminder_sent = true
+WHERE id = $1 AND vote_reminder_sent = false
+RETURNING id
+`
+
+// Atomic once-gate (multi-instance + retry safe): a row back means THIS call
+// owns the vote-reminder send; no row = already sent, skip.
+func (q *Queries) ClaimVoteReminder(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, claimVoteReminder, id)
 	var id_2 pgtype.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
@@ -1839,24 +1869,6 @@ func (q *Queries) ListVotesForEvent(ctx context.Context, eventID pgtype.UUID) ([
 		return nil, err
 	}
 	return items, nil
-}
-
-const markPollReady = `-- name: MarkPollReady :exec
-UPDATE events SET poll_ready_sent = true WHERE id = $1
-`
-
-func (q *Queries) MarkPollReady(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, markPollReady, id)
-	return err
-}
-
-const markVoteReminded = `-- name: MarkVoteReminded :exec
-UPDATE events SET vote_reminder_sent = true WHERE id = $1
-`
-
-func (q *Queries) MarkVoteReminded(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, markVoteReminded, id)
-	return err
 }
 
 const promoteAttendee = `-- name: PromoteAttendee :exec

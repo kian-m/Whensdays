@@ -12,5 +12,9 @@ WHERE status = 'scheduled'
       = ((now() AT TIME ZONE 'America/Los_Angeles')::date - 1)
   AND NOT EXISTS (SELECT 1 FROM event_recaps rc WHERE rc.event_id = events.id);
 
--- name: MarkRecapSent :exec
-INSERT INTO event_recaps (event_id) VALUES ($1) ON CONFLICT DO NOTHING;
+-- name: ClaimEventRecap :one
+-- Atomic once-gate (multi-instance + retry safe): a row back means THIS call
+-- inserted the recap marker and owns the send; no row = already recapped, skip.
+INSERT INTO event_recaps (event_id) VALUES ($1)
+ON CONFLICT DO NOTHING
+RETURNING event_id;

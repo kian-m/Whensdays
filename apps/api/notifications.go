@@ -389,6 +389,11 @@ func (s *server) sendPollVelocity(ctx context.Context) (reminded, ready int) {
 	}
 	if polls, err := s.queries.ListPollsNeedingVoteReminder(ctx); err == nil {
 		for _, ev := range polls {
+			// Claim BEFORE sending (retry/multi-instance safe): no row back
+			// means another attempt already reminded this poll's voters.
+			if _, cerr := s.queries.ClaimVoteReminder(ctx, ev.ID); cerr != nil {
+				continue
+			}
 			contacts, cerr := s.queries.ListInvitedNonVoterContacts(ctx, ev.ID)
 			if cerr != nil {
 				continue
@@ -411,13 +416,15 @@ func (s *server) sendPollVelocity(ctx context.Context) (reminded, ready int) {
 				})
 				s.notify.Send([]string{c.Email}, "Last chance to vote - "+ev.Title, body)
 			}
-			if err := s.queries.MarkVoteReminded(ctx, ev.ID); err == nil {
-				reminded++
-			}
+			reminded++
 		}
 	}
 	if polls, err := s.queries.ListPollsPastDeadline(ctx); err == nil {
 		for _, ev := range polls {
+			// Claim BEFORE sending (retry/multi-instance safe).
+			if _, cerr := s.queries.ClaimPollReady(ctx, ev.ID); cerr != nil {
+				continue
+			}
 			host, herr := s.queries.GetProfile(ctx, ev.HostID)
 			if herr == nil && host.Email != "" {
 				lines := []string{"The poll for " + ev.Title + " has closed. Here's how the group voted:"}
@@ -442,9 +449,7 @@ func (s *server) sendPollVelocity(ctx context.Context) (reminded, ready int) {
 				})
 				s.notify.Send([]string{host.Email}, "Poll closed - lock in "+ev.Title, body)
 			}
-			if err := s.queries.MarkPollReady(ctx, ev.ID); err == nil {
-				ready++
-			}
+			ready++
 		}
 	}
 	return reminded, ready

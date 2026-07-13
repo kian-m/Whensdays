@@ -34,6 +34,12 @@ type CalendarConnection struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type CronRunClaim struct {
+	Job       string             `json:"job"`
+	RunDay    pgtype.Date        `json:"run_day"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type CustomEventType struct {
 	UserID    string             `json:"user_id"`
 	Label     string             `json:"label"`

@@ -407,8 +407,12 @@ FROM events
 WHERE status = 'polling' AND poll_deadline IS NOT NULL
   AND poll_deadline < now() AND poll_ready_sent = false;
 
--- name: MarkPollReady :exec
-UPDATE events SET poll_ready_sent = true WHERE id = $1;
+-- name: ClaimPollReady :one
+-- Atomic once-gate (multi-instance + retry safe): a row back means THIS call
+-- owns the poll-ready send; no row = already sent, skip.
+UPDATE events SET poll_ready_sent = true
+WHERE id = $1 AND poll_ready_sent = false
+RETURNING id;
 
 -- name: ListPollsNeedingVoteReminder :many
 -- Polls closing within the next cron day - invited non-voters get one
@@ -420,8 +424,12 @@ WHERE status = 'polling' AND poll_deadline IS NOT NULL
   AND poll_deadline > now() AND poll_deadline <= now() + interval '26 hours'
   AND vote_reminder_sent = false;
 
--- name: MarkVoteReminded :exec
-UPDATE events SET vote_reminder_sent = true WHERE id = $1;
+-- name: ClaimVoteReminder :one
+-- Atomic once-gate (multi-instance + retry safe): a row back means THIS call
+-- owns the vote-reminder send; no row = already sent, skip.
+UPDATE events SET vote_reminder_sent = true
+WHERE id = $1 AND vote_reminder_sent = false
+RETURNING id;
 
 -- name: ListInvitedNonVoterContacts :many
 -- Invitees with an email who haven't voted on this poll (any dimension).

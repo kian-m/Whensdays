@@ -218,6 +218,16 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 		logoURL:   s.logoURL(),
 		theme:     "analytics",
 	})
+	// Once-per-day gate: with scheduler retries enabled (and the odd manual
+	// trigger), the digest must never send twice for the same run day. Claim
+	// atomically right before sending - if another attempt already sent today
+	// there's no row back, so skip. Claiming this late (after the queries
+	// succeed) means a failed query doesn't burn the day's slot.
+	runDay := pgtype.Date{Time: now, Valid: true} // now is Pacific; date part = today PT
+	if _, err := s.queries.ClaimCronRun(r.Context(), db.ClaimCronRunParams{Job: "analytics", RunDay: runDay}); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"skipped": "already sent today"})
+		return
+	}
 	s.notify.Send([]string{to}, fmt.Sprintf("Whensdays daily: %d registered (+%d), %d visitors", registered, newReg, stage(0)), body)
 	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "registered": registered, "new": newReg, "visitors": stage(0), "actions": total})
 }

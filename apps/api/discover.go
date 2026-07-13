@@ -38,25 +38,32 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "list reminders", err)
 		return
 	}
-	// Reminders are digested per recipient (one email even with several events
-	// tomorrow), so send for the whole batch first, then mark each reminded.
-	sent := s.sendReminders(r.Context(), events)
+	// Claim each event BEFORE sending so a scheduler retry (or a second
+	// instance) can never re-send: only the attempt that flips reminder_sent
+	// from false gets a row back and is eligible to email. Reminders are then
+	// digested per recipient (one email even with several events tomorrow).
+	var due []db.Event
 	for _, ev := range events {
-		if err := s.queries.MarkEventReminded(r.Context(), ev.ID); err != nil {
-			s.internal(w, "mark reminded", err)
-			return
+		if _, err := s.queries.ClaimEventReminder(r.Context(), ev.ID); err == nil {
+			due = append(due, ev)
 		}
 	}
+	sent := s.sendReminders(r.Context(), due)
 	// Day-after recaps ride the same daily tick: yesterday's events get the
 	// "how was it? plan the next one" email (idempotent via event_recaps).
 	recapped := 0
 	if recaps, err := s.queries.ListEventsNeedingRecap(r.Context()); err == nil {
 		for _, ev := range recaps {
+			// Claim the recap marker BEFORE sending (retry/multi-instance safe):
+			// no row back means it was already recapped, so skip the email.
+			if _, err := s.queries.ClaimEventRecap(r.Context(), ev.ID); err != nil {
+				continue
+			}
 			if s.notifyRecap(r.Context(), ev) > 0 {
 				recapped++
 			}
 			// If that was the LAST scheduled occurrence of a series, nudge the
-			// host to re-poll the group for the next dates (the recap marker
+			// host to re-poll the group for the next dates (the claim above
 			// makes this once-only too).
 			if ev.SeriesID.Valid {
 				if sibs, serr := s.queries.ListSeriesEvents(r.Context(), ev.SeriesID); serr == nil {
@@ -71,10 +78,6 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 						s.notifySeriesEnded(r.Context(), ev)
 					}
 				}
-			}
-			if err := s.queries.MarkRecapSent(r.Context(), ev.ID); err != nil {
-				s.internal(w, "mark recapped", err)
-				return
 			}
 		}
 	}

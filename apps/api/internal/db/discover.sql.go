@@ -30,6 +30,41 @@ func (q *Queries) AddFollow(ctx context.Context, arg AddFollowParams) error {
 	return err
 }
 
+const claimCronRun = `-- name: ClaimCronRun :one
+INSERT INTO cron_run_claims (job, run_day) VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING job
+`
+
+type ClaimCronRunParams struct {
+	Job    string      `json:"job"`
+	RunDay pgtype.Date `json:"run_day"`
+}
+
+// Once-per-day-per-job gate for single-email crons (analytics digest). A row
+// back means this attempt owns today's send; no row = already sent today.
+func (q *Queries) ClaimCronRun(ctx context.Context, arg ClaimCronRunParams) (string, error) {
+	row := q.db.QueryRow(ctx, claimCronRun, arg.Job, arg.RunDay)
+	var job string
+	err := row.Scan(&job)
+	return job, err
+}
+
+const claimEventReminder = `-- name: ClaimEventReminder :one
+UPDATE events SET reminder_sent = true
+WHERE id = $1 AND reminder_sent = false
+RETURNING id
+`
+
+// Atomic once-gate (multi-instance + retry safe): a row back means THIS call
+// flipped the flag and owns the send; no row = already reminded, skip.
+func (q *Queries) ClaimEventReminder(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, claimEventReminder, id)
+	var id_2 pgtype.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const countFriendGoingForPublicUpcoming = `-- name: CountFriendGoingForPublicUpcoming :many
 SELECT a.event_id, count(*)::int AS going
 FROM event_attendees a
@@ -582,15 +617,6 @@ func (q *Queries) ListUserRsvpHistory(ctx context.Context, userID string) ([]Lis
 		return nil, err
 	}
 	return items, nil
-}
-
-const markEventReminded = `-- name: MarkEventReminded :exec
-UPDATE events SET reminder_sent = true WHERE id = $1
-`
-
-func (q *Queries) MarkEventReminded(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, markEventReminded, id)
-	return err
 }
 
 const removeFollow = `-- name: RemoveFollow :exec

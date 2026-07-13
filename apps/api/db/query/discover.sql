@@ -13,8 +13,19 @@ WHERE status = 'scheduled' AND reminder_sent = false
   AND (starts_at AT TIME ZONE 'America/Los_Angeles')::date
       = ((now() AT TIME ZONE 'America/Los_Angeles')::date + 1);
 
--- name: MarkEventReminded :exec
-UPDATE events SET reminder_sent = true WHERE id = $1;
+-- name: ClaimEventReminder :one
+-- Atomic once-gate (multi-instance + retry safe): a row back means THIS call
+-- flipped the flag and owns the send; no row = already reminded, skip.
+UPDATE events SET reminder_sent = true
+WHERE id = $1 AND reminder_sent = false
+RETURNING id;
+
+-- name: ClaimCronRun :one
+-- Once-per-day-per-job gate for single-email crons (analytics digest). A row
+-- back means this attempt owns today's send; no row = already sent today.
+INSERT INTO cron_run_claims (job, run_day) VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING job;
 
 -- ==================== public discovery ============================
 
