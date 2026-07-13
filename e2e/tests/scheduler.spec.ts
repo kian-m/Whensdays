@@ -216,6 +216,36 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId(`gpt-cell-${ymd}-1140`)).toBeVisible();
   });
 
+  test("pick-days poll paginates its day columns", async ({ page }) => {
+    await ensureProfile(page);
+    // Next month's 10th-14th: 5 days, always in-view + future, no boundary math.
+    const nm = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
+    const ym = `${nm.getFullYear()}-${String(nm.getMonth() + 1).padStart(2, "0")}`;
+    const days = [10, 11, 12, 13, 14].map((d) => `${ym}-${String(d).padStart(2, "0")}`);
+
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(`Paginate ${test.info().testId}`);
+    await page.getByTestId("type-other").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-general").click();
+    await page.getByTestId("scope-dates").click();
+    await page.getByTestId("cal-next").click(); // → next month
+    for (const d of days) await page.getByTestId(`cal-day-${d}`).click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("rsvp-going").click();
+
+    // 5 days > 4/page ⇒ a pager appears; the last day is off the first page and
+    // only shows after Later → (proving you don't have to hunt for a scrollbar).
+    await expect(page.getByTestId("gpt-pager")).toBeVisible();
+    await expect(page.getByTestId(`gpt-cell-${days[0]}-1080`)).toBeVisible();
+    await expect(page.getByTestId(`gpt-cell-${days[4]}-1080`)).toHaveCount(0);
+    await page.getByTestId("gpt-later").click();
+    await expect(page.getByTestId(`gpt-cell-${days[4]}-1080`)).toBeVisible();
+  });
+
   test("performance preset types + deletable custom types", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();

@@ -219,7 +219,7 @@ export function DayGrid({
 // heatmap: pass `counts`/`top` to color cells by how many people are free and
 // `onCellClick` (instead of onPaint) so the host taps a cell to finalize it.
 export function TimeGrid({
-  days, slots, free, counts, top = 1, pick, fmtSlot,
+  days, slots, free, counts, top = 1, pick, fmtSlot, daysPerPage = 4,
   onPaint, paintOn, onToggleCol, onToggleRow, onCellClick, readOnly, testid, idPrefix = "tg",
 }: {
   days: { value: string; label: string }[];
@@ -229,6 +229,9 @@ export function TimeGrid({
   top?: number;
   pick?: Set<string>;
   fmtSlot: (m: number) => string;
+  // Days are COLUMNS; more than this many paginate (← Earlier / Later →) rather
+  // than scrolling off-screen, which reads as "the grid just ends".
+  daysPerPage?: number;
   onPaint?: (day: string, min: number, on: boolean) => void;
   paintOn?: Set<string>;
   onToggleCol?: (day: string) => void;
@@ -239,6 +242,13 @@ export function TimeGrid({
   idPrefix?: string;
 }) {
   const key = (day: string, min: number) => `${day}:${min}`;
+  // Paginate the day columns so long date lists don't hide behind a horizontal
+  // scroll. The `free`/`counts`/`pick` sets span ALL days, so painting or
+  // picking across pages accumulates normally - only the viewport moves.
+  const pages = Math.max(1, Math.ceil(days.length / daysPerPage));
+  const [page, setPage] = useState(0);
+  const p = Math.min(page, pages - 1);
+  const pageDays = days.slice(p * daysPerPage, p * daysPerPage + daysPerPage);
   const drag = useRef<{ on: boolean; painted: Set<string> } | null>(null);
   const applyAt = (el: Element | null) => {
     if (!drag.current || !onPaint) return;
@@ -269,12 +279,23 @@ export function TimeGrid({
   const heat = (n: number): React.CSSProperties =>
     n === 0 ? {} : { background: `rgba(238, 108, 77, ${0.18 + 0.82 * (n / top)})`, borderColor: "transparent", color: "#fff" };
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div className="stack" style={{ gap: 6 }}>
+      {pages > 1 && (
+        <div className="row between" data-testid={`${idPrefix}-pager`}>
+          <button type="button" className="btn ghost sm" data-testid={`${idPrefix}-earlier`}
+            disabled={p === 0} onClick={() => setPage(p - 1)}>← Earlier</button>
+          <span className="muted small" data-testid={`${idPrefix}-range`}>
+            {pageDays[0]?.label} – {pageDays[pageDays.length - 1]?.label}
+          </span>
+          <button type="button" className="btn ghost sm" data-testid={`${idPrefix}-later`}
+            disabled={p >= pages - 1} onClick={() => setPage(p + 1)}>Later →</button>
+        </div>
+      )}
       <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
-        style={{ gridTemplateColumns: `auto repeat(${days.length}, minmax(46px, 1fr))`, minWidth: "min-content" }}
+        style={{ gridTemplateColumns: `auto repeat(${pageDays.length}, minmax(46px, 1fr))` }}
         data-testid={testid} {...paintHandlers}>
         <div />
-        {days.map((d) =>
+        {pageDays.map((d) =>
           onToggleCol && !readOnly ? (
             <button key={d.value} type="button" className="hd gp-head" data-testid={`${idPrefix}-col-${d.value}`}
               aria-label={`Fill the whole ${d.label} column`} onClick={() => onToggleCol(d.value)}>{d.label}</button>
@@ -291,7 +312,7 @@ export function TimeGrid({
             ) : (
               <div className="day" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{fmtSlot(m)}</div>
             )}
-            {days.map((d) => {
+            {pageDays.map((d) => {
               const k = key(d.value, m);
               const n = counts?.get(k) ?? 0;
               const label = `${d.label}, ${fmtSlot(m)}: ${counts ? `${n} free` : free.has(k) ? "free" : "not set"}`;
