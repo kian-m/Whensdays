@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Event, EventType, Friend, fmtMinutes, getJSON, gridSlots, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
 // (custom types: saved per user, offered as chips next to the presets)
 import { EVENT_TYPES } from "../scheduler/questions";
-import { AddressInput, Avatar, useAsync } from "../ui";
+import { AddressInput, Avatar, MonthPicker, useAsync } from "../ui";
 import { DEV_AUTH } from "../App";
 
 // Native min-validation would block dev/E2E backdating - server enforces the
@@ -18,49 +18,6 @@ const STEPS = ["What", "Where", "When", "Who"] as const;
 
 // 30-min time choices for the 'dates'-poll grid window (12:00 AM → 11:30 PM).
 const TIME_CHOICES = gridSlots(0, 1440, 30);
-
-// A forward-only month calendar for multi-selecting specific days ('dates'
-// poll scope). Past days are disabled; the host pages months forward as far as
-// they like. Local component - only NewEvent needs it.
-function MonthPicker({ selected, onToggle }: { selected: Set<string>; onToggle: (day: string) => void }) {
-  const today = new Date();
-  const [view, setView] = useState({ y: today.getFullYear(), m: today.getMonth() });
-  const first = new Date(view.y, view.m, 1);
-  const startDow = first.getDay();
-  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
-  const ymd = (d: number) => `${view.y}-${String(view.m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const atStart = view.y === today.getFullYear() && view.m === today.getMonth();
-  const step = (dir: number) => setView((v) => {
-    const d = new Date(v.y, v.m + dir, 1);
-    return { y: d.getFullYear(), m: d.getMonth() };
-  });
-  const label = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  return (
-    <div className="card" style={{ padding: 10 }} data-testid="month-picker">
-      <div className="row between" style={{ marginBottom: 6 }}>
-        <button type="button" className="btn ghost sm" disabled={atStart} data-testid="cal-prev" onClick={() => step(-1)}>‹</button>
-        <strong data-testid="cal-month">{label}</strong>
-        <button type="button" className="btn ghost sm" data-testid="cal-next" onClick={() => step(1)}>›</button>
-      </div>
-      <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} className="hd" style={{ textAlign: "center" }}>{d}</div>)}
-        {Array.from({ length: startDow }, (_, i) => <div key={`b${i}`} />)}
-        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-          const v = ymd(d);
-          const past = v < todayYmd;
-          const on = selected.has(v);
-          return (
-            <button key={d} type="button" disabled={past} data-testid={`cal-day-${v}`}
-              className={`cell ${on ? "on" : ""}`} aria-pressed={on}
-              style={{ minHeight: 38, opacity: past ? 0.3 : 1, display: "grid", placeItems: "center" }}
-              onClick={() => onToggle(v)}>{d}</button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 export function NewEvent() {
   const api = useApi();

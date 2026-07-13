@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
+import { Event, fmtMinutes, gridSlots, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
+import { MonthPicker } from "../ui";
 import { DEV_AUTH } from "../App";
+
+// 30-min time choices for the 'dates'-poll grid window (12:00 AM → 11:30 PM).
+const TIME_CHOICES = gridSlots(0, 1440, 30);
 
 // Native min-validation would block dev/E2E backdating (streaks, Past tab) -
 // the server enforces the same rule with the same dev exemption.
@@ -16,12 +20,17 @@ export function Quick() {
   const nav = useNavigate();
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState<"fixed" | "general">("fixed");
-  const [scope, setScope] = useState<"week" | "month" | "general">("week");
+  const [scope, setScope] = useState<"week" | "month" | "general" | "dates">("week");
   const [when, setWhen] = useState("");
+  // 'dates' scope: host-picked days (YYYY-MM-DD) + the grid's time window.
+  const [pollDays, setPollDays] = useState<Set<string>>(new Set());
+  const [gridStart, setGridStart] = useState(540); // 9:00 AM
+  const [gridEnd, setGridEnd] = useState(1260); // 9:00 PM
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const valid = title.trim() !== "" && (mode === "fixed" ? !!when : true);
+  const valid = title.trim() !== ""
+    && (mode === "fixed" ? !!when : scope === "dates" ? pollDays.size > 0 : true);
 
   async function go(e: React.FormEvent) {
     e.preventDefault();
@@ -38,7 +47,14 @@ export function Quick() {
       timezone: hostTimezone(),
     };
     if (mode === "fixed") body.starts_at = when ? new Date(when).toISOString() : "";
-    else body.general_scope = scope; // shapes what guests are asked (week/month/generally)
+    else {
+      body.general_scope = scope; // shapes what guests are asked (week/month/generally/dates)
+      if (scope === "dates") {
+        body.poll_days = [...pollDays].sort();
+        body.grid_start = gridStart;
+        body.grid_end = gridEnd;
+      }
+    }
     const res = await sendJSON(api, "POST", "/api/events", body);
     setSaving(false);
     if (!res.ok) {
@@ -74,7 +90,7 @@ export function Quick() {
           <>
             <div className="row wrap" style={{ gap: 6 }}>
               <span className="muted small">Ask about:</span>
-              {([["week", "This week"], ["month", "This month"], ["general", "Generally"]] as const).map(([v, l]) => (
+              {([["week", "This week"], ["month", "This month"], ["general", "Generally"], ["dates", "Pick days"]] as const).map(([v, l]) => (
                 <button key={v} type="button" className={`chip sm ${scope === v ? "on" : ""}`}
                   data-testid={`quick-scope-${v}`} onClick={() => setScope(v)}>{l}</button>
               ))}
@@ -83,7 +99,28 @@ export function Quick() {
               {scope === "week" && "Everyone marks the days and times that work over the next 7 days - you lock it in from the results."}
               {scope === "month" && "Everyone taps the days that work over the next 4 weeks - you lock it in from the results."}
               {scope === "general" && "Everyone marks the months, days and times that generally work for them - you lock it in from the results."}
+              {scope === "dates" && "Pick the exact days you're considering, then everyone paints the actual times that work on each - you lock it in from the results."}
             </p>
+            {scope === "dates" && (
+              <div className="stack" style={{ gap: 8 }}>
+                <MonthPicker selected={pollDays} onToggle={(d) => setPollDays((s) => {
+                  const n = new Set(s); n.has(d) ? n.delete(d) : n.add(d); return n;
+                })} />
+                <div className="row wrap" style={{ gap: 8, alignItems: "center" }}>
+                  <span className="muted small">Between</span>
+                  <select className="input" style={{ maxWidth: 130 }} data-testid="grid-start" value={gridStart}
+                    onChange={(e) => setGridStart(Number(e.target.value))}>
+                    {TIME_CHOICES.filter((m) => m < gridEnd).map((m) => <option key={m} value={m}>{fmtMinutes(m)}</option>)}
+                  </select>
+                  <span className="muted small">and</span>
+                  <select className="input" style={{ maxWidth: 130 }} data-testid="grid-end" value={gridEnd}
+                    onChange={(e) => setGridEnd(Number(e.target.value))}>
+                    {TIME_CHOICES.filter((m) => m > gridStart).map((m) => <option key={m} value={m}>{fmtMinutes(m)}</option>)}
+                  </select>
+                </div>
+                {pollDays.size === 0 && <p className="muted small" style={{ margin: 0 }} data-testid="dates-hint">Tap at least one day above.</p>}
+              </div>
+            )}
           </>
         )}
         {err && <p className="err">{err}</p>}

@@ -190,6 +190,32 @@ test.describe("scheduler", () => {
     await expect(page.getByText("Confirmed").first()).toBeVisible();
   });
 
+  test("quick flow also offers the pick-days (real-time) poll", async ({ page }) => {
+    await ensureProfile(page);
+    const d = new Date();
+    d.setDate(d.getDate() + 4);
+    const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const rollover = d.getMonth() !== new Date().getMonth();
+
+    const title = `Quick days ${test.info().testId}`;
+    await page.goto("/quick");
+    await page.getByTestId("quick-title").fill(title);
+    await page.getByTestId("quick-mode-avail").click();
+    await page.getByTestId("quick-scope-dates").click();
+    if (rollover) await page.getByTestId("cal-next").click();
+    // Create is gated until a day is picked.
+    await expect(page.getByTestId("quick-create")).toBeDisabled();
+    await page.getByTestId(`cal-day-${ymd}`).click();
+    await page.getByTestId("quick-create").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // It's a real-times poll: the guest grid shows actual clock-time cells.
+    await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("rsvp-going").click();
+    await expect(page.getByTestId("gp-time-grid")).toBeVisible();
+    await expect(page.getByTestId(`gpt-cell-${ymd}-1140`)).toBeVisible();
+  });
+
   test("performance preset types + deletable custom types", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();

@@ -323,6 +323,49 @@ export function TimeGrid({
   );
 }
 
+// A forward-only month calendar for multi-selecting specific days (the 'dates'
+// poll scope). Past days are disabled; the host pages months forward as far as
+// they like. Shared by the quick create flow and the full wizard.
+export function MonthPicker({ selected, onToggle }: { selected: Set<string>; onToggle: (day: string) => void }) {
+  const today = new Date();
+  const [view, setView] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const first = new Date(view.y, view.m, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
+  const ymd = (d: number) => `${view.y}-${String(view.m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const atStart = view.y === today.getFullYear() && view.m === today.getMonth();
+  const step = (dir: number) => setView((v) => {
+    const d = new Date(v.y, v.m + dir, 1);
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+  const label = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return (
+    <div className="card" style={{ padding: 10 }} data-testid="month-picker">
+      <div className="row between" style={{ marginBottom: 6 }}>
+        <button type="button" className="btn ghost sm" disabled={atStart} data-testid="cal-prev" onClick={() => step(-1)}>‹</button>
+        <strong data-testid="cal-month">{label}</strong>
+        <button type="button" className="btn ghost sm" data-testid="cal-next" onClick={() => step(1)}>›</button>
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} className="hd" style={{ textAlign: "center" }}>{d}</div>)}
+        {Array.from({ length: startDow }, (_, i) => <div key={`b${i}`} />)}
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+          const v = ymd(d);
+          const past = v < todayYmd;
+          const on = selected.has(v);
+          return (
+            <button key={d} type="button" disabled={past} data-testid={`cal-day-${v}`}
+              className={`cell ${on ? "on" : ""}`} aria-pressed={on}
+              style={{ minHeight: 38, opacity: past ? 0.3 : 1, display: "grid", placeItems: "center" }}
+              onClick={() => onToggle(v)}>{d}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Color key for the tri-state availability grid. Rendered under every grid
 // (your own + a friend's) so the three states are self-explanatory.
 export function AvailLegend({ hasCalendar }: { hasCalendar?: boolean }) {
