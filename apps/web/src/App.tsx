@@ -13,30 +13,56 @@ import { analytics, EVENTS, denyConsent, grantConsent, needsConsent } from "./an
 import { Home } from "./pages/Home";
 import { ProfileSetup } from "./pages/ProfileSetup";
 import { Loading } from "./ui";
+// A dynamic import that survives a deploy. After we ship a new build the hashed
+// chunk filenames change, so a tab still running the OLD index.html asks for a
+// chunk hash that no longer exists; Cloudflare serves the SPA index.html
+// fallback (text/html) and the module loader throws "'text/html' is not a valid
+// JavaScript MIME type" / "Failed to fetch dynamically imported module". Reload
+// ONCE to pick up the fresh index.html + new hashes; a 10s cooldown prevents a
+// reload loop if the asset is genuinely broken (then the error surfaces).
+function importChunk<T>(factory: () => Promise<T>): Promise<T> {
+  return factory().catch((err: unknown) => {
+    const KEY = "whensdays.chunkReloadAt";
+    let last = 0;
+    try { last = Number(sessionStorage.getItem(KEY) || 0); } catch { /* private mode */ }
+    if (Date.now() - last > 10_000) {
+      try { sessionStorage.setItem(KEY, String(Date.now())); } catch { /* ignore */ }
+      window.location.reload();
+      return new Promise<T>(() => {}); // never resolves; the reload takes over
+    }
+    throw err;
+  });
+}
+
 // Route-level code splitting: the landing/dashboard stay in the main bundle;
 // everything else loads on demand (cellular-friendly first paint).
-const NewEvent = lazy(() => import("./pages/NewEvent").then((m) => ({ default: m.NewEvent })));
-const EventPage = lazy(() => import("./pages/EventPage").then((m) => ({ default: m.EventPage })));
-const Friends = lazy(() => import("./pages/Friends").then((m) => ({ default: m.Friends })));
-const Calendars = lazy(() => import("./pages/Calendars").then((m) => ({ default: m.Calendars })));
-const ProfilePage = lazy(() => import("./pages/Profile").then((m) => ({ default: m.ProfilePage })));
-const Groups = lazy(() => import("./pages/Groups").then((m) => ({ default: m.Groups })));
-const GroupPage = lazy(() => import("./pages/Groups").then((m) => ({ default: m.GroupPage })));
-const Discover = lazy(() => import("./pages/Discover").then((m) => ({ default: m.Discover })));
-const Quick = lazy(() => import("./pages/Quick").then((m) => ({ default: m.Quick })));
+const NewEvent = lazy(() => importChunk(() => import("./pages/NewEvent").then((m) => ({ default: m.NewEvent }))));
+const EventPage = lazy(() => importChunk(() => import("./pages/EventPage").then((m) => ({ default: m.EventPage }))));
+const Friends = lazy(() => importChunk(() => import("./pages/Friends").then((m) => ({ default: m.Friends }))));
+const Calendars = lazy(() => importChunk(() => import("./pages/Calendars").then((m) => ({ default: m.Calendars }))));
+const ProfilePage = lazy(() => importChunk(() => import("./pages/Profile").then((m) => ({ default: m.ProfilePage }))));
+const Groups = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.Groups }))));
+const GroupPage = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.GroupPage }))));
+const Discover = lazy(() => importChunk(() => import("./pages/Discover").then((m) => ({ default: m.Discover }))));
+const Quick = lazy(() => importChunk(() => import("./pages/Quick").then((m) => ({ default: m.Quick }))));
 
 // Warm the lazy chunks once the first paint has settled: navigation then swaps
 // routes instantly instead of flashing "Loading…". Chunks are tiny and cached,
 // so this trades a few idle-time requests for zero perceived nav latency.
 function warmRouteChunks() {
+  // Prefetch only - swallow failures silently (a stale-tab chunk 404 here must
+  // not become an unhandled rejection in error tracking, and must NOT reload
+  // the page from the background; the corrective reload only happens when the
+  // user actually navigates into a route, via importChunk above).
+  const swallow = () => {};
   const warm = () => {
-    void import("./pages/EventPage");
-    void import("./pages/NewEvent");
-    void import("./pages/Quick");
-    void import("./pages/Friends");
-    void import("./pages/Groups");
-    void import("./pages/Profile");
-    void import("./pages/Calendars");
+    import("./pages/EventPage").catch(swallow);
+    import("./pages/NewEvent").catch(swallow);
+    import("./pages/Quick").catch(swallow);
+    import("./pages/Friends").catch(swallow);
+    import("./pages/Groups").catch(swallow);
+    import("./pages/Profile").catch(swallow);
+    import("./pages/Calendars").catch(swallow);
   };
   if ("requestIdleCallback" in window) requestIdleCallback(warm, { timeout: 4000 });
   else setTimeout(warm, 2000);
