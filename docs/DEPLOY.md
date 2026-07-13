@@ -52,7 +52,10 @@ Enables the **Calendars** page to connect a user's Google/Apple calendar. Skip i
 ### 5c. Reminder emails (optional)
 1. Set `EMAIL_API_KEY`/`EMAIL_FROM` (Resend-compatible) and a random `CRON_KEY` as Cloud Run secrets.
 1. Optional: `KLIPY_API_KEY` (GIF covers/comments; get a production key from partner.klipy.com — the test key is rate-limited to 100 calls/hour). The picker hides when unset. Outbound TLS works because the api image ships the CA bundle into `scratch` — keep that Dockerfile line.
-2. Create a Cloud Scheduler job (hourly is plenty): `POST https://<api>/api/cron/reminders` with header `X-Cron-Key: <CRON_KEY>`. Idempotent — each event is reminded once.
+2. Create the Cloud Scheduler jobs (both `POST` with header `X-Cron-Key: <CRON_KEY>`, both idempotent):
+   - `whensdays-reminders` → `https://<api>/api/cron/reminders` (daily 2pm PT) — day-before reminders, day-after recaps, poll-velocity, streak congrats, series-ended.
+   - `whensdays-analytics` → `https://<api>/api/cron/analytics` (daily 8am PT) — the owner metrics digest.
+   - **Set retries on both** (`--max-retry-attempts=3 --min-backoff=30s --max-backoff=300s --max-retry-duration=600s`). Cloud Scheduler defaults to **zero retries**, so a single transient Cloud Run 503 (e.g. the min-instance recycled mid-request) silently drops that run's emails with no second attempt. The handlers are idempotent (per-event `reminder_sent`/`event_recaps`/etc. flags), so a retry only re-sends what didn't go out.
 
 ### 6. GitHub repo secrets
 | Secret | Value |
