@@ -145,6 +145,51 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("responder-dots")).toContainText("Tap someone");
   });
 
+  test("pick-days poll: host chooses dates, guests paint real times", async ({ page }) => {
+    await ensureProfile(page);
+
+    // A day ~5 out; if it rolls into next month, page the calendar forward once.
+    const d = new Date();
+    d.setDate(d.getDate() + 5);
+    const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const rollover = d.getMonth() !== new Date().getMonth();
+
+    const title = `Pick days ${test.info().testId}`;
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("type-other").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-general").click();
+    await page.getByTestId("scope-dates").click();
+    if (rollover) await page.getByTestId("cal-next").click();
+    // Can't advance until at least one day is chosen.
+    await expect(page.getByTestId("wiz-next")).toBeDisabled();
+    await page.getByTestId(`cal-day-${ymd}`).click();
+    await expect(page.getByTestId(`cal-day-${ymd}`)).toHaveClass(/\bon\b/);
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Preview as a guest and paint real clock times (7:00 & 7:30 PM = 1140/1170).
+    await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("rsvp-going").click();
+    await page.getByTestId(`gpt-cell-${ymd}-1140`).click();
+    await page.getByTestId(`gpt-cell-${ymd}-1170`).click();
+    await expect(page.getByTestId(`gpt-cell-${ymd}-1140`)).toHaveClass(/\bon\b/);
+    await page.getByTestId("save-general").click();
+
+    // Host view: the aggregate time-grid heatmap carries the votes, and tapping
+    // a hot cell stages it for a one-click finalize.
+    await page.getByTestId("preview-toggle").click();
+    await expect(page.getByTestId("gr-time-heat")).toBeVisible();
+    await expect(page.getByTestId(`grt-cell-${ymd}-1140`)).toHaveText("1");
+    await page.getByTestId(`grt-cell-${ymd}-1140`).click();
+    await expect(page.getByTestId("picked-cells")).toBeVisible();
+    await page.getByTestId("general-finalize").click();
+    await expect(page.getByText("Confirmed").first()).toBeVisible();
+  });
+
   test("performance preset types + deletable custom types", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();

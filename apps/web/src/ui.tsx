@@ -212,6 +212,117 @@ export function DayGrid({
   );
 }
 
+// When2meet-style time grid for the 'dates' poll scope: the host's chosen days
+// are COLUMNS, actual clock times (30-min slots) are ROWS. Paintable like
+// DayGrid (drag to fill), but transposed so a long list of times scrolls
+// vertically and days scroll horizontally on a phone. Doubles as the results
+// heatmap: pass `counts`/`top` to color cells by how many people are free and
+// `onCellClick` (instead of onPaint) so the host taps a cell to finalize it.
+export function TimeGrid({
+  days, slots, free, counts, top = 1, pick, fmtSlot,
+  onPaint, paintOn, onToggleCol, onToggleRow, onCellClick, readOnly, testid, idPrefix = "tg",
+}: {
+  days: { value: string; label: string }[];
+  slots: number[];
+  free: Set<string>;
+  counts?: Map<string, number>;
+  top?: number;
+  pick?: Set<string>;
+  fmtSlot: (m: number) => string;
+  onPaint?: (day: string, min: number, on: boolean) => void;
+  paintOn?: Set<string>;
+  onToggleCol?: (day: string) => void;
+  onToggleRow?: (min: number) => void;
+  onCellClick?: (day: string, min: number) => void;
+  readOnly?: boolean;
+  testid?: string;
+  idPrefix?: string;
+}) {
+  const key = (day: string, min: number) => `${day}:${min}`;
+  const drag = useRef<{ on: boolean; painted: Set<string> } | null>(null);
+  const applyAt = (el: Element | null) => {
+    if (!drag.current || !onPaint) return;
+    const cell = (el as HTMLElement | null)?.closest?.("[data-day]") as HTMLElement | null;
+    if (!cell || !cell.dataset.min) return;
+    const k = key(cell.dataset.day!, Number(cell.dataset.min));
+    if (drag.current.painted.has(k)) return;
+    drag.current.painted.add(k);
+    onPaint(cell.dataset.day!, Number(cell.dataset.min), drag.current.on);
+  };
+  const paintHandlers = onPaint && !readOnly ? {
+    onPointerDown: (e: React.PointerEvent) => {
+      const cell = (e.target as HTMLElement).closest?.("[data-day]") as HTMLElement | null;
+      if (!cell || !cell.dataset.min) return;
+      e.preventDefault();
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      const k = key(cell.dataset.day!, Number(cell.dataset.min));
+      drag.current = { on: !(paintOn ?? free).has(k), painted: new Set() };
+      applyAt(cell);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (!drag.current) return;
+      applyAt(document.elementFromPoint(e.clientX, e.clientY));
+    },
+    onPointerUp: () => { drag.current = null; },
+    onPointerCancel: () => { drag.current = null; },
+  } : {};
+  const heat = (n: number): React.CSSProperties =>
+    n === 0 ? {} : { background: `rgba(238, 108, 77, ${0.18 + 0.82 * (n / top)})`, borderColor: "transparent", color: "#fff" };
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
+        style={{ gridTemplateColumns: `auto repeat(${days.length}, minmax(46px, 1fr))`, minWidth: "min-content" }}
+        data-testid={testid} {...paintHandlers}>
+        <div />
+        {days.map((d) =>
+          onToggleCol && !readOnly ? (
+            <button key={d.value} type="button" className="hd gp-head" data-testid={`${idPrefix}-col-${d.value}`}
+              aria-label={`Fill the whole ${d.label} column`} onClick={() => onToggleCol(d.value)}>{d.label}</button>
+          ) : (
+            <div key={d.value} className="hd">{d.label}</div>
+          ),
+        )}
+        {slots.map((m) => (
+          <Fragment key={m}>
+            {onToggleRow && !readOnly ? (
+              <button type="button" className="day gp-head" style={{ textAlign: "right", whiteSpace: "nowrap" }}
+                data-testid={`${idPrefix}-row-${m}`} aria-label={`Fill ${fmtSlot(m)} across all days`}
+                onClick={() => onToggleRow(m)}>{fmtSlot(m)}</button>
+            ) : (
+              <div className="day" style={{ textAlign: "right", whiteSpace: "nowrap" }}>{fmtSlot(m)}</div>
+            )}
+            {days.map((d) => {
+              const k = key(d.value, m);
+              const n = counts?.get(k) ?? 0;
+              const label = `${d.label}, ${fmtSlot(m)}: ${counts ? `${n} free` : free.has(k) ? "free" : "not set"}`;
+              const picked = pick?.has(k)
+                ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative" as const, zIndex: 2 } : {};
+              const base: React.CSSProperties = counts
+                ? { ...heat(n), display: "grid", placeItems: "center", fontSize: "0.7rem", fontWeight: 700, cursor: onCellClick ? "pointer" : "default" }
+                : {};
+              return (
+                <button key={d.value} type="button" data-testid={`${idPrefix}-cell-${d.value}-${m}`}
+                  data-day={d.value} data-min={m}
+                  className={`cell ${!counts && free.has(k) ? "on" : ""}`} title={label}
+                  aria-label={label} aria-pressed={free.has(k)}
+                  style={{ ...base, ...picked }}
+                  onClick={onCellClick ? () => onCellClick(d.value, m) : onPaint ? undefined : undefined}
+                  onKeyDown={onPaint && !readOnly ? (ev) => {
+                    if (ev.key !== "Enter" && ev.key !== " ") return;
+                    ev.preventDefault();
+                    onPaint(d.value, m, !(paintOn ?? free).has(k));
+                  } : undefined}>
+                  {counts && n > 0 ? n : ""}
+                </button>
+              );
+            })}
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Color key for the tri-state availability grid. Rendered under every grid
 // (your own + a friend's) so the three states are self-explanatory.
 export function AvailLegend({ hasCalendar }: { hasCalendar?: boolean }) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Event, EventType, Friend, getJSON, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
+import { Event, EventType, Friend, fmtMinutes, getJSON, gridSlots, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
 // (custom types: saved per user, offered as chips next to the presets)
 import { EVENT_TYPES } from "../scheduler/questions";
 import { AddressInput, Avatar, useAsync } from "../ui";
@@ -15,6 +15,52 @@ import { EVENTS, analytics } from "../analytics";
 // Where → When → Who, with Back/Next. The Who step lets
 // the host invite friends before the event even exists.
 const STEPS = ["What", "Where", "When", "Who"] as const;
+
+// 30-min time choices for the 'dates'-poll grid window (12:00 AM → 11:30 PM).
+const TIME_CHOICES = gridSlots(0, 1440, 30);
+
+// A forward-only month calendar for multi-selecting specific days ('dates'
+// poll scope). Past days are disabled; the host pages months forward as far as
+// they like. Local component - only NewEvent needs it.
+function MonthPicker({ selected, onToggle }: { selected: Set<string>; onToggle: (day: string) => void }) {
+  const today = new Date();
+  const [view, setView] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const first = new Date(view.y, view.m, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
+  const ymd = (d: number) => `${view.y}-${String(view.m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const atStart = view.y === today.getFullYear() && view.m === today.getMonth();
+  const step = (dir: number) => setView((v) => {
+    const d = new Date(v.y, v.m + dir, 1);
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+  const label = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return (
+    <div className="card" style={{ padding: 10 }} data-testid="month-picker">
+      <div className="row between" style={{ marginBottom: 6 }}>
+        <button type="button" className="btn ghost sm" disabled={atStart} data-testid="cal-prev" onClick={() => step(-1)}>‹</button>
+        <strong data-testid="cal-month">{label}</strong>
+        <button type="button" className="btn ghost sm" data-testid="cal-next" onClick={() => step(1)}>›</button>
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} className="hd" style={{ textAlign: "center" }}>{d}</div>)}
+        {Array.from({ length: startDow }, (_, i) => <div key={`b${i}`} />)}
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+          const v = ymd(d);
+          const past = v < todayYmd;
+          const on = selected.has(v);
+          return (
+            <button key={d} type="button" disabled={past} data-testid={`cal-day-${v}`}
+              className={`cell ${on ? "on" : ""}`} aria-pressed={on}
+              style={{ minHeight: 38, opacity: past ? 0.3 : 1, display: "grid", placeItems: "center" }}
+              onClick={() => onToggle(v)}>{d}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function NewEvent() {
   const api = useApi();
@@ -55,7 +101,11 @@ export function NewEvent() {
   const [locationMode, setLocationMode] = useState<"host_place" | "find_venue" | "virtual">("host_place");
   const [address, setAddress] = useState("");
   const [schedulingMode, setSchedulingMode] = useState<"fixed" | "poll" | "general">("fixed");
-  const [generalScope, setGeneralScope] = useState<"week" | "month" | "general">("general");
+  const [generalScope, setGeneralScope] = useState<"week" | "month" | "general" | "dates">("general");
+  // 'dates' scope: host-picked days (YYYY-MM-DD) + the grid's time window.
+  const [pollDays, setPollDays] = useState<Set<string>>(new Set());
+  const [gridStart, setGridStart] = useState(540); // 9:00 AM
+  const [gridEnd, setGridEnd] = useState(1260); // 9:00 PM
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState(""); // optional end time (fixed mode)
   const [repeat, setRepeat] = useState<"" | "weekly" | "biweekly" | "monthly">("");
@@ -108,6 +158,7 @@ export function NewEvent() {
     if (i === 2) {
       if (schedulingMode === "fixed") return startsAt !== "";
       if (schedulingMode === "poll") return options.some((o) => o.trim() !== "");
+      if (schedulingMode === "general" && generalScope === "dates") return pollDays.size > 0;
     }
     return true;
   }
@@ -157,8 +208,13 @@ export function NewEvent() {
         .map((o) => new Date(o).toISOString());
     }
     if (schedulingMode === "general") {
-      // Scope shapes the question guests answer (this week / this month / generally).
+      // Scope shapes the question guests answer (this week / this month / generally / specific days).
       body.general_scope = generalScope;
+      if (generalScope === "dates") {
+        body.poll_days = [...pollDays].sort();
+        body.grid_start = gridStart;
+        body.grid_end = gridEnd;
+      }
     }
     // Optional close date - the cron chases non-voters then hands the host results.
     if (schedulingMode !== "fixed" && pollDeadline) body.poll_deadline = new Date(pollDeadline).toISOString();
@@ -399,7 +455,7 @@ export function NewEvent() {
               <div className="stack" style={{ marginTop: 8, gap: 6 }}>
                 <div className="row wrap" style={{ gap: 6 }}>
                   <span className="muted small">Ask about:</span>
-                  {([["week", "This week"], ["month", "This month"], ["general", "Generally"]] as const).map(([v, l]) => (
+                  {([["week", "This week"], ["month", "This month"], ["general", "Generally"], ["dates", "Pick days"]] as const).map(([v, l]) => (
                     <button key={v} type="button" className={`chip sm ${generalScope === v ? "on" : ""}`}
                       data-testid={`scope-${v}`} onClick={() => setGeneralScope(v)}>{l}</button>
                   ))}
@@ -408,7 +464,28 @@ export function NewEvent() {
                   {generalScope === "week" && "Guests mark which days and times work over the next 7 days. You'll lock in a time from the results."}
                   {generalScope === "month" && "Guests tap the days that work over the next 4 weeks. You'll lock in a time from the results."}
                   {generalScope === "general" && "Guests pick their ideal months, days of the week, and times of day (early morning → night). You'll lock in a time from the results."}
+                  {generalScope === "dates" && "Pick the exact days you're considering, then guests paint the actual times that work on each. You'll lock in a time from the results."}
                 </p>
+                {generalScope === "dates" && (
+                  <div className="stack" style={{ gap: 8, marginTop: 4 }}>
+                    <MonthPicker selected={pollDays} onToggle={(d) => setPollDays((s) => {
+                      const n = new Set(s); n.has(d) ? n.delete(d) : n.add(d); return n;
+                    })} />
+                    <div className="row wrap" style={{ gap: 8, alignItems: "center" }}>
+                      <span className="muted small">Between</span>
+                      <select className="input" style={{ maxWidth: 130 }} data-testid="grid-start" value={gridStart}
+                        onChange={(e) => setGridStart(Number(e.target.value))}>
+                        {TIME_CHOICES.filter((m) => m < gridEnd).map((m) => <option key={m} value={m}>{fmtMinutes(m)}</option>)}
+                      </select>
+                      <span className="muted small">and</span>
+                      <select className="input" style={{ maxWidth: 130 }} data-testid="grid-end" value={gridEnd}
+                        onChange={(e) => setGridEnd(Number(e.target.value))}>
+                        {TIME_CHOICES.filter((m) => m > gridStart).map((m) => <option key={m} value={m}>{fmtMinutes(m)}</option>)}
+                      </select>
+                    </div>
+                    {pollDays.size === 0 && <p className="muted small" style={{ margin: 0 }} data-testid="dates-hint">Tap at least one day above.</p>}
+                  </div>
+                )}
               </div>
             )}
           </div>

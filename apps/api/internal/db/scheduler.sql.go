@@ -105,6 +105,24 @@ func (q *Queries) AddGeneralVote(ctx context.Context, arg AddGeneralVoteParams) 
 	return err
 }
 
+const addPollDay = `-- name: AddPollDay :exec
+
+INSERT INTO event_poll_days (event_id, day)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type AddPollDayParams struct {
+	EventID pgtype.UUID `json:"event_id"`
+	Day     pgtype.Date `json:"day"`
+}
+
+// ==================== time-grid ('dates') polls ===================
+func (q *Queries) AddPollDay(ctx context.Context, arg AddPollDayParams) error {
+	_, err := q.db.Exec(ctx, addPollDay, arg.EventID, arg.Day)
+	return err
+}
+
 const addTimeOption = `-- name: AddTimeOption :one
 
 INSERT INTO event_time_options (event_id, starts_at)
@@ -658,6 +676,25 @@ func (q *Queries) GetFriendship(ctx context.Context, id pgtype.UUID) (Friendship
 		&i.Status,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getPollTimeGrid = `-- name: GetPollTimeGrid :one
+SELECT start_min, end_min, slot_min
+FROM event_poll_time_grid
+WHERE event_id = $1
+`
+
+type GetPollTimeGridRow struct {
+	StartMin int32 `json:"start_min"`
+	EndMin   int32 `json:"end_min"`
+	SlotMin  int32 `json:"slot_min"`
+}
+
+func (q *Queries) GetPollTimeGrid(ctx context.Context, eventID pgtype.UUID) (GetPollTimeGridRow, error) {
+	row := q.db.QueryRow(ctx, getPollTimeGrid, eventID)
+	var i GetPollTimeGridRow
+	err := row.Scan(&i.StartMin, &i.EndMin, &i.SlotMin)
 	return i, err
 }
 
@@ -1444,6 +1481,33 @@ func (q *Queries) ListOutgoingRequests(ctx context.Context, requesterID string) 
 	return items, nil
 }
 
+const listPollDays = `-- name: ListPollDays :many
+SELECT day
+FROM event_poll_days
+WHERE event_id = $1
+ORDER BY day
+`
+
+func (q *Queries) ListPollDays(ctx context.Context, eventID pgtype.UUID) ([]pgtype.Date, error) {
+	rows, err := q.db.Query(ctx, listPollDays, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.Date{}
+	for rows.Next() {
+		var day pgtype.Date
+		if err := rows.Scan(&day); err != nil {
+			return nil, err
+		}
+		items = append(items, day)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPollsNeedingVoteReminder = `-- name: ListPollsNeedingVoteReminder :many
 SELECT id, host_id, title, event_type, description,
        location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
@@ -1911,6 +1975,30 @@ func (q *Queries) SetEventDraft(ctx context.Context, arg SetEventDraftParams) (E
 		&i.Capacity,
 	)
 	return i, err
+}
+
+const setPollTimeGrid = `-- name: SetPollTimeGrid :exec
+INSERT INTO event_poll_time_grid (event_id, start_min, end_min, slot_min)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (event_id) DO UPDATE
+    SET start_min = EXCLUDED.start_min, end_min = EXCLUDED.end_min, slot_min = EXCLUDED.slot_min
+`
+
+type SetPollTimeGridParams struct {
+	EventID  pgtype.UUID `json:"event_id"`
+	StartMin int32       `json:"start_min"`
+	EndMin   int32       `json:"end_min"`
+	SlotMin  int32       `json:"slot_min"`
+}
+
+func (q *Queries) SetPollTimeGrid(ctx context.Context, arg SetPollTimeGridParams) error {
+	_, err := q.db.Exec(ctx, setPollTimeGrid,
+		arg.EventID,
+		arg.StartMin,
+		arg.EndMin,
+		arg.SlotMin,
+	)
+	return err
 }
 
 const setProfileEmail = `-- name: SetProfileEmail :one

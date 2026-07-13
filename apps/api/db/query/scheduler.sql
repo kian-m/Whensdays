@@ -263,6 +263,30 @@ SELECT user_id, dimension, value
 FROM event_general_votes
 WHERE event_id = $1;
 
+-- ==================== time-grid ('dates') polls ===================
+
+-- name: AddPollDay :exec
+INSERT INTO event_poll_days (event_id, day)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING;
+
+-- name: ListPollDays :many
+SELECT day
+FROM event_poll_days
+WHERE event_id = $1
+ORDER BY day;
+
+-- name: SetPollTimeGrid :exec
+INSERT INTO event_poll_time_grid (event_id, start_min, end_min, slot_min)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (event_id) DO UPDATE
+    SET start_min = EXCLUDED.start_min, end_min = EXCLUDED.end_min, slot_min = EXCLUDED.slot_min;
+
+-- name: GetPollTimeGrid :one
+SELECT start_min, end_min, slot_min
+FROM event_poll_time_grid
+WHERE event_id = $1;
+
 -- ========================= attendees ==============================
 
 -- name: UpsertRsvp :one

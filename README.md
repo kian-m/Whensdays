@@ -137,8 +137,11 @@ isn't fixed), the guest list, and a summary of everyone's preferences. Tap
 
 A general poll is scoped by the host: **this week** (guests tap a grid of the next
 7 concrete dates × times of day), **this month** (guests tap the days that work over
-the next 4 weeks), or **generally** (ideal months + a weekday × time-of-day grid,
-fill a row/column from its header). The host sees a matching heatmap or day ranking.
+the next 4 weeks), **generally** (ideal months + a weekday × time-of-day grid,
+fill a row/column from its header), or **pick days** (the host hand-picks specific
+calendar days from a forward calendar + a time window; guests then paint the
+**actual clock times** that work on each — a When2meet-style grid). The host sees a
+matching heatmap or day ranking.
 
 ![General availability grid](docs/screenshots/03-scheduler-general-poll.png)
 
@@ -158,7 +161,7 @@ fill a row/column from its header). The host sees a matching heatmap or day rank
 | **RSVP** | Event page | Going / Maybe / Can't | `POST /api/events/{id}/rsvp` |
 | **Scheduling — fixed time** | New event → "I'll set a time" | Host sets the date/time up front | `scheduling_mode: "fixed"` |
 | **Scheduling — specific-times poll** | Event page (poll events) | Guests vote 👍/🤷/👎 on each proposed time; host **Picks** one to lock it in | `POST /api/events/{id}/votes`, `POST /api/events/{id}/finalize` |
-| **Scheduling — general availability poll** | Event page (general events) | The host scopes the ask — **this week** (concrete dates × times grid), **this month** (tap the days that work), or **generally** (ideal months + weekday grid); attendees answer in that shape and the host reads a matching heatmap/ranking, then finalizes a time. Date windows anchor at the event's creation so everyone answers about the same days | `POST /api/events` (`general_scope`), `POST /api/events/{id}/general-votes`, `POST /api/events/{id}/finalize` |
+| **Scheduling — general availability poll** | Event page (general events) | The host scopes the ask — **this week** (concrete dates × times grid), **this month** (tap the days that work), **generally** (ideal months + weekday grid), or **pick days** (host hand-picks specific calendar days + a time window; guests paint the **actual clock times**, When2meet-style); attendees answer in that shape and the host reads a matching heatmap/ranking, then finalizes a time. Date windows anchor at the event's creation so everyone answers about the same days | `POST /api/events` (`general_scope`, `poll_days`, `grid_start`/`grid_end`), `POST /api/events/{id}/general-votes`, `POST /api/events/{id}/finalize` |
 | **Preference questions** | Event page, after RSVP | One question at a time, tuned to the event type (e.g. dietary + cuisine for dinner) | `POST /api/events/{id}/preferences` |
 | **Host view + guest preview** | Event page (host only) | Invite link, poll results, guests, preference summary; toggle to preview the guest flow | role-aware `GET /api/events/{id}` |
 | **Comments** | Event page | A chat-style thread on each event (avatar bubbles, your own tinted, relative timestamps); anyone with the invite can post — **text, a GIF (Klipy picker), or both**. Authors delete their own; the host (or a cohost) moderates any — deletes are two-tap confirmed like every destructive action. The host can turn the thread on/off | `POST/DELETE /api/events/{id}/comments`, `PUT /api/events/{id}/comments-enabled` |

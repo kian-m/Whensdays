@@ -125,6 +125,18 @@ type EventNudge struct {
 	NudgedAt pgtype.Timestamptz `json:"nudged_at"`
 }
 
+type EventPollDay struct {
+	EventID pgtype.UUID `json:"event_id"`
+	Day     pgtype.Date `json:"day"`
+}
+
+type EventPollTimeGrid struct {
+	EventID  pgtype.UUID `json:"event_id"`
+	StartMin int32       `json:"start_min"`
+	EndMin   int32       `json:"end_min"`
+	SlotMin  int32       `json:"slot_min"`
+}
+
 type EventPreferenceAnswer struct {
 	ID          pgtype.UUID `json:"id"`
 	EventID     pgtype.UUID `json:"event_id"`

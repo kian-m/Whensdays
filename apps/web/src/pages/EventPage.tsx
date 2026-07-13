@@ -14,8 +14,11 @@ import {
   EVENT_THEMES,
   busyConflict,
   daysFromDate,
+  dayLabel as dayCol,
   fmtDate,
   fmtDateTime,
+  fmtMinutes,
+  gridSlots,
   toDatetimeLocal,
   getJSON,
   guessCity,
@@ -30,7 +33,7 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, HomescreenPrompt, Linkify, Loading, Pill, QRButton, fileToPhoto, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, HomescreenPrompt, Linkify, Loading, Pill, QRButton, TimeGrid, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH, GuestSignupButton } from "../App";
 
@@ -193,7 +196,7 @@ function SeriesCard({ data }: { data: EventDetail }) {
             className={`chip sm ${s.id === data.event.id ? "on" : ""}`}
             data-testid={`series-occ-${i}`}
             onClick={() => s.id !== data.event.id && nav(`/e/${s.id}`)}>
-            {fmtDate(s.starts_at)}
+            {fmtDate(s.starts_at, data.event.timezone)}
           </button>
         ))}
       </div>
@@ -395,10 +398,11 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
         </div>
       )}
       {e.scheduling_mode === "poll" && e.status === "polling" && !pollClosed(e) && (
-        <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} reload={reload} />
+        <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} tz={e.timezone} reload={reload} />
       )}
       {e.scheduling_mode === "general" && e.status === "polling" && !pollClosed(e) && (
-        <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id} reload={reload} />
+        <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id}
+          days={data.poll_days} grid={data.time_grid} reload={reload} />
       )}
       {/* Preferences sit OFF the critical path (roadmap): collapsed unless the
           guest already answered. Skipped entirely for types with no questions. */}
@@ -500,8 +504,8 @@ function Rsvp({ eventId, current, reload, isGuest }: { eventId: string; current?
   );
 }
 
-function PollVote({ eventId, options, votes, viewerId, reload }: {
-  eventId: string; options: TimeOption[]; votes: Vote[]; viewerId: string; reload: () => void;
+function PollVote({ eventId, options, votes, viewerId, tz, reload }: {
+  eventId: string; options: TimeOption[]; votes: Vote[]; viewerId: string; tz?: string; reload: () => void;
 }) {
   const api = useApi();
   const initial: Record<string, string> = {};
@@ -525,7 +529,7 @@ function PollVote({ eventId, options, votes, viewerId, reload }: {
       {options.map((o, i) => (
         <div key={o.id} className="row between">
           <span className="small">
-            {fmtDateTime(o.starts_at)}
+            {fmtDateTime(o.starts_at, tz)}
             {busyConflict(intervals, o.starts_at) && (
               <span className="pill maybe" style={{ marginLeft: 6 }} data-testid={`busy-${i}`}
                 title={`Conflicts with: ${busyConflict(intervals, o.starts_at)}`}>⚠️ busy</span>
@@ -560,8 +564,9 @@ const slotKey = (wd: number, dp: string) => `${wd}:${dp}`;
 //   general → "when do things usually work?"         (months + weekday × daypart)
 // The date windows are anchored at the event's created_at so every attendee
 // answers about the same days.
-function GeneralPoll({ event, votes, viewerId, reload }: {
-  event: EventDetail["event"]; votes: GeneralVote[]; viewerId: string; reload: () => void;
+function GeneralPoll({ event, votes, viewerId, days, grid, reload }: {
+  event: EventDetail["event"]; votes: GeneralVote[]; viewerId: string;
+  days: string[] | null; grid: EventDetail["time_grid"]; reload: () => void;
 }) {
   const api = useApi();
   const scope = event.general_scope;
@@ -576,6 +581,10 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
   );
   const [dayCells, setDayCells] = useState<Set<string>>(
     new Set(mine.filter((v) => v.dimension === "dayslot").map((v) => v.value)),
+  );
+  // 'dates' scope: "YYYY-MM-DD:<minutes>" cells on the host's chosen days.
+  const [timeCells, setTimeCells] = useState<Set<string>>(
+    new Set(mine.filter((v) => v.dimension === "timeslot").map((v) => v.value)),
   );
   const [saved, setSaved] = useState(false);
 
@@ -635,6 +644,11 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
         const [day, dp] = k.split(":");
         return { day, daypart: dp };
       });
+    } else if (scope === "dates") {
+      body.time_slots = [...timeCells].map((k) => {
+        const [day, min] = k.split(":");
+        return { day, minutes: Number(min) };
+      });
     } else {
       body.months = [...selMonths];
       body.slots = [...cells].map((k) => {
@@ -680,6 +694,30 @@ function GeneralPoll({ event, votes, viewerId, reload }: {
             onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleMonthCol}
             paintOn={dayCells}
             onPaint={(day, dp, on) => mutate(setDayCells, (s) => (on ? s.add(`${day}:${dp}`) : s.delete(`${day}:${dp}`)))} />
+        </div>
+      )}
+
+      {scope === "dates" && grid && (
+        <div>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <span className="muted small">Tap or slide across the times that work (tap a day or time label to fill the whole line)</span>
+            <button type="button" className="btn ghost sm" data-testid="gp-times-clear"
+              disabled={timeCells.size === 0} onClick={() => mutate(setTimeCells, (s) => s.clear())}>Clear</button>
+          </div>
+          <TimeGrid days={(days || []).map(dayCol)} slots={gridSlots(grid.start_min, grid.end_min, grid.slot_min)}
+            free={timeCells} fmtSlot={fmtMinutes} idPrefix="gpt" testid="gp-time-grid"
+            onToggleCol={(day) => mutate(setTimeCells, (s) => {
+              const keys = gridSlots(grid.start_min, grid.end_min, grid.slot_min).map((m) => `${day}:${m}`);
+              const full = keys.every((k) => s.has(k));
+              keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+            })}
+            onToggleRow={(m) => mutate(setTimeCells, (s) => {
+              const keys = (days || []).map((d) => `${d}:${m}`);
+              const full = keys.every((k) => s.has(k));
+              keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+            })}
+            paintOn={timeCells}
+            onPaint={(day, min, on) => mutate(setTimeCells, (s) => (on ? s.add(`${day}:${min}`) : s.delete(`${day}:${min}`)))} />
         </div>
       )}
 
@@ -1373,7 +1411,7 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
           <div key={o.id} className="stack" style={{ gap: 4 }}>
             <div className="row between">
               <span className="small">
-                {fmtDateTime(o.starts_at)}
+                {fmtDateTime(o.starts_at, data.event.timezone)}
                 {i === 0 && (yes > 0 || fitOf(o).free > 0) && <span className="pill scheduled" style={{ marginLeft: 6 }}>Best</span>}
                 {(fitOf(o).free > 0 || fitOf(o).busy > 0) && (
                   <span className="muted small" style={{ marginLeft: 6 }} data-testid={`fit-${i}`}>
@@ -1466,6 +1504,11 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
   const dayslotCounts = countBy("dayslot");
   const dayslotTop = Math.max(1, ...dayslotCounts.values());
 
+  // dates scope: the actual-time grid over the host's chosen days.
+  const timeslotCounts = countBy("timeslot");
+  const timeslotTop = Math.max(1, ...timeslotCounts.values());
+  const grid = data.time_grid;
+
   // month scope: ranked days.
   const dayCounts = countBy("day");
   const days = [...dayCounts.entries()].sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1));
@@ -1550,7 +1593,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
   const pickCount = [when, ...moreWhens].filter((v) => v.trim() !== "").length + picked.size;
 
   return (
-    <div className="card stack">
+    <div className="card stack" data-testid="general-results">
       <div className="row between"><h3>Group availability</h3><span className="muted small">{voters} responded</span></div>
 
       {scope === "week" && (
@@ -1577,6 +1620,19 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                 </Fragment>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {scope === "dates" && grid && (
+        <div>
+          <div className="section-h" style={{ margin: "0 0 4px" }}>Best times{canPick ? " · tap a cell to lock it in" : ""}</div>
+          {timeslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
+            <TimeGrid days={(data.poll_days || []).map(dayCol)} slots={gridSlots(grid.start_min, grid.end_min, grid.slot_min)}
+              free={new Set()} counts={timeslotCounts} top={timeslotTop} fmtSlot={fmtMinutes}
+              pick={new Set([...picked.keys()])} idPrefix="grt" testid="gr-time-heat"
+              onCellClick={canPick ? (day, m) => togglePick(`${day}:${m}`,
+                `${day}T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`) : undefined} />
           )}
         </div>
       )}

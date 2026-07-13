@@ -24,7 +24,7 @@ export type Event = {
   city: string;
   custom_emoji: string;
   custom_label: string;
-  general_scope: "week" | "month" | "general";
+  general_scope: "week" | "month" | "general" | "dates";
   photo_url: string;
   theme: string;
   timezone: string;
@@ -267,8 +267,9 @@ export type Cohost = {
 export type TimeOption = { id: string; event_id: string; starts_at: string };
 export type Vote = { id: string; option_id: string; user_id: string; response: "yes" | "no" | "maybe" };
 // dimension 'month' -> value "YYYY-MM"; dimension 'slot' -> value "<weekday>:<daypart>".
-// dimension: month + slot (general scope), day (month scope), dayslot (week scope).
-export type GeneralVote = { user_id: string; dimension: "month" | "slot" | "day" | "dayslot"; value: string };
+// dimension: month + slot (general scope), day (month scope), dayslot (week scope),
+// timeslot (dates scope) -> value "YYYY-MM-DD:<minutes-from-midnight>".
+export type GeneralVote = { user_id: string; dimension: "month" | "slot" | "day" | "dayslot" | "timeslot"; value: string };
 export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined" | "waitlist"; display_name: string | null; avatar_url: string | null; handle: string | null };
 export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
 
@@ -288,6 +289,9 @@ export type EventDetail = {
   time_options: TimeOption[];
   votes: Vote[];
   general_votes: GeneralVote[];
+  // 'dates'-scope polls: the host-picked days + the time-grid window (else null).
+  poll_days: string[] | null;
+  time_grid: { start_min: number; end_min: number; slot_min: number } | null;
   attendees: Attendee[];
   preference_answers: PrefAnswer[];
   comments: Comment[];
@@ -406,6 +410,29 @@ export function nextMonths(n: number): { value: string; label: string }[] {
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     return { value, label: d.toLocaleDateString(undefined, { month: "short", year: "numeric" }) };
   });
+}
+
+// --- time-grid ('dates' scope) helpers ---
+
+// Minutes-from-midnight → "9:00 AM" / "6:30 PM" (12-hour, locale-ish).
+export function fmtMinutes(m: number): string {
+  const h = Math.floor(m / 60), min = m % 60;
+  const ap = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(min).padStart(2, "0")} ${ap}`;
+}
+
+// The slot start-minutes of a grid window [start, end) at `step` granularity.
+export function gridSlots(start: number, end: number, step: number): number[] {
+  const out: number[] = [];
+  for (let m = start; m < end; m += step) out.push(m);
+  return out;
+}
+
+// "YYYY-MM-DD" → { value, label:"Wed Jul 15" } for a date column/row header.
+export function dayLabel(value: string): { value: string; label: string } {
+  const [y, mo, d] = value.split("-").map(Number);
+  return { value, label: new Date(y, mo - 1, d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) };
 }
 
 // --- imported-calendar busy mapping (calendar as moat) ---

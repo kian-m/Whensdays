@@ -629,7 +629,10 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		City            string   `json:"city"`          // optional, for public discovery
 		CustomEmoji     string   `json:"custom_emoji"`  // optional user-defined type (with label)
 		CustomLabel     string   `json:"custom_label"`  // ≤20 chars; forces event_type=other
-		GeneralScope    string   `json:"general_scope"` // general mode: week|month|general (default general)
+		GeneralScope    string   `json:"general_scope"` // general mode: week|month|general|dates (default general)
+		PollDays        []string `json:"poll_days"`     // dates scope: host-picked YYYY-MM-DD days
+		GridStart       int      `json:"grid_start"`    // dates scope: window start, minutes from midnight (default 540 = 9am)
+		GridEnd         int      `json:"grid_end"`      // dates scope: window end, minutes from midnight (default 1260 = 9pm)
 		Timezone        string   `json:"timezone"`      // host's IANA tz (e.g. America/Los_Angeles); for server-rendered times
 		PollDeadline    string   `json:"poll_deadline"` // optional RFC3339 close date (poll/general modes)
 		Capacity        int      `json:"capacity"`      // optional max going (0 = unlimited)
@@ -689,9 +692,45 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	if in.GeneralScope == "" || in.SchedulingMode != "general" {
 		in.GeneralScope = "general"
 	}
-	if !oneOf(in.GeneralScope, "week", "month", "general") {
+	if !oneOf(in.GeneralScope, "week", "month", "general", "dates") {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid general_scope"})
 		return
+	}
+	// 'dates' scope: the host hand-picks specific days + a time window; validate
+	// and normalize them here so a bad payload fails before the event is created.
+	var pollDays []pgtype.Date
+	gridStart, gridEnd, gridSlot := 540, 1260, 30 // 9am-9pm, 30-min slots (defaults)
+	if in.GeneralScope == "dates" {
+		if in.GridStart != 0 || in.GridEnd != 0 {
+			gridStart, gridEnd = in.GridStart, in.GridEnd
+		}
+		// Snap to the slot grid; require a sane same-day window.
+		gridStart -= gridStart % gridSlot
+		gridEnd -= gridEnd % gridSlot
+		if gridStart < 0 || gridEnd > 1440 || gridEnd-gridStart < gridSlot || gridEnd-gridStart > 1440 {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid time window"})
+			return
+		}
+		if len(in.PollDays) < 1 || len(in.PollDays) > 60 {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "pick 1-60 days"})
+			return
+		}
+		seen := map[string]bool{}
+		for _, d := range in.PollDays {
+			t, err := time.Parse("2006-01-02", d)
+			if err != nil || seen[d] {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid day"})
+				return
+			}
+			// Reject past days (dev-exempt like every time check, so hermetic
+			// E2E can backdate). A day is past once it's fully behind today.
+			if os.Getenv("AUTH_MODE") != "dev" && t.Before(time.Now().Truncate(24*time.Hour).AddDate(0, 0, -1)) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "days can't be in the past"})
+				return
+			}
+			seen[d] = true
+			pollDays = append(pollDays, pgtype.Date{Time: t, Valid: true})
+		}
 	}
 
 	in.Topic = strings.ToLower(strings.TrimSpace(in.Topic))
@@ -922,6 +961,21 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// 'dates' poll: persist the host-picked days + the grid window.
+	if in.GeneralScope == "dates" {
+		for _, d := range pollDays {
+			if err := s.queries.AddPollDay(r.Context(), db.AddPollDayParams{EventID: ev.ID, Day: d}); err != nil {
+				s.internal(w, "add poll day", err)
+				return
+			}
+		}
+		if err := s.queries.SetPollTimeGrid(r.Context(), db.SetPollTimeGridParams{
+			EventID: ev.ID, StartMin: int32(gridStart), EndMin: int32(gridEnd), SlotMin: int32(gridSlot),
+		}); err != nil {
+			s.internal(w, "set poll grid", err)
+			return
+		}
+	}
 	s.analytics.Capture(uid, "event_created", map[string]any{
 		"event_id":        uuidStr(ev.ID),
 		"event_type":      ev.EventType,
@@ -974,6 +1028,21 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.internal(w, "list general votes", err)
 		return
+	}
+	// 'dates' polls carry the host-picked days + the time-grid window so every
+	// attendee renders the same grid. Nil for other scopes (front-end ignores).
+	var pollDays []string
+	var timeGrid map[string]int32
+	if ev.GeneralScope == "dates" {
+		if dayRows, derr := s.queries.ListPollDays(r.Context(), id); derr == nil {
+			pollDays = make([]string, 0, len(dayRows))
+			for _, d := range dayRows {
+				pollDays = append(pollDays, d.Time.Format("2006-01-02"))
+			}
+		}
+		if g, gerr := s.queries.GetPollTimeGrid(r.Context(), id); gerr == nil {
+			timeGrid = map[string]int32{"start_min": g.StartMin, "end_min": g.EndMin, "slot_min": g.SlotMin}
+		}
 	}
 	attendees, err := s.queries.ListAttendees(r.Context(), id)
 	if err != nil {
@@ -1088,6 +1157,8 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		"time_options":       options,
 		"votes":              votes,
 		"general_votes":      generalVotes,
+		"poll_days":          pollDays,
+		"time_grid":          timeGrid,
 		"attendees":          attendees,
 		"preference_answers": answers,
 		"comments":           comments,
@@ -1248,6 +1319,10 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 			Day     string `json:"day"` // YYYY-MM-DD (week scope)
 			Daypart string `json:"daypart"`
 		} `json:"day_slots"`
+		TimeSlots []struct {
+			Day     string `json:"day"`     // YYYY-MM-DD (dates scope)
+			Minutes int    `json:"minutes"` // start of the slot, minutes from midnight
+		} `json:"time_slots"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -1304,6 +1379,36 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 			}
 			rows = append(rows, vote{"dayslot", dsl.Day + ":" + dsl.Daypart})
 		}
+	case "dates":
+		// Time-grid poll: cells are actual clock times on the host's chosen days.
+		// A pick is valid iff its day is one the host picked AND its start minute
+		// lands on the grid (start ≤ m < end, aligned to the slot size).
+		grid, gerr := s.queries.GetPollTimeGrid(r.Context(), id)
+		if gerr != nil {
+			fail("invalid poll")
+			return
+		}
+		dayRows, derr := s.queries.ListPollDays(r.Context(), id)
+		if derr != nil {
+			s.internal(w, "list poll days", derr)
+			return
+		}
+		validDay := map[string]bool{}
+		for _, d := range dayRows {
+			validDay[d.Time.Format("2006-01-02")] = true
+		}
+		if len(in.TimeSlots) > len(dayRows)*int((grid.EndMin-grid.StartMin)/grid.SlotMin+1) {
+			fail("too many selections")
+			return
+		}
+		for _, tsl := range in.TimeSlots {
+			m := int32(tsl.Minutes)
+			if !validDay[tsl.Day] || m < grid.StartMin || m >= grid.EndMin || (m-grid.StartMin)%grid.SlotMin != 0 {
+				fail("invalid time slot")
+				return
+			}
+			rows = append(rows, vote{"timeslot", tsl.Day + ":" + strconv.Itoa(tsl.Minutes)})
+		}
 	default: // general
 		if len(in.Months) > 24 || len(in.Slots) > 7*len(dayparts) {
 			fail("too many selections")
@@ -1344,7 +1449,7 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 	// were, and 'free' overwrites a stale busy. Fuzzy general-scope picks
 	// (months / weekdays) don't map to concrete cells and are skipped.
 	for _, v := range rows {
-		if v.dimension != "dayslot" {
+		if v.dimension != "dayslot" && v.dimension != "timeslot" {
 			continue
 		}
 		parts := strings.SplitN(v.value, ":", 2)
@@ -1355,8 +1460,18 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 		if derr != nil {
 			continue
 		}
+		// timeslot values carry a start minute; bucket it to a coarse daypart so
+		// the fine-grained time pick still marks the right availability cell.
+		daypart := parts[1]
+		if v.dimension == "timeslot" {
+			if m, merr := strconv.Atoi(parts[1]); merr == nil {
+				daypart = hourToDaypart(m / 60)
+			} else {
+				continue
+			}
+		}
 		_ = s.queries.UpsertAvailabilityDayFree(r.Context(), db.UpsertAvailabilityDayFreeParams{
-			UserID: uid, Day: pgtype.Date{Time: d, Valid: true}, Daypart: parts[1],
+			UserID: uid, Day: pgtype.Date{Time: d, Valid: true}, Daypart: daypart,
 		})
 	}
 	s.analytics.Capture(uid, "general_voted", map[string]any{
