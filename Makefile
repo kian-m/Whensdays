@@ -71,6 +71,10 @@ docs-shots: ## Regenerate README feature screenshots from the live app (Docker o
 	docker compose -f compose.docs.yaml up --build --abort-on-container-exit --exit-code-from shots
 	docker compose -f compose.docs.yaml down -v
 
+marketing-shots: ## Capture marketing screenshots (rich seeded scenario) to docs/marketing
+	docker compose -f compose.marketing.yaml up --build --abort-on-container-exit --exit-code-from shots
+	docker compose -f compose.marketing.yaml down -v
+
 e2e-update: ## Refresh visual baselines (review diffs before committing!)
 	cd e2e && pnpm run update-snapshots
 

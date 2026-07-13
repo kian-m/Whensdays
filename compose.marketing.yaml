@@ -1,0 +1,60 @@
+# Regenerate README feature screenshots from the live app — only Docker needed.
+#   make docs-shots
+# Fresh DB (no volume) so the "empty" state is truly empty and shots are
+# deterministic. Writes PNGs to ./docs/screenshots on the host.
+name: clsandbox-marketing
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: clsandbox
+      POSTGRES_PASSWORD: clsandbox
+      POSTGRES_DB: clsandbox
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clsandbox"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./apps/api
+    environment:
+      API_PORT: "8080"
+      DATABASE_URL: postgres://clsandbox:clsandbox@db:5432/clsandbox?sslmode=disable
+      AUTH_MODE: dev
+      CALENDAR_MODE: stub
+      KLIPY_API_KEY: ${KLIPY_API_KEY} # real Klipy so the picker works in this local stack
+      GEO_MODE: stub # deterministic address type-ahead, no network
+      RUN_MIGRATIONS: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_AUTH_MODE: dev
+    ports:
+      - "8899:80"
+    depends_on:
+      - api
+
+  shots:
+    image: mcr.microsoft.com/playwright:v1.55.1-jammy
+    working_dir: /work
+    volumes:
+      - ./e2e:/work
+      - ./docs/marketing:/out
+    environment:
+      BASE_URL: http://web
+      E2E_AUTH_MODE: dev
+      MARKETING_SHOTS: "1"
+      DOCS_OUT: /out
+      CI: "1"
+    depends_on:
+      - web
+    command: >-
+      sh -c "npm install --no-audit --no-fund &&
+             npx wait-on -t 60000 http://web http://web/api/notes &&
+             npx playwright test marketing.spec.ts --reporter=list"
