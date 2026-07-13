@@ -189,6 +189,10 @@ a { color: inherit; text-decoration: none; }
   /* action clusters inside header rows (e.g. Quick + New event) stay one line
      pinned right; the heading shrinks instead */
   .row.between > .row { flex-wrap: nowrap; flex: none; }
+  /* A single action button/chip beside a title/hint keeps its intrinsic size
+     too - the `> * { min-width: 0 }` above would otherwise let it shrink below
+     its label and look smushed. The flexible text sibling shrinks instead. */
+  .row.between > .btn, .row.between > .chip { flex: none; }
 }
 
 /* cards - the frosted-glass panel every feature sits in */
