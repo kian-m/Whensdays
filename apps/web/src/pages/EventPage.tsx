@@ -1,38 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  Attendee,
-  DAYPARTS,
-  EventDetail,
-  Friend,
-  GeneralVote,
-  PrefAnswer,
-  ImportedEvent,
-  TimeOption,
-  Vote,
-  WEEKDAYS,
-  EVENT_THEMES,
-  TYPE_COLORS,
-  busyConflict,
-  daysFromDate,
-  dayLabel as dayCol,
-  fmtDate,
-  fmtDateTime,
-  fmtMinutes,
-  gridSlots,
-  toDatetimeLocal,
-  getJSON,
-  guessCity,
-  importedBusy,
-  mapsUrl,
-  appleMapsUrl,
-  openGoogleMaps,
-  isStandalone,
-  nextMonths,
-  sendJSON,
-  timeAgo,
-  useApi,
-} from "../lib";
+import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, PrefAnswer, ImportedEvent, TimeOption, Vote, WEEKDAYS, EVENT_THEMES, busyConflict, daysFromDate, dayLabel as dayCol, fmtDate, fmtDateTime, fmtMinutes, gridSlots, toDatetimeLocal, getJSON, guessCity, importedBusy, mapsUrl, appleMapsUrl, openGoogleMaps, isStandalone, nextMonths, sendJSON, timeAgo, useApi } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
 import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, GifPicker, HomescreenPrompt, Linkify, Pill, QRButton, TimeGrid, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
@@ -982,20 +950,17 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         {/* The cover is the hero visual: the photo/GIF when set, otherwise a
             type-coloured emoji tile (no picture ⇒ fall back to the type emoji)
             so the title row below stays clean - no emoji crammed beside it. */}
-        {e.photo_url ? (
-          <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />
-        ) : (
-          <div className="event-cover event-cover-emoji" data-testid="event-cover-emoji"
-            role="img" aria-label={eventLabel(e)}
-            style={{ background: `linear-gradient(150deg, ${TYPE_COLORS[e.event_type]}, color-mix(in srgb, ${TYPE_COLORS[e.event_type]} 45%, #141a27))` }}>
-            {eventEmoji(e)}
-          </div>
-        )}
+        {/* Cover slot: a real photo/GIF only. Photo-less events lead with the
+            title - a small type emoji rides inline with it, never a big tile. */}
+        {e.photo_url && <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />}
         {/* Title left, status + Edit right on desktop; stacked on a phone (the
             title gets the full width instead of being squeezed to a sliver). */}
         <div className="card-header">
           <div style={{ minWidth: 0 }}>
-            <h1 data-testid="event-title">{e.title}</h1>
+            <h1>
+              {!e.photo_url && <span aria-hidden style={{ marginRight: 8 }}>{eventEmoji(e)}</span>}
+              <span data-testid="event-title">{e.title}</span>
+            </h1>
             <p className="muted" style={{ margin: 0 }}>{eventLabel(e)}</p>
             {data.host_name && (
               <span className="row" style={{ gap: 6, marginTop: 4 }} data-testid="hosted-by">

@@ -388,13 +388,8 @@ textarea.input { resize: vertical; min-height: 64px; }
   border-radius: var(--radius); align-self: center; display: block; margin: 0 auto;
   box-shadow: var(--shadow);
 }
-/* Photo-less events get a type-coloured emoji "cover" in the same slot (the
-   background gradient is set inline from TYPE_COLORS), so the hero always has a
-   visual and the title row stays clean. */
-.event-cover.event-cover-emoji {
-  width: 100%; max-width: 340px; aspect-ratio: 1 / 1;
-  display: grid; place-items: center; font-size: 6rem; line-height: 1;
-}
+/* Photo-less events have NO cover slot - the title leads, with a small
+   inline type emoji (the big emoji tile read as filler). */
 /* event tile thumbnail (cover photo/gif as the tile's main visual) */
 .thumb { border-radius: 10px; object-fit: cover; flex: none; display: block; box-shadow: var(--shadow); }
 /* comment thread: chat-style bubbles (avatar + glass bubble; own = accent tint) */
