@@ -321,11 +321,18 @@ test.describe("scheduler", () => {
     await page.getByTestId("cover-file").setInputFiles({
       name: "cover.png", mimeType: "image/png", buffer: Buffer.from(png, "base64"),
     });
-    // The crop dialog lets the host pick which square of the photo to use.
+    // The crop dialog lets the host pick the crop - square or a 2:1 banner
+    // (flyers). Banner export = width 2x height; verify via the data URL.
     await expect(page.getByTestId("crop-modal")).toBeVisible();
+    await page.getByTestId("crop-aspect-banner").click();
     await page.getByTestId("crop-save").click();
     await expect(page.getByTestId("crop-modal")).toHaveCount(0);
     await expect(page.getByTestId("event-cover")).toHaveAttribute("src", /^data:image\//);
+    const dims = await page.getByTestId("event-cover").evaluate((el) => {
+      const i = el as HTMLImageElement;
+      return { w: i.naturalWidth, h: i.naturalHeight };
+    });
+    expect(dims.w).toBe(dims.h * 2);
     // Pick a backdrop theme - the WHOLE page reflects it live, before saving.
     await page.getByTestId("theme-party").click();
     await expect(page.locator(".event-theme.theme-party")).toBeVisible();

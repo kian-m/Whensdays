@@ -1059,7 +1059,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
         <input ref={fileRef} type="file" accept="image/*" data-testid="cover-file"
           style={{ display: "none" }} onChange={onPickPhoto} />
         {cropFile && (
-          <CropModal file={cropFile} shape="square" size={420}
+          <CropModal file={cropFile} shape="square" size={640}
             onDone={(url) => { setPhoto(url); setCropFile(null); }}
             onCancel={() => setCropFile(null)} />
         )}

@@ -686,11 +686,12 @@ export function fileToPhoto(file: File, maxDim = 640): Promise<string> {
   });
 }
 
-// Pan-and-zoom crop dialog for uploaded photos. The square viewport IS the
-// crop area: drag to position, slider to zoom; output is a size x size JPEG
-// data URL (same contract as fileToAvatar). `shape` only changes the preview
-// mask - avatars render as circles in the app, event covers as squares - the
-// exported image is always the full square.
+// Pan-and-zoom crop dialog for uploaded photos. The viewport IS the crop
+// area: drag to position, slider to zoom; output is a JPEG data URL (same
+// contract as fileToAvatar). `shape` only changes the preview mask - avatars
+// render as circles in the app. Square covers can switch to a 2:1 BANNER
+// aspect (concert flyers, wide art) via the chips; the exported image is
+// size x size (square) or size x size/2 (banner).
 export function CropModal({ file, shape, size, onDone, onCancel }: {
   file: File; shape: "circle" | "square"; size: number;
   onDone: (dataUrl: string) => void; onCancel: () => void;
@@ -700,6 +701,9 @@ export function CropModal({ file, shape, size, onDone, onCancel }: {
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [off, setOff] = useState({ x: 0, y: 0 });
+  // Crop aspect: 1 = square, 0.5 = banner. Circles (avatars) stay square.
+  const [ratio, setRatio] = useState(1);
+  const VIEWH = VIEW * ratio;
   const drag = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -715,22 +719,27 @@ export function CropModal({ file, shape, size, onDone, onCancel }: {
 
   if (!src || !dims) return null;
 
-  // Baseline scale = "cover" (short side fills the viewport); zoom multiplies
-  // it, and the pan offset is clamped so the image always covers the crop.
-  const scale = (VIEW / Math.min(dims.w, dims.h)) * zoom;
+  // Baseline scale = "cover" (image fills the viewport); zoom multiplies it,
+  // and the pan offset is clamped so the image always covers the crop.
+  const scale = Math.max(VIEW / dims.w, VIEWH / dims.h) * zoom;
   const dw = dims.w * scale, dh = dims.h * scale;
-  const clampOff = (v: number, span: number) =>
-    Math.min(Math.max(v, -(span - VIEW) / 2), (span - VIEW) / 2);
-  const ox = clampOff(off.x, dw), oy = clampOff(off.y, dh);
-  const left = (VIEW - dw) / 2 + ox, top = (VIEW - dh) / 2 + oy;
+  const clampOff = (v: number, span: number, view: number) =>
+    Math.min(Math.max(v, -(span - view) / 2), (span - view) / 2);
+  const ox = clampOff(off.x, dw, VIEW), oy = clampOff(off.y, dh, VIEWH);
+  const left = (VIEW - dw) / 2 + ox, top = (VIEWH - dh) / 2 + oy;
 
   function exportCrop() {
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = size;
+    canvas.width = size;
+    canvas.height = Math.round(size * ratio);
     const ctx = canvas.getContext("2d");
     if (!ctx || !imgRef.current) return onCancel();
-    ctx.drawImage(imgRef.current, -left / scale, -top / scale, VIEW / scale, VIEW / scale, 0, 0, size, size);
-    onDone(canvas.toDataURL("image/jpeg", 0.85));
+    ctx.drawImage(imgRef.current, -left / scale, -top / scale, VIEW / scale, VIEWH / scale, 0, 0, canvas.width, canvas.height);
+    // Step quality down if needed - the server caps cover bodies (coverMaxBody).
+    for (const q of [0.85, 0.7, 0.55]) {
+      const d = canvas.toDataURL("image/jpeg", q);
+      if (d.length <= 240_000 || q === 0.55) return onDone(d);
+    }
   }
 
   // Portal to <body>: .card's backdrop-filter makes it the containing block
@@ -741,10 +750,21 @@ export function CropModal({ file, shape, size, onDone, onCancel }: {
       <div className="card stack crop-card">
         <strong>{shape === "circle" ? "Position your photo" : "Crop your cover"}</strong>
         <span className="muted small">Drag to move · slide to zoom</span>
+        {shape === "square" && (
+          <div className="row" role="radiogroup" aria-label="Cover shape">
+            {([["Square", 1], ["Banner", 0.5]] as const).map(([label, r]) => (
+              <button key={label} type="button" className={`chip sm ${ratio === r ? "on" : ""}`}
+                data-testid={`crop-aspect-${label.toLowerCase()}`} aria-pressed={ratio === r}
+                onClick={() => setRatio(r)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div
           className={`crop-viewport ${shape === "circle" ? "crop-circle" : ""}`}
           data-testid="crop-viewport"
-          style={{ width: VIEW, height: VIEW }}
+          style={{ width: VIEW, height: VIEWH }}
           onPointerDown={(e) => {
             e.preventDefault();
             (e.currentTarget as Element).setPointerCapture(e.pointerId);
