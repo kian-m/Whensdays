@@ -6,6 +6,9 @@
     <title>Whensdays - plans, minus the group-chat chaos</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <!-- Safari doesn't support SVG favicons - it takes the PNG (regenerate
+         from icon.svg if the logo changes); SVG-capable browsers prefer it. -->
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="64x64" />
     <!-- Warm the TLS handshakes we know are coming (Clerk auth JS, GIF CDN) so
          they don't stack on top of first interaction. dns-prefetch is the cheap
          fallback for browsers that ignore preconnect. -->
