@@ -13,6 +13,23 @@ import { EVENTS, analytics } from "./analytics";
 // Cache key = the fetcher's source + deps (closure source is stable per call
 // site; deps carry the ids that vary, e.g. the event id).
 const swrCache = new Map<string, unknown>();
+// In-flight warm fetches (see warmAsync): useAsync consumes a pending promise
+// instead of firing a duplicate request.
+const swrPending = new Map<string, Promise<unknown>>();
+
+// Kick off a fetch BEFORE its page mounts (e.g. the dashboard fetch in
+// parallel with the profile gate) - the page's useAsync with the SAME fetcher
+// reference + deps picks up the result or the in-flight promise. Cuts a serial
+// API round trip out of first load.
+export function warmAsync<T>(api: ApiFn, fn: (api: ApiFn) => Promise<T>, deps: unknown[] = []) {
+  const key = fn.toString() + "|" + JSON.stringify(deps);
+  if (swrCache.has(key) || swrPending.has(key)) return;
+  const p = fn(api)
+    .then((d) => { swrCache.set(key, d); return d as unknown; })
+    .finally(() => swrPending.delete(key));
+  p.catch(() => {}); // errors surface via the page's own revalidation
+  swrPending.set(key, p);
+}
 
 export function useAsync<T>(fn: (api: ApiFn) => Promise<T>, deps: unknown[] = []) {
   const api = useApi();
@@ -25,7 +42,7 @@ export function useAsync<T>(fn: (api: ApiFn) => Promise<T>, deps: unknown[] = []
 
   const run = useCallback(() => {
     if (swrCache.get(key) === undefined) setLoading(true);
-    fn(api)
+    ((swrPending.get(key) as Promise<T> | undefined) ?? fn(api))
       .then((d) => {
         swrCache.set(key, d);
         setData(d);

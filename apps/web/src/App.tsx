@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import {
+  ClerkLoading,
   SignedIn,
   SignedOut,
   SignIn,
@@ -8,12 +9,12 @@ import {
   useAuth,
 } from "@clerk/clerk-react";
 import "./styles.css";
-import { ApiContext, ApiFn, Badges, Profile, ProfileContext, useApi, useProfile } from "./lib";
+import { ApiContext, ApiFn, Badges, Profile, ProfileContext, fetchDashboard, useApi, useProfile } from "./lib";
 import { Avatar } from "./ui";
 import { analytics, EVENTS, denyConsent, grantConsent, needsConsent } from "./analytics";
 import { Home } from "./pages/Home";
 import { ProfileSetup } from "./pages/ProfileSetup";
-import { ListSkeleton } from "./ui";
+import { ListSkeleton, warmAsync } from "./ui";
 // A dynamic import that survives a deploy. After we ship a new build the hashed
 // chunk filenames change, so a tab still running the OLD index.html asks for a
 // chunk hash that no longer exists; Cloudflare serves the SPA index.html
@@ -151,6 +152,12 @@ export function App() {
         )
       ) : (
         <>
+          {/* Until clerk-js (~300KB, external) loads and resolves the session,
+              SignedIn/SignedOut render NOTHING - that blank was the slowest
+              part of first load. Show the shell + skeleton immediately. */}
+          <ClerkLoading>
+            <Shell hideNav><ListSkeleton rows={4} header /></Shell>
+          </ClerkLoading>
           <SignedOut>
             <GuestOrLanding />
           </SignedOut>
@@ -392,6 +399,10 @@ function ProfileGate({ canMerge }: { canMerge?: boolean }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Start the dashboard fetch NOW, in parallel with the profile fetch -
+    // Home's useAsync consumes the in-flight promise instead of re-fetching,
+    // cutting a serial API round trip out of first load.
+    warmAsync(api, fetchDashboard);
     (async () => {
       // Guest → account merge: if a guest token lingers from before sign-up,
       // reassign that guest's plans/RSVPs to this account, then forget it.

@@ -59,8 +59,12 @@ export function EventPage() {
   // The lock moment: when this session watches the status flip polling →
   // scheduled, celebrate - a one-shot confetti burst + banner. Catching the
   // transition here (rather than in each finalize button) covers every path.
-  const prevStatus = useRef<string | null>(null);
+  const prevStatus = useRef<{ id: string; status: string } | null>(null);
   const [celebrate, setCelebrate] = useState(false);
+  // Navigating between series occurrences reuses this mounted page (only the
+  // :id param changes), so per-event UI state must reset by hand here - the
+  // rendered children below are keyed by event id instead (remount wholesale).
+  useEffect(() => { setThemePreview(null); setPreview(false); }, [id]);
   // One-time add-to-homescreen prompt: fires on the event page right after
   // this device's FIRST event creation (see the create flows), phones only.
   const [showA2HS, setShowA2HS] = useState(false);
@@ -77,8 +81,10 @@ export function EventPage() {
   useEffect(() => {
     if (!data) return;
     const prev = prevStatus.current;
-    prevStatus.current = data.event.status;
-    if (prev === "polling" && data.event.status === "scheduled") {
+    prevStatus.current = { id: data.event.id, status: data.event.status };
+    // Same event only - arriving at a scheduled occurrence from a polling
+    // sibling is navigation, not a lock moment.
+    if (prev?.id === data.event.id && prev.status === "polling" && data.event.status === "scheduled") {
       setCelebrate(true);
       const t = setTimeout(() => setCelebrate(false), 3400);
       return () => clearTimeout(t);
@@ -93,7 +99,7 @@ export function EventPage() {
   const effTheme = themePreview ?? e.theme;
 
   return (
-    <div className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
+    <div key={e.id} className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
       {celebrate && <div className="fx-locked" data-testid="locked-banner">It&rsquo;s locked in 🎉</div>}
       {data.event.status === "draft" && data.can_manage && (
         <div className="card row between" data-testid="draft-banner">

@@ -382,6 +382,13 @@ export async function getJSON<T>(api: ApiFn, path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// The dashboard fetcher, shared by reference: Home's useAsync AND the
+// ProfileGate's warmAsync must pass the SAME function so the SWR cache key
+// matches - that's what lets the gate start this fetch in parallel with the
+// profile fetch instead of after it.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const fetchDashboard = (api: ApiFn): Promise<any> => getJSON(api, "/api/events");
+
 export async function sendJSON(api: ApiFn, method: string, path: string, body: unknown): Promise<Response> {
   return api(path, {
     method,

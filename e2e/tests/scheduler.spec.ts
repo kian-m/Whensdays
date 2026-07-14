@@ -1397,6 +1397,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+    const eventUrl = page.url();
 
     // Series card: 3 occurrences, this is the first; siblings navigate.
     await expect(page.getByTestId("series")).toContainText("1 of 3");
@@ -1409,6 +1410,18 @@ test.describe("scheduler", () => {
     const rows = page.getByTestId("event-row").filter({ hasText: title });
     await expect(rows).toHaveCount(1);
     await expect(rows.getByTestId("series-badge")).toContainText("3 dates");
+
+    // Regression: an RSVP on one occurrence must NOT carry its selection to a
+    // sibling (the mounted page is reused across ids; children re-key).
+    await ensureUser(page, "seriesguest", "Series Guest", "seriesguest");
+    await page.goto(`${eventUrl}?as=seriesguest`);
+    const post = page.waitForResponse((r) => r.url().includes("/rsvp") && r.request().method() === "POST");
+    await page.getByTestId("rsvp-going").click();
+    await post;
+    await expect(page.getByTestId("rsvp-going")).toHaveClass(/on/);
+    await page.getByTestId("series-occ-1").click();
+    await expect(page.getByTestId("series")).toContainText("2 of 3");
+    await expect(page.getByTestId("rsvp-going")).not.toHaveClass(/on/);
   });
 
   test("group page: past occurrences and cancelled events drop out", async ({ page }) => {

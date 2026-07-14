@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, TYPE_COLORS, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON } from "../lib";
+import { Event, TYPE_COLORS, collapseSeries, eventIsPast, fetchDashboard, seriesCounts, fmtDateTime } from "../lib";
 import { eventEmoji, eventLabel } from "../scheduler/questions";
 import { Avatar, EventThumb, ListSkeleton, Pill, useAsync } from "../ui";
 
@@ -35,7 +35,7 @@ function byWhen(a: Event, b: Event): number {
 
 export function Home() {
   const nav = useNavigate();
-  const { data, loading } = useAsync<EventsResp>((api) => getJSON(api, "/api/events"));
+  const { data, loading } = useAsync<EventsResp>(fetchDashboard);
   const [filter, setFilter] = useState<Filter>("all");
 
   // No full-page loader: the chrome below renders instantly and the list area
