@@ -66,7 +66,7 @@ export function Groups() {
             maxLength={80} data-testid="group-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Crew name"
+            placeholder="Group name"
           />
           <button className="btn" data-testid="group-create">Create</button>
         </div>
