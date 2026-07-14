@@ -63,12 +63,6 @@ export function Groups() {
 
       <form className="card stack" onSubmit={create}>
         <label className="field" htmlFor="gn">Create a group</label>
-        <div className="row wrap" style={{ gap: 4 }}>
-          {GROUP_EMOJIS.map((em) => (
-            <button key={em} type="button" className={`chip sm ${emoji === em ? "on" : ""}`}
-              data-testid={`group-emoji-${em}`} onClick={() => setEmoji(em)}>{em}</button>
-          ))}
-        </div>
         <div className="row">
           <input
             id="gn"
@@ -82,7 +76,16 @@ export function Groups() {
         </div>
         <textarea className="input" maxLength={500} data-testid="group-desc" value={description} rows={2}
           placeholder="What's this group about? (optional)" onChange={(e) => setDescription(e.target.value)} />
-        <p className="muted small">Pick an emoji - or upload a photo from the group page after creating.</p>
+        {/* Icon is optional - defaults to 👥; the row is clearly labelled so it
+            never reads as a required step. A photo/GIF can be added later. */}
+        <div className="row wrap" style={{ gap: 4, alignItems: "center" }}>
+          <span className="muted small">Icon (optional):</span>
+          {GROUP_EMOJIS.map((em) => (
+            <button key={em} type="button" className={`chip sm ${emoji === em ? "on" : ""}`}
+              data-testid={`group-emoji-${em}`} onClick={() => setEmoji(em)}>{em}</button>
+          ))}
+        </div>
+        <p className="muted small" style={{ margin: 0 }}>Or add a photo/GIF from the group page after creating.</p>
         {msg && <p className="muted small">{msg}</p>}
       </form>
 
@@ -149,6 +152,7 @@ export function GroupPage() {
   const { data, loading, reload } = useAsync<GroupDetail>((a) => getJSON(a, `/api/groups/${id}`), [id]);
   const [handle, setHandle] = useState("");
   const [addMsg, setAddMsg] = useState<string | null>(null);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickingGif, setPickingGif] = useState(false);
 
@@ -211,11 +215,8 @@ export function GroupPage() {
       <BackLink />
 
       <div className="card stack">
-        <div className="row between">
-          {/* flex:1 + minWidth:0 override the mobile .row.between > .row
-              flex:none rule so a long group name shrinks/wraps; the button is
-              flex:none so its label never spills past its edge. */}
-          <span className="row" style={{ gap: 10, flex: "1 1 auto", minWidth: 0 }}>
+        <div className="card-header">
+          <span className="row" style={{ gap: 10, minWidth: 0 }}>
             <GroupIcon group={group} size={64} />
             <span className="stack" style={{ gap: 4, minWidth: 0 }}>
               <h1 data-testid="group-title">{group.name}</h1>
@@ -226,16 +227,14 @@ export function GroupPage() {
               )}
             </span>
           </span>
-          <span className="row" style={{ gap: 6, flex: "none" }}>
-            {canManage && !editing && (
+          {canManage && !editing && (
+            <span className="row card-actions" style={{ gap: 6 }}>
               <button type="button" className="btn ghost sm" data-testid="group-edit"
                 onClick={() => { setEditName(group.name); setEditDesc(group.description); setEditing(true); }}>✎ Edit</button>
-            )}
-            {canManage && (
-              <button className="btn sm" data-testid="group-new-event" style={{ flex: "none" }}
+              <button className="btn sm" data-testid="group-new-event"
                 onClick={() => nav(`/new?group=${group.id}`)}>+ New event</button>
-            )}
-          </span>
+            </span>
+          )}
         </div>
         {group.description && !editing && (
           <p className="muted" data-testid="group-description" style={{ overflowWrap: "anywhere" }}>{group.description}</p>
@@ -246,43 +245,54 @@ export function GroupPage() {
               placeholder="Group name" onChange={(e) => setEditName(e.target.value)} />
             <textarea className="input" maxLength={500} data-testid="group-edit-desc" value={editDesc} rows={2}
               placeholder="What's this group about? (optional)" onChange={(e) => setEditDesc(e.target.value)} />
-            <div className="row" style={{ gap: 6 }}>
-              <button className="btn sm" data-testid="group-edit-save">Save</button>
-              <button type="button" className="btn ghost sm" data-testid="group-edit-cancel" onClick={() => setEditing(false)}>Cancel</button>
+            {/* Icon + delete only live in edit mode (owner) - not clutter on the
+                default view. */}
+            {is_owner && (
+              <div className="row wrap" style={{ gap: 6 }}>
+                <button type="button" className="btn ghost sm" data-testid="group-icon-pick"
+                  onClick={() => fileRef.current?.click()}>
+                  {group.icon_url ? "Change photo" : "Use a photo"}
+                </button>
+                <input ref={fileRef} type="file" accept="image/*" data-testid="group-icon-file"
+                  style={{ display: "none" }} onChange={onPickIcon} />
+                <button type="button" className="btn ghost sm" data-testid="group-icon-gif"
+                  onClick={() => setPickingGif((p) => !p)}>GIF</button>
+              </div>
+            )}
+            {is_owner && pickingGif && (
+              <GifPicker onPick={async (url) => {
+                await sendJSON(api, "PUT", `/api/groups/${id}/icon`, { icon_url: url });
+                setPickingGif(false);
+                reload();
+              }} />
+            )}
+            <div className="row between">
+              <span className="row" style={{ gap: 6 }}>
+                <button className="btn sm" data-testid="group-edit-save">Save</button>
+                <button type="button" className="btn ghost sm" data-testid="group-edit-cancel" onClick={() => setEditing(false)}>Cancel</button>
+              </span>
+              {is_owner && (
+                <ConfirmButton label="Delete group" confirmLabel="Tap again - events stay, group goes" testid="group-delete"
+                  onConfirm={async () => { await api(`/api/groups/${id}`, { method: "DELETE" }); nav("/groups"); }} />
+              )}
             </div>
           </form>
         )}
-        {/* Any member can grow the group - the link IS the invite. */}
+      </div>
+
+      {/* Invite lives in its own box - any member can grow the group (the link
+          IS the invite). */}
+      <div className="card stack" style={{ gap: 8 }}>
+        <div className="section-h" style={{ margin: 0 }}>Invite people</div>
+        <p className="muted small" style={{ margin: 0 }}>Anyone with the link can preview the group and join in one tap.</p>
         <div className="row wrap" style={{ gap: 6 }}>
           <button type="button" className="btn soft sm" data-testid="group-invite-copy"
-            onClick={() => { navigator.clipboard?.writeText(inviteURL); setAddMsg("Invite link copied ✓"); }}>
+            onClick={() => { navigator.clipboard?.writeText(inviteURL); setCopyMsg("Invite link copied ✓"); }}>
             🔗 Invite via link
           </button>
           <QRButton url={inviteURL} testid="group-qr" />
         </div>
-        {is_owner && (
-          <div className="row wrap">
-            <button type="button" className="btn ghost sm" data-testid="group-icon-pick"
-              onClick={() => fileRef.current?.click()}>
-              {group.icon_url ? "Change photo" : "Use a photo instead"}
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" data-testid="group-icon-file"
-              style={{ display: "none" }} onChange={onPickIcon} />
-            <button type="button" className="btn ghost sm" data-testid="group-icon-gif"
-              onClick={() => setPickingGif((p) => !p)}>GIF</button>
-            <ConfirmButton label="Delete group" confirmLabel="Tap again - events stay, group goes" testid="group-delete"
-              onConfirm={async () => { await api(`/api/groups/${id}`, { method: "DELETE" }); nav("/groups"); }} />
-          </div>
-        )}
-        {is_owner && pickingGif && (
-          <div style={{ marginTop: 6 }}>
-            <GifPicker onPick={async (url) => {
-              await sendJSON(api, "PUT", `/api/groups/${id}/icon`, { icon_url: url });
-              setPickingGif(false);
-              reload();
-            }} />
-          </div>
-        )}
+        {copyMsg && <p className="muted small" style={{ margin: 0 }}>{copyMsg}</p>}
       </div>
 
       <div className="section-h">Members</div>

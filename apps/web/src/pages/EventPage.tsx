@@ -12,6 +12,7 @@ import {
   Vote,
   WEEKDAYS,
   EVENT_THEMES,
+  TYPE_COLORS,
   busyConflict,
   daysFromDate,
   dayLabel as dayCol,
@@ -957,16 +958,22 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
   if (!editing) {
     return (
       <div className="card stack">
-        {e.photo_url && <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />}
-        {/* Header row NEVER wraps: the status pill + Edit stay pinned to the
-            top-right corner even when a long title runs two lines (the mobile
-            .row wrap rule would otherwise strand them mid-card). */}
-        <div className="row" style={{ gap: "0.9rem", flexWrap: "nowrap", alignItems: "flex-start" }}>
-          {/* the cover/GIF is the visual once set - no type emoji beside the title */}
-          {!e.photo_url && (
-            <div className="emoji" style={{ fontSize: "1.8rem", width: 56, height: 56, flex: "none" }}>{eventEmoji(e)}</div>
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
+        {/* The cover is the hero visual: the photo/GIF when set, otherwise a
+            type-coloured emoji tile (no picture ⇒ fall back to the type emoji)
+            so the title row below stays clean - no emoji crammed beside it. */}
+        {e.photo_url ? (
+          <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />
+        ) : (
+          <div className="event-cover event-cover-emoji" data-testid="event-cover-emoji"
+            role="img" aria-label={eventLabel(e)}
+            style={{ background: `linear-gradient(150deg, ${TYPE_COLORS[e.event_type]}, color-mix(in srgb, ${TYPE_COLORS[e.event_type]} 45%, #141a27))` }}>
+            {eventEmoji(e)}
+          </div>
+        )}
+        {/* Title left, status + Edit right on desktop; stacked on a phone (the
+            title gets the full width instead of being squeezed to a sliver). */}
+        <div className="card-header">
+          <div style={{ minWidth: 0 }}>
             <h1 data-testid="event-title">{e.title}</h1>
             <p className="muted" style={{ margin: 0 }}>{eventLabel(e)}</p>
             {data.host_name && (
@@ -976,7 +983,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
               </span>
             )}
           </div>
-          <span className="stack" style={{ alignItems: "flex-end", gap: 6, flex: "none" }}>
+          <span className="row card-actions" style={{ gap: 6, alignItems: "center" }}>
             {e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
               : e.status === "draft" ? <Pill kind="">Draft</Pill>
               : e.status === "polling" ? <Pill kind="polling">Polling</Pill>

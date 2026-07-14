@@ -100,10 +100,20 @@ body::after {
 
 /* type scale - display-weight headings with tight tracking read editorial,
    not template. */
-/* overflow-wrap:anywhere + min-width:0 let a long/unbreakable title shrink and
-   wrap inside a flex row instead of overflowing under a pinned action button
-   (e.g. a group name under its ✎ Edit, an event title under its Edit). */
-h1, h2, h3 { letter-spacing: -0.025em; line-height: 1.08; margin: 0; overflow-wrap: anywhere; min-width: 0; }
+/* break-word (not anywhere) breaks a genuinely long/unbreakable word to avoid
+   overflow, but never chops a normal multi-word title mid-word - so "Dev Team"
+   stays one line when it has room, rather than shattering into three. */
+h1, h2, h3 { letter-spacing: -0.025em; line-height: 1.08; margin: 0; overflow-wrap: break-word; }
+
+/* Card header (group + event hero): title block left, action buttons/status
+   right on desktop; on a phone they STACK (title gets the full width, actions
+   drop to their own line) so a title never gets squeezed to a sliver beside
+   the buttons. */
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+@media (max-width: 640px) {
+  .card-header { flex-direction: column; }
+  .card-header > .card-actions { align-self: stretch; }
+}
 h1 { font-size: 2.2rem; font-weight: 850; }
 h2 { font-size: 1.35rem; font-weight: 800; }
 h3 { font-size: 1.02rem; font-weight: 750; }
@@ -362,6 +372,10 @@ textarea.input { resize: vertical; min-height: 64px; }
   border-radius: var(--radius); align-self: center; display: block; margin: 0 auto;
   box-shadow: var(--shadow);
 }
+/* Photo-less events get a type-coloured emoji "cover" in the same slot (the
+   background gradient is set inline from TYPE_COLORS), so the hero always has a
+   visual and the title row stays clean. */
+.event-cover.event-cover-emoji { display: grid; place-items: center; font-size: 6rem; line-height: 1; }
 /* event tile thumbnail (cover photo/gif as the tile's main visual) */
 .thumb { border-radius: 10px; object-fit: cover; flex: none; display: block; box-shadow: var(--shadow); }
 /* comment thread: chat-style bubbles (avatar + glass bubble; own = accent tint) */

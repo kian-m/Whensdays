@@ -1418,6 +1418,9 @@ test.describe("scheduler", () => {
     await page.getByText(name).first().click();
     await expect(page.getByTestId("group-title")).toHaveText(name);
 
+    // Icon controls live in edit mode (owner) - open it first.
+    await page.getByTestId("group-edit").click();
+
     // Owner uploads a photo icon; it replaces the emoji (avatar img appears).
     const png =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -1518,6 +1521,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("group-name").fill(gname);
     await page.getByTestId("group-create").click();
     await page.getByText(gname).first().click();
+    await page.getByTestId("group-edit").click(); // delete lives in edit mode now
     await page.getByTestId("group-delete").click(); // arm…
     await page.getByTestId("group-delete").click(); // …confirm
     await expect(page).toHaveURL(/\/groups$/);
