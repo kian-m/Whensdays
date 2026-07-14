@@ -2011,30 +2011,6 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("custom-bowling")).toBeVisible();
   });
 
-  test("landing: hero shot, how-it-works, FAQ, compare links", async ({ page, request }) => {
-    // /landing is the dev-only alias (the landing never renders in dev auth
-    // mode otherwise - no signed-out state exists in the hermetic stack).
-    await page.goto("/landing");
-    await expect(page.locator(".land-title")).toContainText("One link finds the time");
-    await expect(page.locator(".land-shot")).toBeVisible(); // the product IS the social proof
-    await expect(page.getByTestId("start-plan")).toBeVisible();
-    // How it works: three numbered steps.
-    await expect(page.getByTestId("land-how").locator(".land-step")).toHaveCount(3);
-    // FAQ: script-free accordions - the visible mirror of the JSON-LD FAQ.
-    const firstFaq = page.getByTestId("land-faq").locator("details").first();
-    await firstFaq.locator("summary").click();
-    await expect(firstFaq.locator("p")).toBeVisible();
-    // Closer CTA + comparison links to the static /vs/ pages.
-    await expect(page.getByTestId("start-plan-bottom")).toBeVisible();
-    await expect(page.locator(".land-compare a")).toHaveCount(4);
-    await expect(page.getByTestId("land-how")).toHaveScreenshot("land-how.png");
-    // The proof counter's API is live but server-gated; dev never renders it.
-    const stats = await (await request.get("/api/stats/landing")).json();
-    expect(typeof stats.plans_locked).toBe("number");
-    expect(stats.show).toBe(stats.plans_locked >= 50);
-    await expect(page.getByTestId("land-proof")).toHaveCount(0);
-  });
-
   test("zero-signup: start a plan from scratch, share-ready", async ({ browser }) => {
     test.skip(!DEV_AUTH, "guest flow uses the dev ?guest=1 hook");
     const ctx = await browser.newContext();

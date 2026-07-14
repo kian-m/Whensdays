@@ -553,58 +553,6 @@ textarea.input { resize: vertical; min-height: 64px; }
 
 /* landing hero */
 .land { text-align: center; padding: 3rem 1rem 2rem; }
-/* Hero: copy beside a real product shot on desktop, stacked on a phone. The
-   screenshot IS the social proof (zero-testimonial stage) - it shows RSVPs,
-   the who's-in bar, and the one-tap chips in a single glance. */
-.land-hero {
-  display: flex; align-items: center; justify-content: center; gap: 3rem;
-  text-align: left; margin-top: 2.2rem;
-}
-.land-hero-copy { max-width: 460px; }
-.land-hero .land-sub { margin: 1rem 0 1.6rem; }
-.land-hero .land-cta { justify-content: flex-start; }
-.land-shot {
-  width: min(280px, 74vw); height: auto; flex: none;
-  border-radius: 26px; border: 1px solid var(--glass-line);
-  box-shadow: var(--shadow);
-}
-.land-proof { margin-top: 1rem; font-weight: 700; color: var(--accent); }
-@media (max-width: 760px) {
-  .land-hero { flex-direction: column; gap: 2rem; text-align: center; }
-  .land-hero .land-cta { justify-content: center; }
-  .land-points { justify-content: center; }
-}
-/* How it works: three numbered steps, one row on desktop. */
-.land-how { margin-top: 3.4rem; }
-.land-steps {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.9rem;
-  margin-top: 1.2rem; text-align: left;
-}
-@media (max-width: 640px) { .land-steps { grid-template-columns: 1fr; } }
-.land-step {
-  background: var(--glass); border: 1px solid var(--glass-line);
-  border-radius: var(--radius); padding: 1rem 1.1rem;
-}
-.land-step p { color: var(--muted); font-size: 0.92rem; margin-top: 4px; }
-.land-step-n {
-  display: inline-grid; place-items: center; width: 26px; height: 26px;
-  border-radius: 999px; background: var(--accent); color: #fff;
-  font-weight: 800; font-size: 0.85rem; margin-bottom: 8px;
-}
-.land-step b { display: block; }
-/* FAQ: script-free accordions. */
-.land-faq { margin: 3.2rem auto 0; max-width: 560px; text-align: left; }
-.land-faq h2 { text-align: center; }
-.land-faq-item {
-  background: var(--glass); border: 1px solid var(--glass-line);
-  border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-top: 0.6rem;
-}
-.land-faq-item summary { cursor: pointer; font-weight: 700; }
-.land-faq-item p { color: var(--muted); margin-top: 8px; font-size: 0.95rem; }
-.land-close { margin-top: 3.2rem; }
-.land-close .btn { margin-top: 0.9rem; }
-.land-compare { text-align: center; margin-top: 2.4rem; }
-.land-compare a { text-decoration: underline; }
 .land-title {
   font-size: clamp(2.4rem, 8vw, 4rem); font-weight: 850; letter-spacing: -0.03em;
   line-height: 1.02; margin: 0.6rem auto 0; max-width: 12ch;
@@ -615,7 +563,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .land-cta { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
 .land-showcase { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 2.2rem auto 0; max-width: 520px; }
 .land-showcase .chip { cursor: default; }
-.land-points { display: flex; gap: 0.5rem 1.2rem; justify-content: flex-start; flex-wrap: wrap; margin-top: 1rem; color: var(--muted); font-size: 0.9rem; }
+.land-points { display: flex; gap: 1.4rem; justify-content: center; flex-wrap: wrap; margin-top: 2.4rem; color: var(--muted); font-size: 0.9rem; }
 .land-points b { color: var(--ink); }
 
 /* filter chip row - scrolls horizontally on mobile */

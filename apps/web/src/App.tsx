@@ -143,11 +143,7 @@ export function App() {
       <ConsentBanner />
       <AnalyticsPageviews />
       {DEV_AUTH ? (
-        window.location.pathname === "/landing" ? (
-          // Dev-only alias: the landing never renders in dev auth mode (no
-          // signed-out state exists), so E2E reaches it here.
-          <Landing />
-        ) : DEV_GUEST ? (
+        DEV_GUEST ? (
           <GuestFlow />
         ) : (
           <ApiContext.Provider value={devApi}>
@@ -355,106 +351,35 @@ function Landing() {
   useEffect(() => {
     analytics.reset();
   }, []);
-  // Live proof counter - server-gated (`show` is false until the number is
-  // worth showing), skipped in dev so hermetic E2E stays deterministic.
-  const [locked, setLocked] = useState(0);
-  useEffect(() => {
-    if (DEV_AUTH) return;
-    fetch("/api/stats/landing")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((b) => { if (b?.show) setLocked(b.plans_locked); })
-      .catch(() => {});
-  }, []);
   const showcase = ["🍽️ Dinner", "🎬 Movie night", "⛺ Camping", "🎉 Party", "🏃 Run club", "🎲 Game night"];
-  // Visible mirror of the FAQ crawlers get via JSON-LD (index.html) - humans
-  // deserve the same answers. Keep the two in sync.
-  const faqs: [string, string][] = [
-    ["Do my friends need an account?", "No. Anyone with the link can RSVP, vote on times, and comment with just their name - no app, no signup."],
-    ["Is it free?", "Yes. Events, availability polls, groups, reminders, and calendar sync are all free."],
-    ["What happens after everyone votes?", "You lock the winning time in one tap. Everyone gets the locked-in email, a day-before reminder, and a calendar invite - times always in your timezone."],
-    ["Does it work for recurring hangouts?", "That's the whole point. Schedule several winning dates at once as a series, keep a group streak going, and re-poll the crew when the series runs out."],
-    ["How is this different from When2meet or Doodle?", "Those are one-off meeting pollers. Whensdays is built for friend groups that keep hanging out: no-account RSVPs, group pages, streaks, recaps, and email that respects people (digests + one-tap RSVP, not spam)."],
-  ];
   return (
     <div className="app">
       <div className="land">
         <div className="brand" aria-label="Whensdays" style={{ justifyContent: "center" }}>
           <span className="dot" /><span className="word" />
         </div>
-        <div className="land-hero">
-          <div className="land-hero-copy">
-            <h1 className="land-title">One link finds the time everyone can make.</h1>
-            <p className="land-sub">
-              The group chat says “we should hang out” — and then nothing happens.
-              Whensdays fixes that: friends tap the times they can do, the best
-              time locks in, and everyone gets the plan. It’s that easy.
-            </p>
-            <div className="land-cta">
-              <a href="/start" className="btn" data-testid="start-plan">Start a plan - no account needed</a>
-              {!DEV_AUTH && (
-                <a href="/sign-in" className="btn ghost" data-testid="sign-in">Sign in</a>
-              )}
-            </div>
-            <p className="land-points">
-              <span>Free</span><span><b>No app</b> to download</span><span><b>No account</b> for friends to RSVP</span><span><b>One link</b> does it all</span>
-            </p>
-            {locked > 0 && (
-              <p className="land-proof" data-testid="land-proof">🔒 {locked.toLocaleString()} plans locked in so far</p>
-            )}
-            <p className="muted small" style={{ marginTop: 6 }}>Runs the weekly jam schedule for LA improv crews 🎭</p>
-          </div>
-          <img className="land-shot" src="/landing-shot.jpg" width={553} height={1200} alt="A Whensdays event page: 9 of 9 friends in, one-tap RSVP" />
+        <h1 className="land-title">Make plans that actually happen.</h1>
+        <p className="land-sub">
+          The group chat says “we should hang out.” Whensdays turns that into a
+          real plan: poll everyone on when they're free, lock the best time, drop one link. Its that easy.
+        </p>
+        <div className="land-cta">
+          <a href="/start" className="btn" data-testid="start-plan">Start a plan - no account needed</a>
+          {!DEV_AUTH && (
+            <a href="/sign-in" className="btn ghost" data-testid="sign-in">Sign in</a>
+          )}
         </div>
         <div className="land-showcase" aria-hidden>
           {showcase.map((s) => <span key={s} className="chip">{s}</span>)}
         </div>
-
-        <div className="land-how" data-testid="land-how">
-          <h2>How it works</h2>
-          <div className="land-steps">
-            <div className="land-step">
-              <span className="land-step-n">1</span>
-              <b>Name the hangout</b>
-              <p>Dinner, movie night, run club - pick a time or let the group vote. Ten seconds, no account.</p>
-            </div>
-            <div className="land-step">
-              <span className="land-step-n">2</span>
-              <b>Drop the link in the chat</b>
-              <p>Friends tap the times they can do and RSVP with just their name. No app, no signup, no nagging.</p>
-            </div>
-            <div className="land-step">
-              <span className="land-step-n">3</span>
-              <b>It locks in</b>
-              <p>The best time wins. Everyone gets the plan, a day-before reminder, and a calendar invite.</p>
-            </div>
-          </div>
+        <div className="land-points">
+          <span><b>No app</b> to download</span>
+          <span><b>No account</b> to RSVP</span>
+          <span><b>One link</b>, everyone's in</span>
         </div>
-
-        <div className="land-faq" data-testid="land-faq">
-          <h2>Questions people ask</h2>
-          {faqs.map(([q, a]) => (
-            <details key={q} className="land-faq-item">
-              <summary>{q}</summary>
-              <p>{a}</p>
-            </details>
-          ))}
-        </div>
-
-        <div className="land-close">
-          <h2>The next hangout is one link away.</h2>
-          <a href="/start" className="btn" data-testid="start-plan-bottom">Start a plan - it&rsquo;s free</a>
-        </div>
-
-        <p className="muted small land-compare">
-          Compare:{" "}
-          <a href="/vs/when2meet/">When2meet</a>{" · "}
-          <a href="/vs/doodle/">Doodle</a>{" · "}
-          <a href="/vs/lettucemeet/">LettuceMeet</a>{" · "}
-          <a href="/vs/timeful/">Timeful</a>
-        </p>
         {/* Visible privacy link on the homepage - required for Google OAuth
             app verification (a crawler-only link doesn't count). */}
-        <p className="muted small" style={{ textAlign: "center", marginTop: "0.6rem" }}>
+        <p className="muted small" style={{ textAlign: "center", marginTop: "2rem" }}>
           <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy policy</a>{" · "}
           <a href="/terms/" style={{ textDecoration: "underline" }}>Terms</a>{" · "}
           <a href="/cookies/" style={{ textDecoration: "underline" }}>Cookies</a>

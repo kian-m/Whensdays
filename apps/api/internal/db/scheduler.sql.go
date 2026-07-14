@@ -417,18 +417,6 @@ func (q *Queries) CountRegisteredUsers(ctx context.Context) (int32, error) {
 	return column_1, err
 }
 
-const countScheduledEvents = `-- name: CountScheduledEvents :one
-SELECT count(*) FROM events WHERE status = 'scheduled'
-`
-
-// Landing-page proof counter: every plan that reached a locked-in time.
-func (q *Queries) CountScheduledEvents(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countScheduledEvents)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createEvent = `-- name: CreateEvent :one
 
 INSERT INTO events (
