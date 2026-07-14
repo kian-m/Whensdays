@@ -10,7 +10,7 @@ import {
   sendJSON,
   useApi,
 } from "../lib";
-import { ConfirmButton, Loading, useAsync } from "../ui";
+import { ConfirmButton, ListSkeleton, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 // ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ export function Calendars() {
         ? `${startOfWeek(cursor).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${addDays(startOfWeek(cursor), 6).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
         : cursor.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
-  if (loading && !mine) return <Loading />;
+  if (loading && !mine) return <ListSkeleton rows={2} header />;
 
   return (
     <div className="stack">

@@ -66,6 +66,16 @@ export function seriesCounts(events: Event[]): Record<string, number> {
   return c;
 }
 
+// An event is PAST from the day after it happens (its date is before today's
+// midnight) - OR the moment its explicit end time passes. Shared by Home's
+// filter buckets and the group page (which hides past occurrences outright).
+export function eventIsPast(e: Event): boolean {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  return (!!e.ends_at && new Date(e.ends_at).getTime() < Date.now()) ||
+    (!!e.starts_at && new Date(e.starts_at).getTime() < startOfToday.getTime());
+}
+
 // Preset event-page backdrop themes (server-validated; see eventThemes in gifs.go).
 export const EVENT_THEMES: { value: string; label: string }[] = [
   { value: "", label: "None" },

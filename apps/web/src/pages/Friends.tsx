@@ -11,7 +11,7 @@ import {
   sendJSON,
   useApi,
 } from "../lib";
-import { AvailLegend, Avatar, ConfirmButton, DayGrid, Loading, useAsync } from "../ui";
+import { AvailLegend, Avatar, ConfirmButton, DayGrid, ListSkeleton, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 
 type Suggestion = { friend_id: string; display_name: string; handle: string; avatar_url: string; score: number; shared_events: number };
@@ -55,7 +55,7 @@ export function Friends() {
     reload();
   }
 
-  if (loading && !data) return <Loading />;
+  if (loading && !data) return <ListSkeleton rows={4} header />;
 
   return (
     <div className="stack">

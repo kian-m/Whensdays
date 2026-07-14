@@ -34,7 +34,7 @@ import {
   useApi,
 } from "../lib";
 import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, GifPicker, HomescreenPrompt, Linkify, Loading, Pill, QRButton, TimeGrid, fileToPhoto, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, GifPicker, HomescreenPrompt, Linkify, Pill, QRButton, TimeGrid, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH, GuestSignupButton } from "../App";
 
@@ -85,7 +85,7 @@ export function EventPage() {
     }
   }, [data]);
 
-  if (loading && !data) return <Loading />;
+  if (loading && !data) return <EventSkeleton />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Event not found.</p></div>;
 
   const showManage = data.can_manage && !preview;

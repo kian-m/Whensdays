@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, TYPE_COLORS, collapseSeries, seriesCounts, fmtDateTime, getJSON } from "../lib";
+import { Event, TYPE_COLORS, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON } from "../lib";
 import { eventEmoji, eventLabel } from "../scheduler/questions";
-import { Avatar, EventThumb, Loading, Pill, useAsync } from "../ui";
+import { Avatar, EventThumb, ListSkeleton, Pill, useAsync } from "../ui";
 
 // Avatar-stack preview: the API sends ≤6 prioritized faces (friends → people
 // with photos → initials-only) + the total going count per event.
@@ -38,19 +38,15 @@ export function Home() {
   const { data, loading } = useAsync<EventsResp>((api) => getJSON(api, "/api/events"));
   const [filter, setFilter] = useState<Filter>("all");
 
-  if (loading && !data) return <Loading />;
+  // No full-page loader: the chrome below renders instantly and the list area
+  // shows skeleton tiles until the first fetch lands (revisits hit the cache).
+  const firstLoad = loading && !data;
   const hosting = data?.hosting ?? [];
   const attending = data?.attending ?? [];
   const unseen = new Set(data?.unseen ?? []);
   const now = Date.now();
-  // An event is PAST from the day after it happens (its date is before today's
-  // midnight) - OR the moment its explicit end time passes. Past events leave
-  // every active view and live only under "Past".
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const isPast = (e: Event) =>
-    (!!e.ends_at && new Date(e.ends_at).getTime() < now) ||
-    (!!e.starts_at && new Date(e.starts_at).getTime() < startOfToday.getTime());
+  // Past events leave every active view and live only under "Past".
+  const isPast = eventIsPast;
   // Past tiles say what happened for YOU: hosted it or RSVP'd going = Attended.
   const hostingIds = new Set(hosting.map((e) => e.id));
   const attended = (e: Event) => hostingIds.has(e.id) || data?.my_rsvps?.[e.id] === "going";
@@ -90,7 +86,11 @@ export function Home() {
     past: lists.past.length, drafts: lists.drafts.length, declined: lists.declined.length,
   };
   const shown = lists[filter];
-  const scount = seriesCounts(union); // occurrences per series, for the "🔁 N dates" badge
+  // "🔁 N dates" counts only the occurrences relevant to the view: remaining
+  // dates on active tiles (the number goes DOWN as dates pass), past ones
+  // under Past. Union-wide counts would keep showing the series' full length.
+  const scountActive = seriesCounts(live.filter((e) => !isPast(e)));
+  const scountPast = seriesCounts(past);
 
   const FILTERS: { key: Filter; label: string }[] = [
     { key: "all", label: "All" },
@@ -123,7 +123,9 @@ export function Home() {
         ))}
       </div>
 
-      {union.length === 0 ? (
+      {firstLoad ? (
+        <ListSkeleton rows={4} />
+      ) : union.length === 0 ? (
         <div className="card empty stack" data-testid="events-empty">
           <div style={{ fontSize: "2.4rem" }}>🗓️</div>
           <h3>No plans yet</h3>
@@ -149,7 +151,7 @@ export function Home() {
           {shown.map((e) => (
             <EventRow key={e.id} e={e} pile={data?.faces?.[e.id]} isNew={unseen.has(e.id)}
               past={isPast(e)} attended={attended(e)} declinedByMe={iDeclined(e)}
-              seriesN={e.series_id ? (scount[e.series_id] ?? 1) : 0}
+              seriesN={e.series_id ? ((isPast(e) ? scountPast : scountActive)[e.series_id] ?? 1) : 0}
               soon={!isPast(e) && e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
           ))}
         </div>

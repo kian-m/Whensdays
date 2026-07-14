@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Event, Group, GroupDetail, TYPE_COLORS, collapseSeries, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
+import { Event, Group, GroupDetail, TYPE_COLORS, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
 
 // Consecutive months (ending now, with a one-month grace) in which the group
 // had at least one scheduled event - the ritual streak. Loss aversion is the
@@ -17,7 +17,7 @@ function groupStreak(events: Event[]): number {
   while (months.has(m)) { n++; m--; }
   return n;
 }
-import { Avatar, BackLink, ConfirmButton, GifPicker, Loading, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
+import { Avatar, BackLink, ConfirmButton, GifPicker, ListSkeleton, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { eventEmoji, eventLabel } from "../scheduler/questions";
 
 // Group icon: uploaded photo wins over emoji.
@@ -51,8 +51,8 @@ export function Groups() {
     reload();
   }
 
-  if (loading && !data) return <Loading />;
-
+  // No full-page loader: the create form renders instantly; the list area
+  // shows skeleton tiles until the first fetch lands.
   return (
     <div className="stack">
       <h1>Groups</h1>
@@ -77,6 +77,7 @@ export function Groups() {
       </form>
 
       <div className="section-h">Your groups</div>
+      {loading && !data && <ListSkeleton rows={3} />}
       {data && data.groups.length === 0 && (
         <p className="muted small">No groups yet - make one for your crew.</p>
       )}
@@ -107,7 +108,7 @@ function GroupJoin({ id, onJoined }: { id: string; onJoined: () => void }) {
   const { data, loading } = useAsync<GroupPreview>((a) => getJSON(a, `/api/groups/${id}/preview`), [id]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  if (loading && !data) return <Loading />;
+  if (loading && !data) return <ListSkeleton rows={1} header />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Group not found.</p></div>;
   async function join() {
     setBusy(true);
@@ -186,12 +187,15 @@ export function GroupPage() {
     reload();
   }
 
-  if (loading && !data) return <Loading />;
+  if (loading && !data) return <ListSkeleton rows={4} header />;
   // Not a member (or arriving fresh from an invite link): the link is the
   // capability - show a preview + Join instead of a wall.
   if (!data) return <GroupJoin id={id!} onJoined={reload} />;
 
   const { group, members, events, is_owner, is_admin, viewer_id } = data;
+  // The list shows only what's still happening: no past occurrences, and a
+  // cancelled event never lingers even if a stale cached response carries one.
+  const upcomingEvents = events.filter((e) => e.status !== "cancelled" && !eventIsPast(e));
   const canManage = is_owner || is_admin;
   // ?from=<me> lets the unfurl say "<name> invited you to join" (server checks
   // the id is a real member before showing any name).
@@ -332,16 +336,18 @@ export function GroupPage() {
         </form>
       )}
 
-      {events.length > 0 && (
+      {upcomingEvents.length > 0 && (
         <>
           <div className="section-h">Events</div>
-          {/* A recurring series shows once (its next occurrence + a "N dates"
-              badge), not one tile per date. */}
-          {collapseSeries([...events], "next")
+          {/* A recurring series shows once (its next occurrence + a badge
+              counting its REMAINING dates), not one tile per date. Past
+              occurrences and cancelled events don't show here at all (the
+              streak above still reads the full history). */}
+          {collapseSeries([...upcomingEvents], "next")
             .sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime())
             .map((e) => (
               <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
-                seriesN={e.series_id ? (seriesCounts(events)[e.series_id] ?? 1) : 0} />
+                seriesN={e.series_id ? (seriesCounts(upcomingEvents)[e.series_id] ?? 1) : 0} />
             ))}
         </>
       )}

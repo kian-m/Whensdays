@@ -49,8 +49,52 @@ export function useAsync<T>(fn: (api: ApiFn) => Promise<T>, deps: unknown[] = []
   return { data, loading, error, reload: run };
 }
 
-export function Loading() {
-  return <p className="muted" style={{ marginTop: "2rem" }}>Loading…</p>;
+// Skeleton placeholders: on a first load, pages render their real chrome
+// immediately and mark where data will land with these shimmer blocks
+// (.skel in styles.css) instead of a bare "Loading…" wall.
+export function Skel({ w, h = 14, r, style }: {
+  w: number | string; h?: number; r?: number | string; style?: React.CSSProperties;
+}) {
+  return <span className="skel" aria-hidden style={{ width: w, height: h, borderRadius: r, ...style }} />;
+}
+
+// A list page's placeholder: optional page-title bar + N tile-shaped cards.
+export function ListSkeleton({ rows = 4, thumb = true, header = false }: {
+  rows?: number; thumb?: boolean; header?: boolean;
+}) {
+  return (
+    <div className="stack" data-testid="skeleton" aria-busy="true">
+      {header && <Skel w="40%" h={30} style={{ margin: "0.4rem 0" }} />}
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="card row" style={{ gap: 12 }}>
+          {thumb && <Skel w={56} h={56} r="var(--radius-sm)" style={{ flex: "none" }} />}
+          <span style={{ flex: 1, display: "block" }}>
+            <Skel w="55%" h={16} />
+            <Skel w="35%" style={{ marginTop: 8 }} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The event page's placeholder: cover slot + title/meta lines + an RSVP-ish card.
+export function EventSkeleton() {
+  return (
+    <div className="stack" data-testid="skeleton" aria-busy="true">
+      <BackLink />
+      <div className="card stack">
+        <Skel w="100%" h={180} r="var(--radius-sm)" />
+        <Skel w="60%" h={22} />
+        <Skel w="40%" />
+        <Skel w="50%" />
+      </div>
+      <div className="card stack">
+        <Skel w="30%" h={16} />
+        <Skel w="70%" h={38} r="var(--radius-sm)" />
+      </div>
+    </div>
+  );
 }
 
 export function BackLink() {

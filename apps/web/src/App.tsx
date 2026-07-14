@@ -13,7 +13,7 @@ import { Avatar } from "./ui";
 import { analytics, EVENTS, denyConsent, grantConsent, needsConsent } from "./analytics";
 import { Home } from "./pages/Home";
 import { ProfileSetup } from "./pages/ProfileSetup";
-import { Loading } from "./ui";
+import { ListSkeleton } from "./ui";
 // A dynamic import that survives a deploy. After we ship a new build the hashed
 // chunk filenames change, so a tab still running the OLD index.html asks for a
 // chunk hash that no longer exists; Cloudflare serves the SPA index.html
@@ -217,7 +217,7 @@ function GuestOrLanding() {
           <NavLink to="/" className="brand" aria-label="Whensdays"><span className="dot" /><span className="word" /></NavLink>
           <a href="/sign-in" className="btn sm" data-testid="sign-in">Sign in</a>
         </nav>
-        <Suspense fallback={<Loading />}><Discover /></Suspense>
+        <Suspense fallback={<ListSkeleton rows={3} header />}><Discover /></Suspense>
       </div>
     );
   }
@@ -424,7 +424,9 @@ function ProfileGate({ canMerge }: { canMerge?: boolean }) {
     if (profile) analytics.identify(profile.user_id, { handle: profile.handle });
   }, [profile]);
 
-  if (state === "loading") return <div className="app"><p className="muted" style={{ marginTop: "3rem" }}>Loading…</p></div>;
+  // The gate blocks on the profile fetch - show the real shell (brand + nav)
+  // with skeleton tiles instead of a blank "Loading…" screen.
+  if (state === "loading") return <Shell><ListSkeleton rows={4} header /></Shell>;
   if (state === "needs-setup")
     return (
       <Shell hideNav>
@@ -441,7 +443,7 @@ function ProfileGate({ canMerge }: { canMerge?: boolean }) {
   return (
     <ProfileContext.Provider value={profile}>
       <Shell>
-        <Suspense fallback={<Loading />}>
+        <Suspense fallback={<ListSkeleton rows={3} header />}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/new" element={<NewEvent />} />

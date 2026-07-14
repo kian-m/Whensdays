@@ -1411,6 +1411,62 @@ test.describe("scheduler", () => {
     await expect(rows.getByTestId("series-badge")).toContainText("3 dates");
   });
 
+  test("group page: past occurrences and cancelled events drop out", async ({ page }) => {
+    await ensureProfile(page);
+    const stamp = `${test.info().testId}-${Date.now()}`;
+    await page.goto("/groups");
+    const groupName = `Trim ${stamp}`;
+    await page.getByTestId("group-name").fill(groupName);
+    await page.getByTestId("group-create").click();
+    await page.getByText(groupName).first().click();
+    await expect(page.getByTestId("group-title")).toBeVisible();
+    const gid = page.url().split("/g/")[1];
+
+    // Seed via the API (dev mode allows backdating): a 2-date series with one
+    // date yesterday + one tomorrow, and a one-off that then gets cancelled.
+    const seriesTitle = `Run club ${stamp}`;
+    const goneTitle = `Called off ${stamp}`;
+    const iso = (days: number) => new Date(Date.now() + days * 864e5).toISOString();
+    await page.evaluate(async ({ gid, seriesTitle, goneTitle, yest, tom }) => {
+      const h = { "Content-Type": "application/json", "X-Dev-User": "demo-user" };
+      await fetch("/api/events", { method: "POST", headers: h, body: JSON.stringify({
+        title: seriesTitle, event_type: "other", location_mode: "host_place",
+        scheduling_mode: "fixed", starts_at: yest, more_starts: [tom], group_id: gid }) });
+      const r = await fetch("/api/events", { method: "POST", headers: h, body: JSON.stringify({
+        title: goneTitle, event_type: "other", location_mode: "host_place",
+        scheduling_mode: "fixed", starts_at: tom, group_id: gid }) });
+      const ev = await r.json();
+      await fetch(`/api/events/${ev.id}`, { method: "DELETE", headers: h });
+    }, { gid, seriesTitle, goneTitle, yest: iso(-1), tom: iso(1) });
+
+    await page.reload();
+    await expect(page.getByTestId("group-title")).toBeVisible();
+    // The series shows ONE tile for its remaining date; the past occurrence is
+    // hidden and doesn't inflate a badge (1 date left = no "🔁 N dates").
+    const seriesTiles = page.getByTestId("group-event").filter({ hasText: seriesTitle });
+    await expect(seriesTiles).toHaveCount(1);
+    await expect(seriesTiles.getByTestId("series-badge")).toHaveCount(0);
+    // The cancelled event doesn't show at all.
+    await expect(page.getByTestId("group-event").filter({ hasText: goneTitle })).toHaveCount(0);
+  });
+
+  test("skeletons: page chrome renders instantly while data loads", async ({ page }) => {
+    await ensureProfile(page);
+    // Hold the dashboard fetch open so the first-load skeleton is observable.
+    let release!: () => void;
+    const gate = new Promise<void>((res) => { release = res; });
+    await page.route("**/api/events", async (route) => { await gate; await route.continue(); });
+    await page.goto("/");
+    // The real chrome is interactive immediately; the list area shimmers.
+    await expect(page.getByTestId("new-event")).toBeVisible();
+    const skel = page.getByTestId("skeleton");
+    await expect(skel).toBeVisible();
+    await expect(skel).toHaveScreenshot("home-skeleton.png");
+    release();
+    // Data lands in place - the skeleton swaps for the real list.
+    await expect(skel).toHaveCount(0);
+  });
+
   test("group icons: emoji-only and photo upload", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for an isolated owner");
     await ensureUser(page, "iconowner", "Icon Owner", "iconowner");

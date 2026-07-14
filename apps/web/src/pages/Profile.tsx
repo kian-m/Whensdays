@@ -20,7 +20,7 @@ import {
   useProfile,
 } from "../lib";
 import { useSearchParams } from "react-router-dom";
-import { AvailLegend, Avatar, CropModal, DayGrid, Loading, Toast, useAsync } from "../ui";
+import { AvailLegend, Avatar, CropModal, DayGrid, ListSkeleton, Toast, useAsync } from "../ui";
 import { DEV_AUTH } from "../App";
 import { ClerkAccountCard } from "../ClerkAccount";
 import { CalendarConnections } from "./Calendars";
@@ -245,7 +245,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
     setEditingAvail(false);
   }
 
-  if (loading && !availData) return <Loading />;
+  if (loading && !availData) return <ListSkeleton rows={3} header />;
 
   return (
     <div className="stack">

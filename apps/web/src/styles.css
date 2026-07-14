@@ -218,6 +218,19 @@ a { color: inherit; text-decoration: none; }
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-glint);
 }
 .stack { display: flex; flex-direction: column; gap: 0.9rem; }
+
+/* skeleton placeholders - a first load renders the page's real chrome with
+   shimmer blocks where data will land (see Skel/ListSkeleton in ui.tsx),
+   never a bare "Loading…" wall. Gradient-only motion, same policy as themes. */
+.skel {
+  display: block;
+  background: linear-gradient(100deg, var(--glass-2) 40%, var(--glass-line) 50%, var(--glass-2) 60%);
+  background-size: 300% 100%;
+  border-radius: var(--radius-xs);
+  animation: skel-sweep 1.4s ease-in-out infinite;
+}
+@keyframes skel-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
 .row { display: flex; align-items: center; gap: 0.6rem; }
 .between { justify-content: space-between; }
 .wrap { flex-wrap: wrap; }
