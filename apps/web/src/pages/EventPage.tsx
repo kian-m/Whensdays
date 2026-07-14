@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, PrefAnswer, ImportedEvent, TimeOption, Vote, WEEKDAYS, EVENT_THEMES, busyConflict, daysFromDate, dayLabel as dayCol, fmtDate, fmtDateTime, fmtMinutes, gridSlots, toDatetimeLocal, getJSON, guessCity, importedBusy, mapsUrl, appleMapsUrl, openGoogleMaps, isStandalone, nextMonths, sendJSON, timeAgo, useApi } from "../lib";
-import { QUESTIONS, eventEmoji, eventLabel, questionLabel } from "../scheduler/questions";
+import { QUESTIONS, eventLabel, questionLabel } from "../scheduler/questions";
 import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, GifPicker, HomescreenPrompt, Linkify, Pill, QRButton, TimeGrid, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH, GuestSignupButton } from "../App";
@@ -957,10 +957,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
             title gets the full width instead of being squeezed to a sliver). */}
         <div className="card-header">
           <div style={{ minWidth: 0 }}>
-            <h1>
-              {!e.photo_url && <span aria-hidden style={{ marginRight: 8 }}>{eventEmoji(e)}</span>}
-              <span data-testid="event-title">{e.title}</span>
-            </h1>
+            <h1><span data-testid="event-title">{e.title}</span></h1>
             <p className="muted" style={{ margin: 0 }}>{eventLabel(e)}</p>
             {data.host_name && (
               <span className="row" style={{ gap: 6, marginTop: 4 }} data-testid="hosted-by">

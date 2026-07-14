@@ -79,7 +79,7 @@ export function Groups() {
       <div className="section-h">Your groups</div>
       {loading && !data && <ListSkeleton rows={3} />}
       {data && data.groups.length === 0 && (
-        <p className="muted small">No groups yet - make one for your crew.</p>
+        <p className="muted small">No groups yet - make one for your people.</p>
       )}
       {data?.groups.map((g) => (
         <div
