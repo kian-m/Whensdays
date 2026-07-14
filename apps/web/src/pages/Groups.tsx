@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Event, Group, GroupDetail, TYPE_COLORS, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
+import { Event, Group, GroupDetail, TYPE_COLORS, collapseSeries, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
 
 // Consecutive months (ending now, with a one-month grace) in which the group
 // had at least one scheduled event - the ritual streak. Loss aversion is the
@@ -18,7 +18,7 @@ function groupStreak(events: Event[]): number {
   return n;
 }
 import { Avatar, BackLink, ConfirmButton, GifPicker, Loading, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
-import { eventEmoji } from "../scheduler/questions";
+import { eventEmoji, eventLabel } from "../scheduler/questions";
 
 // Group icon: uploaded photo wins over emoji.
 function GroupIcon({ group, size = 44 }: { group: Group; size?: number }) {
@@ -335,16 +335,21 @@ export function GroupPage() {
       {events.length > 0 && (
         <>
           <div className="section-h">Events</div>
-          {events.map((e) => (
-            <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)} />
-          ))}
+          {/* A recurring series shows once (its next occurrence + a "N dates"
+              badge), not one tile per date. */}
+          {collapseSeries([...events], "next")
+            .sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime())
+            .map((e) => (
+              <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
+                seriesN={e.series_id ? (seriesCounts(events)[e.series_id] ?? 1) : 0} />
+            ))}
         </>
       )}
     </div>
   );
 }
 
-function GroupEventRow({ event, onClick }: { event: Event; onClick: () => void }) {
+function GroupEventRow({ event, onClick, seriesN }: { event: Event; onClick: () => void; seriesN?: number }) {
   return (
     <div
       className={`card ev tile ${event.theme ? `theme-tile theme-${event.theme}` : "type-tile"}`}
@@ -356,7 +361,8 @@ function GroupEventRow({ event, onClick }: { event: Event; onClick: () => void }
       <div style={{ flex: 1 }}>
         <div className="title">{event.title}</div>
         <div className="muted small">
-          {event.status === "polling" ? "Finding a time" : fmtDateTime(event.starts_at)}
+          {eventLabel(event)} · {event.status === "polling" ? "Finding a time" : fmtDateTime(event.starts_at)}
+          {seriesN && seriesN > 1 ? <span data-testid="series-badge"> · 🔁 {seriesN} dates</span> : null}
         </div>
       </div>
     </div>

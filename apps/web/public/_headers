@@ -13,7 +13,12 @@
   # Clerk + PostHog load scripts at runtime; report-only reveals their exact
   # hosts before we enforce. style 'unsafe-inline' stays (the app uses inline
   # style={} pervasively - low risk). Flip to enforcing after the bake.
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.com https://js.clerk.com https://challenges.cloudflare.com https://clerk.whensdays.com https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.whensdays.com https://*.posthog.com https://*.i.posthog.com; worker-src 'self' blob:; frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; report-uri /api/csp-report
+  # PostHog serves via the managed reverse proxy use.whensdays.com (scripts +
+  # ingest), and Cloudflare Pages auto-injects its Web Analytics beacon from
+  # static.cloudflareinsights.com - both must be allow-listed. frame-ancestors
+  # is dropped here (it's ignored in a report-only policy and already enforced
+  # by the Content-Security-Policy header above).
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.com https://js.clerk.com https://challenges.cloudflare.com https://clerk.whensdays.com https://*.posthog.com https://use.whensdays.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.whensdays.com https://*.posthog.com https://*.i.posthog.com https://use.whensdays.com https://cloudflareinsights.com; worker-src 'self' blob:; frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com; base-uri 'self'; form-action 'self'; report-uri /api/csp-report
 
 # Vite content-hashed bundles: safe to cache forever.
 /assets/*

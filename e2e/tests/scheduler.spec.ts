@@ -1403,6 +1403,12 @@ test.describe("scheduler", () => {
     await page.getByTestId("series-occ-1").click();
     await expect(page.getByTestId("series")).toContainText("2 of 3");
     await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Home collapses the whole series to ONE tile (not 3), badged "3 dates".
+    await page.goto("/");
+    const rows = page.getByTestId("event-row").filter({ hasText: title });
+    await expect(rows).toHaveCount(1);
+    await expect(rows.getByTestId("series-badge")).toContainText("3 dates");
   });
 
   test("group icons: emoji-only and photo upload", async ({ page }) => {

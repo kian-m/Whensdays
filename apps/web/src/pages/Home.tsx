@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, TYPE_COLORS, fmtDateTime, getJSON } from "../lib";
+import { Event, TYPE_COLORS, collapseSeries, seriesCounts, fmtDateTime, getJSON } from "../lib";
 import { eventEmoji, eventLabel } from "../scheduler/questions";
 import { Avatar, EventThumb, Loading, Pill, useAsync } from "../ui";
 
@@ -71,25 +71,26 @@ export function Home() {
 
   const activeHosting = hosting.filter((e) => e.status !== "draft" && !isPast(e));
   const activeAttending = attending.filter((e) => e.status !== "draft" && !isPast(e) && !iDeclined(e));
-  const counts: Record<Filter, number> = {
-    all: all.length, upcoming: upcoming.length,
-    hosting: activeHosting.length,
-    attending: activeAttending.length,
-    past: past.length,
-    drafts: drafts.length,
-    declined: declined.length,
-  };
+  // A recurring series shows as ONE tile: its next upcoming occurrence in the
+  // active views, its most-recent one under Past (collapse then re-sort).
+  const newestFirst = (a: Event, b: Event) => new Date(b.starts_at!).getTime() - new Date(a.starts_at!).getTime();
   const lists: Record<Filter, Event[]> = {
-    all: [...all].sort(byWhen),
-    upcoming: [...upcoming].sort(byWhen),
-    hosting: [...activeHosting].sort(byWhen),
-    attending: [...activeAttending].sort(byWhen),
+    all: collapseSeries(all).sort(byWhen),
+    upcoming: collapseSeries(upcoming).sort(byWhen),
+    hosting: collapseSeries(activeHosting).sort(byWhen),
+    attending: collapseSeries(activeAttending).sort(byWhen),
     // Past reads newest-first - the most recent memory on top.
-    past: [...past].sort((a, b) => new Date(b.starts_at!).getTime() - new Date(a.starts_at!).getTime()),
-    drafts: [...drafts].sort(byWhen),
-    declined: [...declined].sort(byWhen),
+    past: collapseSeries(past, "latest").sort(newestFirst),
+    drafts: collapseSeries(drafts).sort(byWhen),
+    declined: collapseSeries(declined).sort(byWhen),
+  };
+  const counts: Record<Filter, number> = {
+    all: lists.all.length, upcoming: lists.upcoming.length,
+    hosting: lists.hosting.length, attending: lists.attending.length,
+    past: lists.past.length, drafts: lists.drafts.length, declined: lists.declined.length,
   };
   const shown = lists[filter];
+  const scount = seriesCounts(union); // occurrences per series, for the "🔁 N dates" badge
 
   const FILTERS: { key: Filter; label: string }[] = [
     { key: "all", label: "All" },
@@ -148,6 +149,7 @@ export function Home() {
           {shown.map((e) => (
             <EventRow key={e.id} e={e} pile={data?.faces?.[e.id]} isNew={unseen.has(e.id)}
               past={isPast(e)} attended={attended(e)} declinedByMe={iDeclined(e)}
+              seriesN={e.series_id ? (scount[e.series_id] ?? 1) : 0}
               soon={!isPast(e) && e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
           ))}
         </div>
@@ -156,9 +158,9 @@ export function Home() {
   );
 }
 
-function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe }: {
+function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe, seriesN }: {
   e: Event; pile?: Pile; onClick: () => void; isNew?: boolean; soon?: string;
-  past?: boolean; attended?: boolean; declinedByMe?: boolean;
+  past?: boolean; attended?: boolean; declinedByMe?: boolean; seriesN?: number;
 }) {
   const color = TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other;
   // Fit the row: show up to 5 faces, fold the rest into "+N more".
@@ -188,6 +190,7 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe 
         </div>
         <div className="muted small">
           {eventLabel(e)} · {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
+          {seriesN && seriesN > 1 ? <span data-testid="series-badge"> · 🔁 {seriesN} dates</span> : null}
         </div>
         <div className="muted small">
           {e.location_mode === "virtual" ? "💻 Online" : e.location_mode === "find_venue" ? "📍 Location TBD" : `📍 ${e.location_address || "Host's place"}`}

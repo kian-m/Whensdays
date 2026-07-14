@@ -34,6 +34,38 @@ export type Event = {
   created_at: string;
 };
 
+// Collapse a recurring series (occurrences share a series_id) to ONE tile so a
+// repeating event shows once, not N times. `pick` chooses which occurrence
+// represents it: "earliest" (the next one, for active lists) or "latest" (the
+// most recent, for Past). Non-series events pass through untouched. Order of
+// non-series events is preserved; each series lands at its representative's
+// position via a re-sort by the caller.
+export function collapseSeries(events: Event[], pick: "earliest" | "latest" | "next" = "earliest"): Event[] {
+  const groups = new Map<string, Event[]>();
+  const out: Event[] = [];
+  for (const e of events) {
+    if (!e.series_id) { out.push(e); continue; }
+    const g = groups.get(e.series_id);
+    if (g) g.push(e); else groups.set(e.series_id, [e]);
+  }
+  const now = Date.now();
+  for (const g of groups.values()) {
+    g.sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime());
+    const rep = pick === "latest" ? g[g.length - 1]
+      : pick === "next" ? (g.find((e) => e.starts_at && new Date(e.starts_at).getTime() >= now) ?? g[g.length - 1])
+      : g[0];
+    out.push(rep);
+  }
+  return out;
+}
+
+// Count of occurrences per series_id across a list (for a "🔁 N dates" badge).
+export function seriesCounts(events: Event[]): Record<string, number> {
+  const c: Record<string, number> = {};
+  for (const e of events) if (e.series_id) c[e.series_id] = (c[e.series_id] || 0) + 1;
+  return c;
+}
+
 // Preset event-page backdrop themes (server-validated; see eventThemes in gifs.go).
 export const EVENT_THEMES: { value: string; label: string }[] = [
   { value: "", label: "None" },
