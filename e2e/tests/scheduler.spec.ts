@@ -1409,9 +1409,8 @@ test.describe("scheduler", () => {
     test.skip(!DEV_AUTH, "uses ?as for an isolated owner");
     await ensureUser(page, "iconowner", "Icon Owner", "iconowner");
     await page.goto("/groups");
-    // Emoji comes from the preset palette (free text is impossible in the UI
-    // and rejected by the API).
-    await page.getByTestId("group-emoji-🎲").click();
+    // No icon picker at creation - the group defaults to 👥; a photo/GIF is
+    // added later from the group page (edit mode).
     const name = `Icons ${test.info().testId}`;
     await page.getByTestId("group-name").fill(name);
     await page.getByTestId("group-create").click();

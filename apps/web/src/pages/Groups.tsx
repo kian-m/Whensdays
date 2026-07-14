@@ -20,10 +20,6 @@ function groupStreak(events: Event[]): number {
 import { Avatar, BackLink, ConfirmButton, GifPicker, Loading, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { eventEmoji } from "../scheduler/questions";
 
-// Group icons are an emoji from this palette or an uploaded photo - never free
-// text (the API rejects non-emoji values too).
-const GROUP_EMOJIS = ["👥", "🎉", "🍜", "📚", "🏃", "🎲", "⛺️", "🍻", "🎬", "🧗", "⚽️", "🎮"];
-
 // Group icon: uploaded photo wins over emoji.
 function GroupIcon({ group, size = 44 }: { group: Group; size?: number }) {
   if (group.icon_url) return <Avatar url={group.icon_url} name={group.name} size={size} />;
@@ -38,20 +34,20 @@ export function Groups() {
   const { data, loading, reload } = useAsync<GroupsResp>((a) => getJSON(a, "/api/groups"));
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [emoji, setEmoji] = useState("👥");
   const [msg, setMsg] = useState<string | null>(null);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    const res = await sendJSON(api, "POST", "/api/groups", { name, description, emoji });
+    // No icon at creation - the server defaults the emoji to 👥; a photo/GIF can
+    // be added from the group page afterward.
+    const res = await sendJSON(api, "POST", "/api/groups", { name, description });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
       return setMsg(b.error || "could not create");
     }
     setName("");
     setDescription("");
-    setEmoji("👥");
     reload();
   }
 
@@ -76,16 +72,7 @@ export function Groups() {
         </div>
         <textarea className="input" maxLength={500} data-testid="group-desc" value={description} rows={2}
           placeholder="What's this group about? (optional)" onChange={(e) => setDescription(e.target.value)} />
-        {/* Icon is optional - defaults to 👥; the row is clearly labelled so it
-            never reads as a required step. A photo/GIF can be added later. */}
-        <div className="row wrap" style={{ gap: 4, alignItems: "center" }}>
-          <span className="muted small">Icon (optional):</span>
-          {GROUP_EMOJIS.map((em) => (
-            <button key={em} type="button" className={`chip sm ${emoji === em ? "on" : ""}`}
-              data-testid={`group-emoji-${em}`} onClick={() => setEmoji(em)}>{em}</button>
-          ))}
-        </div>
-        <p className="muted small" style={{ margin: 0 }}>Or add a photo/GIF from the group page after creating.</p>
+        <p className="muted small" style={{ margin: 0 }}>Add a photo or GIF from the group page after creating.</p>
         {msg && <p className="muted small">{msg}</p>}
       </form>
 

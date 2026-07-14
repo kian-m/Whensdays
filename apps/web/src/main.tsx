@@ -53,7 +53,7 @@ if (DEV_AUTH) {
   if (!key) throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY");
   root.render(
     <StrictMode>
-      <ClerkProvider publishableKey={key} afterSignOutUrl="/">
+      <ClerkProvider publishableKey={key} afterSignOutUrl="/" signInUrl="/sign-in" signUpUrl="/sign-up">
         <App />
       </ClerkProvider>
     </StrictMode>,

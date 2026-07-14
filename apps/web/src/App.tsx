@@ -3,7 +3,8 @@ import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router
 import {
   SignedIn,
   SignedOut,
-  SignInButton,
+  SignIn,
+  SignUp,
   useAuth,
 } from "@clerk/clerk-react";
 import "./styles.css";
@@ -109,10 +110,8 @@ export function GuestSignupButton({ testid, label = "Sign up", source }: { testi
     );
   }
   return (
-    <SignInButton mode="modal">
-      <button className="btn sm" data-testid={testid}
-        onClick={() => analytics.capture(EVENTS.guestSignupClicked, { mode: "clerk", source })}>{label}</button>
-    </SignInButton>
+    <a href="/sign-in" className="btn sm" data-testid={testid}
+      onClick={() => analytics.capture(EVENTS.guestSignupClicked, { mode: "clerk", source })}>{label}</a>
   );
 }
 
@@ -184,8 +183,31 @@ function storedGuest(): GuestAuth | null {
 
 // Signed out: guests with a token (or on an invite link) get the guest app;
 // everyone else sees the landing page.
+// Sign-in / sign-up live on their OWN pages (not a modal): the email-code flow
+// means the user tabs away to fetch the code, and a modal would vanish on
+// return, forcing a restart. A page stays mounted, so the flow survives the
+// round-trip. `routing="virtual"` keeps every step inside this one component
+// (no URL sub-paths / catch-all route needed).
+function AuthPage({ kind }: { kind: "in" | "up" }) {
+  return (
+    <div className="app">
+      <nav className="nav">
+        <a href="/" className="brand" aria-label="Whensdays"><span className="dot" /><span className="word" /></a>
+      </nav>
+      <div style={{ display: "grid", placeItems: "center", padding: "1.5rem 0" }}>
+        {kind === "in"
+          ? <SignIn routing="virtual" signUpUrl="/sign-up" fallbackRedirectUrl="/" />
+          : <SignUp routing="virtual" signInUrl="/sign-in" fallbackRedirectUrl="/" />}
+      </div>
+    </div>
+  );
+}
+
 function GuestOrLanding() {
   const { pathname } = useLocation();
+  // Auth pages first - reachable even for stored guests (converting to an account).
+  if (pathname.startsWith("/sign-in")) return <AuthPage kind="in" />;
+  if (pathname.startsWith("/sign-up")) return <AuthPage kind="up" />;
   if (storedGuest() || pathname.startsWith("/e/") || pathname.startsWith("/ev/") || pathname.startsWith("/g/") || pathname.startsWith("/gv/") || pathname.startsWith("/start")) return <GuestFlow />;
   // Discover is public: browsable without any account (follow requires one).
   if (pathname.startsWith("/discover")) {
@@ -193,7 +215,7 @@ function GuestOrLanding() {
       <div className="app">
         <nav className="nav">
           <NavLink to="/" className="brand" aria-label="Whensdays"><span className="dot" /><span className="word" /></NavLink>
-          <SignInButton mode="modal"><button className="btn sm">Sign in</button></SignInButton>
+          <a href="/sign-in" className="btn sm" data-testid="sign-in">Sign in</a>
         </nav>
         <Suspense fallback={<Loading />}><Discover /></Suspense>
       </div>
@@ -337,9 +359,7 @@ function Landing() {
         <div className="land-cta">
           <a href="/start" className="btn" data-testid="start-plan">Start a plan - no account needed</a>
           {!DEV_AUTH && (
-            <SignInButton mode="modal">
-              <button className="btn ghost" data-testid="sign-in">Sign in</button>
-            </SignInButton>
+            <a href="/sign-in" className="btn ghost" data-testid="sign-in">Sign in</a>
           )}
         </div>
         <div className="land-showcase" aria-hidden>
