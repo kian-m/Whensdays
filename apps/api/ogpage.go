@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 )
 
 // ogpage.go - link unfurls. Chat apps (iMessage/WhatsApp/Discord/Slack) fetch
@@ -42,12 +43,46 @@ func (s *server) handleOGPage(w http.ResponseWriter, r *http.Request) {
 	// Per-event social card: cover/gif + host name + logo (ogimage.go).
 	image := base + "/api/events/" + r.PathValue("id") + "/og.png"
 	pageURL := base + "/e/" + r.PathValue("id")
+	writeOGHTML(w, title, desc, target, pageURL, image)
+}
+
+// handleGroupOGPage is the group-invite twin of handleOGPage: nginx proxies
+// full-page loads of /g/{id} here so chat apps get a real preview (group name,
+// "<who> invited you to join", the group's icon/gif), then browsers bounce to
+// the SPA at /gv/{id}. The group id is the invite capability, same as events.
+func (s *server) handleGroupOGPage(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseUUID(r.PathValue("id"))
+	title, desc := "Whensdays", "Plans, minus the group-chat chaos."
+	from := r.URL.Query().Get("from")
+	if ok {
+		if g, err := s.queries.GetGroup(r.Context(), id); err == nil {
+			title = g.Name + " · Whensdays"
+			if inviter := s.groupInviterName(r.Context(), id, from); inviter != "" {
+				desc = inviter + " invited you to join " + g.Name + " on Whensdays. Tap to join, no account needed."
+			} else {
+				desc = "You're invited to join " + g.Name + " on Whensdays. Tap to join, no account needed."
+			}
+		}
+	}
+	target := "/gv/" + r.PathValue("id")
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery // preserve ?from=… through the bounce
+	}
+	base := s.ogBaseURL(r)
+	image := base + "/api/groups/" + r.PathValue("id") + "/og.png"
+	if from != "" {
+		image += "?from=" + url.QueryEscape(from)
+	}
+	pageURL := base + "/g/" + r.PathValue("id")
+	writeOGHTML(w, title, desc, target, pageURL, image)
+}
+
+// writeOGHTML renders the tiny unfurl shell: Open Graph tags for scrapers plus a
+// script-free <meta refresh> that bounces real browsers to the SPA (the global
+// default-src 'none' CSP would block an inline script). All fields are escaped.
+func writeOGHTML(w http.ResponseWriter, title, desc, target, pageURL, image string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	// This is the one HTML endpoint on an otherwise JSON/image API; the global
-	// default-src 'none' CSP would block an inline bounce script, so we redirect
-	// browsers with a script-free <meta refresh> (scrapers ignore it and read
-	// the OG tags above). No CSP exception needed.
 	fmt.Fprintf(w, `<!doctype html>
 <html><head>
 <meta charset="utf-8">

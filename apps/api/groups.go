@@ -120,7 +120,7 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 	isAdmin, _ := s.queries.IsGroupAdmin(r.Context(), db.IsGroupAdminParams{ID: g.ID, UserID: uid})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"group": g, "members": members, "events": events,
-		"is_owner": g.OwnerID == uid, "is_admin": isAdmin,
+		"is_owner": g.OwnerID == uid, "is_admin": isAdmin, "viewer_id": uid,
 	})
 }
 

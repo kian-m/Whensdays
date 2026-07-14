@@ -200,9 +200,11 @@ export function GroupPage() {
   // capability - show a preview + Join instead of a wall.
   if (!data) return <GroupJoin id={id!} onJoined={reload} />;
 
-  const { group, members, events, is_owner, is_admin } = data;
+  const { group, members, events, is_owner, is_admin, viewer_id } = data;
   const canManage = is_owner || is_admin;
-  const inviteURL = `${location.origin}/g/${group.id}`;
+  // ?from=<me> lets the unfurl say "<name> invited you to join" (server checks
+  // the id is a real member before showing any name).
+  const inviteURL = `${location.origin}/g/${group.id}?from=${encodeURIComponent(viewer_id)}`;
 
   return (
     <div className="stack">

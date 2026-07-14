@@ -246,6 +246,36 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId(`gpt-cell-${days[4]}-1080`)).toBeVisible();
   });
 
+  test("group invite link unfurls with an OG preview", async ({ page, request }) => {
+    await ensureProfile(page); // demo-user gets a display name (the inviter)
+    const create = await request.post("/api/groups", {
+      headers: { "X-Dev-User": "demo-user" },
+      data: { name: `Improv Crew ${test.info().testId}`, emoji: "🎭" },
+    });
+    expect(create.ok()).toBeTruthy();
+    const gid = (await create.json()).id;
+
+    // The unfurl shell: OG tags for the group, pointing at the group's composited
+    // card and bouncing browsers to the SPA alias /gv/{id}.
+    const shell = await request.get(`/g/${gid}`);
+    expect(shell.status()).toBe(200);
+    const html = await shell.text();
+    expect(html).toContain("og:title");
+    expect(html).toContain("Improv Crew");
+    expect(html).toContain(`/api/groups/${gid}/og.png`);
+    expect(html).toContain(`/gv/${gid}`);
+
+    // The card is a real composited PNG.
+    const og = await request.get(`/api/groups/${gid}/og.png`);
+    expect(og.status()).toBe(200);
+    expect(og.headers()["content-type"]).toContain("image/png");
+
+    // ?from=<a member> names the inviter ("<name> invited you to join"); a
+    // non-member id falls back to the generic form (no "invited you to join").
+    expect(await (await request.get(`/g/${gid}?from=demo-user`)).text()).toContain("invited you to join");
+    expect(await (await request.get(`/g/${gid}?from=nobody-xyz`)).text()).not.toContain("invited you to join");
+  });
+
   test("performance preset types + deletable custom types", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();

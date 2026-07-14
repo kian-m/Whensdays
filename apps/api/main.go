@@ -124,8 +124,11 @@ func main() {
 	mux.Handle("POST /api/csp-report", readLimit(http.HandlerFunc(s.handleCSPReport))) // browser CSP beacon
 	mux.Handle("POST /api/guest/join", writeLimit(http.HandlerFunc(s.handleGuestJoin)))
 	mux.Handle("POST /api/guest/merge", auth(http.HandlerFunc(s.handleGuestMerge)))
-	// Full-page loads of /e/{id} are proxied here by nginx for link unfurls.
+	// Full-page loads of /e/{id} and /g/{id} are proxied here by nginx for link
+	// unfurls (the group id is the invite capability, same as an event's).
 	mux.Handle("GET /e/{id}", readLimit(http.HandlerFunc(s.handleOGPage)))
+	mux.Handle("GET /g/{id}", readLimit(http.HandlerFunc(s.handleGroupOGPage)))
+	mux.Handle("GET /api/groups/{id}/og.png", readLimit(http.HandlerFunc(s.handleGroupOGImage)))
 	// Public browse (read-only, publishes only host-chosen fields) + cron.
 	mux.Handle("GET /api/discover", readLimit(http.HandlerFunc(s.handleDiscover)))
 	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)

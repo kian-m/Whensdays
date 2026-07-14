@@ -186,7 +186,7 @@ function storedGuest(): GuestAuth | null {
 // everyone else sees the landing page.
 function GuestOrLanding() {
   const { pathname } = useLocation();
-  if (storedGuest() || pathname.startsWith("/e/") || pathname.startsWith("/ev/") || pathname.startsWith("/g/") || pathname.startsWith("/start")) return <GuestFlow />;
+  if (storedGuest() || pathname.startsWith("/e/") || pathname.startsWith("/ev/") || pathname.startsWith("/g/") || pathname.startsWith("/gv/") || pathname.startsWith("/start")) return <GuestFlow />;
   // Discover is public: browsable without any account (follow requires one).
   if (pathname.startsWith("/discover")) {
     return (
@@ -206,7 +206,7 @@ function GuestFlow() {
   const [auth, setAuth] = useState<GuestAuth | null>(storedGuest);
   const { pathname } = useLocation();
   const eventId = pathname.startsWith("/e/") ? pathname.slice(3) : pathname.startsWith("/ev/") ? pathname.slice(4) : null;
-  const groupInvite = pathname.startsWith("/g/"); // group links invite guests too
+  const groupInvite = pathname.startsWith("/g/") || pathname.startsWith("/gv/"); // group links invite guests too (/g/ = unfurl path, /gv/ = SPA alias)
 
   const api: ApiFn = useCallback(
     async (p, i) => {
@@ -432,6 +432,7 @@ function ProfileGate({ canMerge }: { canMerge?: boolean }) {
           <Route path="/friends" element={<Friends />} />
           <Route path="/groups" element={<Groups />} />
           <Route path="/g/:id" element={<GroupPage />} />
+          <Route path="/gv/:id" element={<GroupPage />} />
           <Route path="/calendars" element={<Calendars />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/profile" element={<ProfilePage onUpdated={setProfile} />} />

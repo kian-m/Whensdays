@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"encoding/base64"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
@@ -98,6 +100,80 @@ func (s *server) handleEventOGImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=600")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(buf.Bytes())
+}
+
+// groupInviterName returns the sharer's display name for the group invite
+// preview, but ONLY when `from` is genuinely a member - so the public OG
+// endpoint can't be used as a name-lookup oracle for arbitrary user ids.
+func (s *server) groupInviterName(ctx context.Context, id pgtype.UUID, from string) string {
+	if from == "" {
+		return ""
+	}
+	if m, err := s.queries.IsGroupMember(ctx, db.IsGroupMemberParams{ID: id, UserID: from}); err != nil || !m {
+		return ""
+	}
+	if p, err := s.queries.GetProfile(ctx, from); err == nil {
+		return p.DisplayName
+	}
+	return ""
+}
+
+// handleGroupOGImage composites the 1200×630 group-invite card: the group's
+// icon/gif (or a brand gradient), the inviter line, and the group name.
+// Unauthenticated - the group id is the invite capability, same as events.
+func (s *server) handleGroupOGImage(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseUUID(r.PathValue("id"))
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	g, err := s.queries.GetGroup(r.Context(), id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		s.internal(w, "group og image: load", err)
+		return
+	}
+	inviter := s.groupInviterName(r.Context(), id, r.URL.Query().Get("from"))
+	card := composeGroupOGCard(s.loadCover(g.IconUrl), inviter, g.Name)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, card); err != nil {
+		s.internal(w, "group og image: encode", err)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=600")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// composeGroupOGCard mirrors composeOGCard for a group invite: icon/gif fill (or
+// brand gradient), a scrim for legibility, the inviter line top-left, and the
+// group name across the bottom.
+func composeGroupOGCard(icon image.Image, inviterName, groupName string) *image.RGBA {
+	card := image.NewRGBA(image.Rect(0, 0, ogW, ogH))
+	if icon != nil {
+		drawCoverFill(card, icon)
+	} else {
+		drawBrandGradient(card)
+	}
+	drawScrim(card, 0, 170, 0.62)
+	drawScrim(card, ogH-200, ogH, 0.40)
+	if inviterName != "" {
+		drawText(card, ogBoldFace, truncate(inviterName, 28), 48, 84, color.White)
+		drawText(card, ogRegFace, "invites you to join", 48, 126, color.RGBA{235, 226, 218, 235})
+	} else {
+		drawText(card, ogRegFace, "You're invited to join", 48, 96, color.RGBA{235, 226, 218, 235})
+	}
+	drawText(card, ogBoldFace, truncate(groupName, 30), 48, ogH-72, color.White)
+	if ogLogo != nil {
+		b := ogLogo.Bounds()
+		pos := image.Rect(ogW-48-b.Dx(), 40, ogW-48, 40+b.Dy())
+		draw.Draw(card, pos, ogLogo, b.Min, draw.Over)
+	}
+	return card
 }
 
 // maxCoverPixels caps decode dimensions: bytes are already bounded, but a tiny

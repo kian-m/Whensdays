@@ -100,7 +100,10 @@ body::after {
 
 /* type scale - display-weight headings with tight tracking read editorial,
    not template. */
-h1, h2, h3 { letter-spacing: -0.025em; line-height: 1.08; margin: 0; }
+/* overflow-wrap:anywhere + min-width:0 let a long/unbreakable title shrink and
+   wrap inside a flex row instead of overflowing under a pinned action button
+   (e.g. a group name under its ✎ Edit, an event title under its Edit). */
+h1, h2, h3 { letter-spacing: -0.025em; line-height: 1.08; margin: 0; overflow-wrap: anywhere; min-width: 0; }
 h1 { font-size: 2.2rem; font-weight: 850; }
 h2 { font-size: 1.35rem; font-weight: 800; }
 h3 { font-size: 1.02rem; font-weight: 750; }
