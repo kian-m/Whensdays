@@ -497,38 +497,29 @@ func (s *server) handlePutAvailabilityDays(w http.ResponseWriter, r *http.Reques
 
 func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
-	hosting, err := s.queries.ListEventsHosting(r.Context(), uid)
+	ctx := r.Context()
+	// Five independent reads - fan out (one DB round trip of latency, not five).
+	var (
+		hosting, cohosting, attending, invited []db.Event
+		unseenRows                             []pgtype.UUID
+	)
+	err := parallel(
+		func() (e error) { hosting, e = s.queries.ListEventsHosting(ctx, uid); return },
+		// Cohosted events belong under Hosting too - a cohost helps run the
+		// event and must see it without ever opening the invite link.
+		func() (e error) { cohosting, e = s.queries.ListEventsCohosting(ctx, uid); return },
+		func() (e error) { attending, e = s.queries.ListEventsAttending(ctx, uid); return },
+		func() (e error) { invited, e = s.queries.ListEventsInvited(ctx, uid); return },
+		// Per-event "new" markers: ids of invited events the user hasn't opened
+		// yet. (Cleared one at a time in handleGetEvent, not en masse here.)
+		func() (e error) { unseenRows, e = s.queries.ListUnseenInviteEventIDs(ctx, uid); return },
+	)
 	if err != nil {
-		s.internal(w, "list hosting", err)
-		return
-	}
-	// Cohosted events belong under Hosting too - a cohost helps run the event
-	// and must see it on their dashboard without ever opening the invite link.
-	cohosting, err := s.queries.ListEventsCohosting(r.Context(), uid)
-	if err != nil {
-		s.internal(w, "list cohosting", err)
+		s.internal(w, "list events: load", err)
 		return
 	}
 	hosting = append(hosting, cohosting...)
-	attending, err := s.queries.ListEventsAttending(r.Context(), uid)
-	if err != nil {
-		s.internal(w, "list attending", err)
-		return
-	}
-	invited, err := s.queries.ListEventsInvited(r.Context(), uid)
-	if err != nil {
-		s.internal(w, "list invited", err)
-		return
-	}
 	attending = append(attending, invited...)
-	// Per-event "new" markers: ids of invited events the user hasn't opened yet.
-	// (Cleared one at a time in handleGetEvent, not en masse here - so the alert
-	// stays on each event until it's actually opened.)
-	unseenRows, err := s.queries.ListUnseenInviteEventIDs(r.Context(), uid)
-	if err != nil {
-		s.internal(w, "list unseen invites", err)
-		return
-	}
 	unseen := make([]string, 0, len(unseenRows))
 	for _, u := range unseenRows {
 		unseen = append(unseen, uuidStr(u))
@@ -553,27 +544,39 @@ func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		Going int32  `json:"going"`
 	}
 	faces := map[string]*pile{}
-	if len(ids) > 0 {
-		rows, err := s.queries.ListGoingFaces(r.Context(), db.ListGoingFacesParams{RequesterID: uid, Column2: ids})
-		if err != nil {
-			s.internal(w, "list going faces", err)
-			return
-		}
-		for _, row := range rows {
-			k := uuidStr(row.EventID)
-			if faces[k] == nil {
-				faces[k] = &pile{Faces: []face{}}
-			}
-			faces[k].Faces = append(faces[k].Faces, face{Name: row.DisplayName, Avatar: row.AvatarUrl, IsFriend: row.IsFriend})
-			faces[k].Going = row.GoingCount
-		}
-	}
-	// The viewer's own rsvp per event: past tiles render Attended vs Passed.
 	myRsvps := map[string]string{}
-	if rows, err := s.queries.ListMyRsvps(r.Context(), uid); err == nil {
-		for _, row := range rows {
-			myRsvps[uuidStr(row.EventID)] = row.Rsvp
-		}
+	err = parallel(
+		func() error {
+			if len(ids) == 0 {
+				return nil
+			}
+			rows, err := s.queries.ListGoingFaces(ctx, db.ListGoingFacesParams{RequesterID: uid, Column2: ids})
+			if err != nil {
+				return err
+			}
+			for _, row := range rows {
+				k := uuidStr(row.EventID)
+				if faces[k] == nil {
+					faces[k] = &pile{Faces: []face{}}
+				}
+				faces[k].Faces = append(faces[k].Faces, face{Name: row.DisplayName, Avatar: row.AvatarUrl, IsFriend: row.IsFriend})
+				faces[k].Going = row.GoingCount
+			}
+			return nil
+		},
+		func() error {
+			// The viewer's own rsvp per event: past tiles render Attended vs Passed.
+			if rows, err := s.queries.ListMyRsvps(ctx, uid); err == nil {
+				for _, row := range rows {
+					myRsvps[uuidStr(row.EventID)] = row.Rsvp
+				}
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		s.internal(w, "list going faces", err)
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending, "unseen": unseen, "faces": faces, "my_rsvps": myRsvps})
 }
@@ -1006,49 +1009,108 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	isHost := ev.HostID == uid
+
+	// The event page needs ~14 independent reads; the database is a network
+	// hop away, so run them CONCURRENTLY (one RTT, not fourteen) - this was
+	// the single slowest endpoint in prod. Each closure owns its variable.
+	ctx := r.Context()
+	var (
+		isCo          bool
+		options       []db.EventTimeOption
+		votes         []db.EventTimeVote
+		generalVotes  []db.ListGeneralVotesForEventRow
+		pollDays      []string
+		timeGrid      map[string]int32
+		attendees     []db.ListAttendeesRow
+		answers       []db.ListPreferenceAnswersForEventRow
+		comments      []db.ListEventCommentsRow
+		cohosts       []db.ListCohostsRow
+		invites       []db.ListEventInvitesRow
+		series        []db.ListSeriesEventsRow
+		muted         bool
+		voterProfiles []db.ListVoterProfilesRow
+		availRows     []db.AvailabilityDay
+		hostName      string
+		hostAvatar    string
+	)
+	err = parallel(
+		func() (e error) {
+			if !isHost {
+				isCo, _ = s.queries.IsCohost(ctx, db.IsCohostParams{EventID: id, UserID: uid})
+			}
+			return nil
+		},
+		func() (e error) { options, e = s.queries.ListTimeOptions(ctx, id); return },
+		func() (e error) { votes, e = s.queries.ListVotesForEvent(ctx, id); return },
+		func() (e error) { generalVotes, e = s.queries.ListGeneralVotesForEvent(ctx, id); return },
+		func() error {
+			// 'dates' polls carry the host-picked days + the time-grid window so
+			// every attendee renders the same grid. Nil otherwise (web ignores).
+			if ev.GeneralScope != "dates" {
+				return nil
+			}
+			if dayRows, derr := s.queries.ListPollDays(ctx, id); derr == nil {
+				pollDays = make([]string, 0, len(dayRows))
+				for _, d := range dayRows {
+					pollDays = append(pollDays, d.Time.Format("2006-01-02"))
+				}
+			}
+			if g, gerr := s.queries.GetPollTimeGrid(ctx, id); gerr == nil {
+				timeGrid = map[string]int32{"start_min": g.StartMin, "end_min": g.EndMin, "slot_min": g.SlotMin}
+			}
+			return nil
+		},
+		func() (e error) { attendees, e = s.queries.ListAttendees(ctx, id); return },
+		func() (e error) { answers, e = s.queries.ListPreferenceAnswersForEvent(ctx, id); return },
+		func() (e error) { comments, e = s.queries.ListEventComments(ctx, id); return },
+		func() (e error) { cohosts, e = s.queries.ListCohosts(ctx, id); return },
+		func() (e error) { invites, e = s.queries.ListEventInvites(ctx, id); return },
+		func() (e error) {
+			// Sibling occurrences when this event is part of a recurring series.
+			if !ev.SeriesID.Valid {
+				return nil
+			}
+			series, e = s.queries.ListSeriesEvents(ctx, ev.SeriesID)
+			return
+		},
+		func() error { muted, _ = s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: id, UserID: uid}); return nil },
+		func() error {
+			// Names for poll responders - a pure voter (availability filled, no
+			// RSVP) has no attendee row, so the web can't label them otherwise.
+			voterProfiles, _ = s.queries.ListVoterProfiles(ctx, id)
+			return nil
+		},
+		func() error {
+			if ev.SchedulingMode == "poll" {
+				availRows, _ = s.queries.ListAttendeeAvailabilityForEvent(ctx, id)
+			}
+			return nil
+		},
+		func() error {
+			// Host identity for the invite hero ("Hosted by ...").
+			if hp, herr := s.queries.GetProfile(ctx, ev.HostID); herr == nil {
+				hostName, hostAvatar = hp.DisplayName, hp.AvatarUrl
+			}
+			return nil
+		},
+		func() error {
+			// Opening the event clears its "new" invite marker (per-event).
+			_ = s.queries.MarkOneInviteSeen(ctx, db.MarkOneInviteSeenParams{EventID: id, UserID: uid})
+			return nil
+		},
+	)
+	if err != nil {
+		s.internal(w, "get event: load", err)
+		return
+	}
 	role := "guest"
 	if isHost {
 		role = "host"
-	} else if isCo, _ := s.queries.IsCohost(r.Context(), db.IsCohostParams{EventID: id, UserID: uid}); isCo {
+	} else if isCo {
 		role = "cohost"
 	}
 	canManage := isManager(role)
 
-	options, err := s.queries.ListTimeOptions(r.Context(), id)
-	if err != nil {
-		s.internal(w, "list options", err)
-		return
-	}
-	votes, err := s.queries.ListVotesForEvent(r.Context(), id)
-	if err != nil {
-		s.internal(w, "list votes", err)
-		return
-	}
-	generalVotes, err := s.queries.ListGeneralVotesForEvent(r.Context(), id)
-	if err != nil {
-		s.internal(w, "list general votes", err)
-		return
-	}
-	// 'dates' polls carry the host-picked days + the time-grid window so every
-	// attendee renders the same grid. Nil for other scopes (front-end ignores).
-	var pollDays []string
-	var timeGrid map[string]int32
-	if ev.GeneralScope == "dates" {
-		if dayRows, derr := s.queries.ListPollDays(r.Context(), id); derr == nil {
-			pollDays = make([]string, 0, len(dayRows))
-			for _, d := range dayRows {
-				pollDays = append(pollDays, d.Time.Format("2006-01-02"))
-			}
-		}
-		if g, gerr := s.queries.GetPollTimeGrid(r.Context(), id); gerr == nil {
-			timeGrid = map[string]int32{"start_min": g.StartMin, "end_min": g.EndMin, "slot_min": g.SlotMin}
-		}
-	}
-	attendees, err := s.queries.ListAttendees(r.Context(), id)
-	if err != nil {
-		s.internal(w, "list attendees", err)
-		return
-	}
 	// Anonymous RSVPs: identity is masked for EVERYONE else - hosts included -
 	// before the response leaves the server. The viewer's own row stays intact
 	// so the UI can show (and toggle) their state.
@@ -1060,11 +1122,6 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 			attendees[i].Handle = pgtype.Text{}
 		}
 	}
-	answers, err := s.queries.ListPreferenceAnswersForEvent(r.Context(), id)
-	if err != nil {
-		s.internal(w, "list answers", err)
-		return
-	}
 	// Guests only see their own preference answers; managers see everyone's.
 	if !canManage {
 		filtered := answers[:0:0]
@@ -1075,70 +1132,34 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		}
 		answers = filtered
 	}
-
-	comments, err := s.queries.ListEventComments(r.Context(), id)
-	if err != nil {
-		s.internal(w, "list comments", err)
-		return
-	}
-	cohosts, err := s.queries.ListCohosts(r.Context(), id)
-	if err != nil {
-		s.internal(w, "list cohosts", err)
-		return
-	}
-	invites, err := s.queries.ListEventInvites(r.Context(), id)
-	if err != nil {
-		s.internal(w, "list invites", err)
-		return
-	}
-	// Sibling occurrences when this event is part of a recurring series.
-	var series []db.ListSeriesEventsRow
-	if ev.SeriesID.Valid {
-		if series, err = s.queries.ListSeriesEvents(r.Context(), ev.SeriesID); err != nil {
-			s.internal(w, "list series", err)
-			return
-		}
-	}
-
-	muted, _ := s.queries.IsEventMuted(r.Context(), db.IsEventMutedParams{EventID: id, UserID: uid})
-
-	// Names for poll responders - a pure voter (availability filled, no RSVP)
-	// has no attendee row, so the web can't label them from attendees alone.
-	voterProfiles, _ := s.queries.ListVoterProfiles(r.Context(), id)
-
 	// Best-time ranking input: for specific-time polls, score every option
 	// against ALL attendees' saved availability (free/busy for that option's
 	// day+daypart in the event's timezone) - not just the viewer's calendar.
 	optionFit := map[string]map[string]int{}
-	if ev.SchedulingMode == "poll" && len(options) > 0 {
-		if rows, ferr := s.queries.ListAttendeeAvailabilityForEvent(r.Context(), id); ferr == nil && len(rows) > 0 {
-			byCell := map[string]map[string]bool{} // "day:part" -> user -> isFree
-			for _, row := range rows {
-				k := row.Day.Time.Format("2006-01-02") + ":" + row.Daypart
-				if byCell[k] == nil {
-					byCell[k] = map[string]bool{}
-				}
-				byCell[k][row.UserID] = row.Status != "busy"
+	if len(options) > 0 && len(availRows) > 0 {
+		byCell := map[string]map[string]bool{} // "day:part" -> user -> isFree
+		for _, row := range availRows {
+			k := row.Day.Time.Format("2006-01-02") + ":" + row.Daypart
+			if byCell[k] == nil {
+				byCell[k] = map[string]bool{}
 			}
-			loc := eventLocation(ev)
-			for _, o := range options {
-				local := o.StartsAt.Time.In(loc)
-				k := local.Format("2006-01-02") + ":" + hourToDaypart(local.Hour())
-				fit := map[string]int{"free": 0, "busy": 0}
-				for _, isFree := range byCell[k] {
-					if isFree {
-						fit["free"]++
-					} else {
-						fit["busy"]++
-					}
+			byCell[k][row.UserID] = row.Status != "busy"
+		}
+		loc := eventLocation(ev)
+		for _, o := range options {
+			local := o.StartsAt.Time.In(loc)
+			k := local.Format("2006-01-02") + ":" + hourToDaypart(local.Hour())
+			fit := map[string]int{"free": 0, "busy": 0}
+			for _, isFree := range byCell[k] {
+				if isFree {
+					fit["free"]++
+				} else {
+					fit["busy"]++
 				}
-				optionFit[uuidStr(o.ID)] = fit
 			}
+			optionFit[uuidStr(o.ID)] = fit
 		}
 	}
-
-	// Opening the event clears its "new" invite marker (per-event, persistent).
-	_ = s.queries.MarkOneInviteSeen(r.Context(), db.MarkOneInviteSeenParams{EventID: id, UserID: uid})
 	s.analytics.Capture(uid, "event_viewed", map[string]any{
 		"event_id": uuidStr(ev.ID),
 		"role":     role,
@@ -1149,11 +1170,6 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 	if ev.Status == "draft" && !canManage {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
-	}
-	// Host identity for the invite hero ("Hosted by ...").
-	hostName, hostAvatar := "", ""
-	if hp, herr := s.queries.GetProfile(r.Context(), ev.HostID); herr == nil {
-		hostName, hostAvatar = hp.DisplayName, hp.AvatarUrl
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"event":              ev,
@@ -1643,24 +1659,22 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleListFriends(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
-	friends, err := s.queries.ListFriends(r.Context(), uid)
+	ctx := r.Context()
+	// Four independent reads - fan out (one round trip of latency, not four).
+	var (
+		friends     []db.ListFriendsRow
+		incoming    []db.ListIncomingRequestsRow
+		outgoing    []db.ListOutgoingRequestsRow
+		suggestions []db.ListPeopleYouMayKnowRow
+	)
+	err := parallel(
+		func() (e error) { friends, e = s.queries.ListFriends(ctx, uid); return },
+		func() (e error) { incoming, e = s.queries.ListIncomingRequests(ctx, uid); return },
+		func() (e error) { outgoing, e = s.queries.ListOutgoingRequests(ctx, uid); return },
+		func() (e error) { suggestions, e = s.queries.ListPeopleYouMayKnow(ctx, uid); return },
+	)
 	if err != nil {
-		s.internal(w, "list friends", err)
-		return
-	}
-	incoming, err := s.queries.ListIncomingRequests(r.Context(), uid)
-	if err != nil {
-		s.internal(w, "list incoming", err)
-		return
-	}
-	outgoing, err := s.queries.ListOutgoingRequests(r.Context(), uid)
-	if err != nil {
-		s.internal(w, "list outgoing", err)
-		return
-	}
-	suggestions, err := s.queries.ListPeopleYouMayKnow(r.Context(), uid)
-	if err != nil {
-		s.internal(w, "list suggestions", err)
+		s.internal(w, "list friends: load", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

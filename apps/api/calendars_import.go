@@ -349,12 +349,24 @@ func (s *server) handleCalendarEvents(w http.ResponseWriter, r *http.Request) {
 	if s.calendar.stub() {
 		events = stubImportedEvents(conns)
 	} else {
-		for _, c := range conns {
-			evs, err := s.fetchConnectionEvents(r.Context(), c, from, to)
-			if err != nil {
-				s.logger.Error("fetch calendar events", "provider", c.Provider, "err", err)
-				continue
+		// Each connection is an OUTBOUND fetch (Google API / CalDAV / iCal URL)
+		// costing hundreds of ms to seconds - run them concurrently and merge.
+		// Per-connection failures still just log and skip.
+		perConn := make([][]importedEvent, len(conns))
+		fns := make([]func() error, len(conns))
+		for i, c := range conns {
+			fns[i] = func() error {
+				evs, err := s.fetchConnectionEvents(r.Context(), c, from, to)
+				if err != nil {
+					s.logger.Error("fetch calendar events", "provider", c.Provider, "err", err)
+					return nil
+				}
+				perConn[i] = evs
+				return nil
 			}
+		}
+		_ = parallel(fns...)
+		for _, evs := range perConn {
 			events = append(events, evs...)
 		}
 	}

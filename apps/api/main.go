@@ -68,7 +68,18 @@ func main() {
 	}
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dbURL)
+	// Hot handlers fan queries out concurrently (see parallel in util.go), so
+	// the pool needs headroom beyond the default (max(4, NumCPU) - Cloud Run
+	// runs 1 vCPU). 16 stays well inside Neon's connection budget.
+	poolCfg, err := pgxpool.ParseConfig(dbURL)
+	if err != nil {
+		logger.Error("db config", "err", err)
+		os.Exit(1)
+	}
+	if poolCfg.MaxConns < 16 {
+		poolCfg.MaxConns = 16
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		logger.Error("db connect", "err", err)
 		os.Exit(1)

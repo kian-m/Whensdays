@@ -107,17 +107,22 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	members, err := s.queries.ListGroupMembers(r.Context(), g.ID)
+	// Three independent reads - fan out (the DB is a network hop away).
+	ctx := r.Context()
+	var (
+		members []db.ListGroupMembersRow
+		events  []db.Event
+		isAdmin bool
+	)
+	err := parallel(
+		func() (e error) { members, e = s.queries.ListGroupMembers(ctx, g.ID); return },
+		func() (e error) { events, e = s.queries.ListGroupEvents(ctx, g.ID); return },
+		func() error { isAdmin, _ = s.queries.IsGroupAdmin(ctx, db.IsGroupAdminParams{ID: g.ID, UserID: uid}); return nil },
+	)
 	if err != nil {
-		s.internal(w, "list group members", err)
+		s.internal(w, "group detail: load", err)
 		return
 	}
-	events, err := s.queries.ListGroupEvents(r.Context(), g.ID)
-	if err != nil {
-		s.internal(w, "list group events", err)
-		return
-	}
-	isAdmin, _ := s.queries.IsGroupAdmin(r.Context(), db.IsGroupAdminParams{ID: g.ID, UserID: uid})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"group": g, "members": members, "events": events,
 		"is_owner": g.OwnerID == uid, "is_admin": isAdmin, "viewer_id": uid,
