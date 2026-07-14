@@ -376,9 +376,14 @@ function Landing() {
         <div className="land-showcase" aria-hidden>
           {showcase.map((s) => <span key={s} className="chip">{s}</span>)}
         </div>
-        {/* The product is the pitch: a real event page, one glance = how it works. */}
-        <img className="land-shot" src="/landing-shot.jpg" width={553} height={1200}
-          alt="A Whensdays event: 9 of 9 friends in, one-tap RSVP" />
+        {/* The product is the pitch: a real event page + the group-availability
+            heatmap with winning dates picked - one glance = how it works. */}
+        <div className="land-shots">
+          <img className="land-shot" src="/landing-shot.jpg" width={553} height={1200}
+            alt="A Whensdays event: 9 of 9 friends in, one-tap RSVP" />
+          <img className="land-shot land-shot-b" src="/landing-shot-2.jpg" width={553} height={1200}
+            alt="Group availability from 9 people, two winning dates picked to schedule" />
+        </div>
         <div className="land-points">
           <span><b>No app</b> to download</span>
           <span><b>No account</b> to RSVP</span>

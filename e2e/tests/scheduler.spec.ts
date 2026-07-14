@@ -2016,7 +2016,7 @@ test.describe("scheduler", () => {
     // hermetic stack, so the landing is otherwise unreachable here).
     await page.goto("/landing");
     await expect(page.locator(".land-title")).toContainText("Hangouts");
-    await expect(page.locator(".land-shot")).toBeVisible();
+    await expect(page.locator(".land-shot")).toHaveCount(2); // event page + availability heatmap
     await expect(page.getByTestId("start-plan")).toBeVisible();
     await expect(page.locator(".land-points")).toContainText("One link");
   });

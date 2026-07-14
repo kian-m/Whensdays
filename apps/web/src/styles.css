@@ -564,13 +564,19 @@ textarea.input { resize: vertical; min-height: 64px; }
 @media (prefers-reduced-motion: reduce) { .land > * { animation: none; } }
 .land-go { font-size: 1.1rem; padding: 0.9rem 2.2rem; }
 .land-micro { color: var(--muted); font-size: 0.85rem; margin-top: 0.7rem; }
-/* The product shot IS the pitch: centered, gently tilted, warm glow. */
+/* The product shots ARE the pitch: two phones, opposing tilts, warm glow.
+   Side by side at every width (shrinking beats stacking two tall phones). */
+.land-shots {
+  display: flex; justify-content: center; align-items: flex-start;
+  gap: clamp(0.6rem, 3vw, 2rem); margin: 3rem auto 0.6rem;
+}
 .land-shot {
-  width: min(300px, 76vw); height: auto; margin: 3rem auto 0.6rem; display: block;
+  width: min(280px, 42vw); height: auto; display: block;
   border-radius: 28px; border: 1px solid var(--glass-line);
   transform: rotate(-2deg);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45), 0 0 90px color-mix(in srgb, var(--accent) 22%, transparent);
 }
+.land-shot-b { transform: rotate(2deg) translateY(18px); }
 .land-title {
   font-size: clamp(2.9rem, 9vw, 5rem);
   font-weight: 850; letter-spacing: -0.045em; line-height: 0.98;
