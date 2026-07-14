@@ -210,6 +210,17 @@ func (q *Queries) CancelEvent(ctx context.Context, id pgtype.UUID) (Event, error
 	return i, err
 }
 
+const cancelEventQuiet = `-- name: CancelEventQuiet :exec
+UPDATE events SET status = 'cancelled' WHERE id = $1
+`
+
+// Soft-cancel without the email fan-out (sync-driven: a scraped listing
+// vanishing is weaker evidence than a host's explicit cancel).
+func (q *Queries) CancelEventQuiet(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, cancelEventQuiet, id)
+	return err
+}
+
 const cancelSeries = `-- name: CancelSeries :exec
 UPDATE events SET status = 'cancelled' WHERE series_id = $1
 `
@@ -1885,6 +1896,22 @@ func (q *Queries) PromoteAttendee(ctx context.Context, arg PromoteAttendeeParams
 	return err
 }
 
+const retimeEvent = `-- name: RetimeEvent :exec
+UPDATE events SET starts_at = $2, reminder_sent = false WHERE id = $1
+`
+
+type RetimeEventParams struct {
+	ID       pgtype.UUID        `json:"id"`
+	StartsAt pgtype.Timestamptz `json:"starts_at"`
+}
+
+// Move a scheduled occurrence (venue time changed upstream): new start,
+// reminder re-armed so the day-before email fires for the new date.
+func (q *Queries) RetimeEvent(ctx context.Context, arg RetimeEventParams) error {
+	_, err := q.db.Exec(ctx, retimeEvent, arg.ID, arg.StartsAt)
+	return err
+}
+
 const setAvatar = `-- name: SetAvatar :one
 UPDATE profiles SET avatar_url = $2
 WHERE user_id = $1
@@ -1987,6 +2014,39 @@ func (q *Queries) SetEventDraft(ctx context.Context, arg SetEventDraftParams) (E
 		&i.Capacity,
 	)
 	return i, err
+}
+
+const setEventHost = `-- name: SetEventHost :exec
+UPDATE events SET host_id = $2 WHERE id = $1
+`
+
+type SetEventHostParams struct {
+	ID     pgtype.UUID `json:"id"`
+	HostID string      `json:"host_id"`
+}
+
+// Hand an event to another host (the UCB sync bot adopts scraped series;
+// the previous host stays on as cohost - see ucbsync.go).
+func (q *Queries) SetEventHost(ctx context.Context, arg SetEventHostParams) error {
+	_, err := q.db.Exec(ctx, setEventHost, arg.ID, arg.HostID)
+	return err
+}
+
+const setEventLook = `-- name: SetEventLook :exec
+UPDATE events SET photo_url = $2, theme = $3 WHERE id = $1
+`
+
+type SetEventLookParams struct {
+	ID       pgtype.UUID `json:"id"`
+	PhotoUrl string      `json:"photo_url"`
+	Theme    string      `json:"theme"`
+}
+
+// Carry cover + theme onto a sync-created sibling occurrence (CreateEvent
+// has no photo/theme params - those normally arrive via the edit PUT).
+func (q *Queries) SetEventLook(ctx context.Context, arg SetEventLookParams) error {
+	_, err := q.db.Exec(ctx, setEventLook, arg.ID, arg.PhotoUrl, arg.Theme)
+	return err
 }
 
 const setPollTimeGrid = `-- name: SetPollTimeGrid :exec

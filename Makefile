@@ -67,6 +67,9 @@ e2e-docker: ## Run the FULL e2e in containers — only Docker required, nothing 
 	docker compose -f compose.e2e.yaml up --build --abort-on-container-exit --exit-code-from e2e; \
 	ec=$$?; docker compose -f compose.e2e.yaml down -v; exit $$ec
 
+ucb-sync: ## Scrape UCB LA + sync the jam series into the group (needs CRON_KEY + UCB_GROUP_ID; APP_ORIGIN optional, add -- --dry-run to preview)
+	cd e2e && node scripts/ucb-sync.mjs $(ARGS)
+
 docs-shots: ## Regenerate README feature screenshots from the live app (Docker only)
 	docker compose -f compose.docs.yaml up --build --abort-on-container-exit --exit-code-from shots
 	docker compose -f compose.docs.yaml down -v

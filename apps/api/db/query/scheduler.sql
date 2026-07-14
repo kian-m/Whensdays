@@ -368,6 +368,26 @@ WHERE ad.user_id IN (SELECT user_id FROM event_attendees WHERE event_id = $1);
 -- Attach an event to a series after the fact (multi-date finalize).
 UPDATE events SET series_id = $2, recurrence = $3 WHERE id = $1;
 
+-- name: SetEventHost :exec
+-- Hand an event to another host (the UCB sync bot adopts scraped series;
+-- the previous host stays on as cohost - see ucbsync.go).
+UPDATE events SET host_id = $2 WHERE id = $1;
+
+-- name: RetimeEvent :exec
+-- Move a scheduled occurrence (venue time changed upstream): new start,
+-- reminder re-armed so the day-before email fires for the new date.
+UPDATE events SET starts_at = $2, reminder_sent = false WHERE id = $1;
+
+-- name: CancelEventQuiet :exec
+-- Soft-cancel without the email fan-out (sync-driven: a scraped listing
+-- vanishing is weaker evidence than a host's explicit cancel).
+UPDATE events SET status = 'cancelled' WHERE id = $1;
+
+-- name: SetEventLook :exec
+-- Carry cover + theme onto a sync-created sibling occurrence (CreateEvent
+-- has no photo/theme params - those normally arrive via the edit PUT).
+UPDATE events SET photo_url = $2, theme = $3 WHERE id = $1;
+
 -- name: CopyAttendees :exec
 -- Carry everyone (with their RSVP) onto a sibling occurrence.
 INSERT INTO event_attendees (event_id, user_id, rsvp)

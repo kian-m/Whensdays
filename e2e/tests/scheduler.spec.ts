@@ -1463,6 +1463,68 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("group-event").filter({ hasText: goneTitle })).toHaveCount(0);
   });
 
+  test("ucb sync: key-gated cron adopts a matched series and adds venue dates", async ({ page, request }) => {
+    await ensureProfile(page);
+    const stamp = `${test.info().testId}-${Date.now()}`;
+    await page.goto("/groups");
+    const groupName = `UCB LA ${stamp}`;
+    await page.getByTestId("group-name").fill(groupName);
+    await page.getByTestId("group-create").click();
+    await page.getByText(groupName).first().click();
+    await expect(page.getByTestId("group-title")).toBeVisible();
+    const gid = page.url().split("/g/")[1];
+
+    // Seed ONE occurrence (the sync only maintains titles the group already
+    // has). LA calendar days for the payload so the server's date bucketing
+    // (America/Los_Angeles) agrees with what we seeded.
+    const title = `Night School ${stamp}`;
+    const laDay = (days: number) =>
+      new Date(Date.now() + days * 864e5).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+    await page.evaluate(async ({ gid, title, day }) => {
+      await fetch("/api/events", {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Dev-User": "demo-user" },
+        body: JSON.stringify({
+          title, event_type: "show", location_mode: "host_place",
+          location_address: "1925 N Bronson Ave, Los Angeles, CA",
+          scheduling_mode: "fixed", starts_at: `${day}T21:30:00-07:00`,
+          timezone: "America/Los_Angeles", group_id: gid,
+        }),
+      });
+    }, { gid, title, day: laDay(2) });
+
+    // No key -> 401 (same gate as the other cron routes).
+    expect((await request.post("/api/cron/ucb-sync")).status()).toBe(401);
+
+    // The venue lists the seeded date plus two more: sync adopts the series to
+    // the bot host and creates the missing siblings.
+    const shows = [2, 9, 16].map((d) => ({ title, starts: `${laDay(d)} 21:30`, venue: "1925 N Bronson Ave, Los Angeles, CA" }));
+    const res = await request.post("/api/cron/ucb-sync", {
+      headers: { "X-Cron-Key": "e2e-cron-key" },
+      data: { group_id: gid, shows },
+    });
+    expect(res.ok()).toBeTruthy();
+    const out = await res.json();
+    expect(out.created).toBe(2);
+    expect(out.adopted).toBe(1);
+
+    // Idempotent: the same payload again changes nothing.
+    const again = await (await request.post("/api/cron/ucb-sync", {
+      headers: { "X-Cron-Key": "e2e-cron-key" }, data: { group_id: gid, shows },
+    })).json();
+    expect(again.created).toBe(0);
+    expect(again.adopted).toBe(0);
+
+    // Group page: one tile for the series, 3 upcoming dates; the event page
+    // shows the bot as host while the original host keeps manage (cohost).
+    await page.reload();
+    const tile = page.getByTestId("group-event").filter({ hasText: title });
+    await expect(tile).toHaveCount(1);
+    await expect(tile.getByTestId("series-badge")).toContainText("3 dates");
+    await tile.click();
+    await expect(page.getByTestId("hosted-by")).toContainText("UCB Schedule");
+    await expect(page.getByTestId("series")).toContainText("of 3");
+  });
+
   test("skeletons: page chrome renders instantly while data loads", async ({ page }) => {
     await ensureProfile(page);
     // Hold the dashboard fetch open so the first-load skeleton is observable.

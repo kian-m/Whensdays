@@ -133,6 +133,7 @@ func main() {
 	mux.Handle("GET /api/discover", readLimit(http.HandlerFunc(s.handleDiscover)))
 	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
 	mux.HandleFunc("POST /api/cron/analytics", s.handleCronAnalytics) // CRON_KEY-gated daily digest
+	mux.HandleFunc("POST /api/cron/ucb-sync", s.handleCronUCBSync)    // CRON_KEY-gated venue-schedule sync (see ucbsync.go)
 	// Follows + personal feed.
 	mux.Handle("GET /api/feed", auth(http.HandlerFunc(s.handleFeed)))
 	mux.Handle("GET /api/event-types", auth(http.HandlerFunc(s.handleListCustomTypes)))
