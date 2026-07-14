@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, TYPE_COLORS, collapseSeries, eventIsPast, fetchDashboard, seriesCounts, fmtDateTime } from "../lib";
+import { Event, TYPE_COLORS, collapseSeries, eventIsPast, fetchDashboard, seriesCounts, fmtDateTime, useProfile } from "../lib";
 import { eventEmoji, eventLabel } from "../scheduler/questions";
 import { Avatar, EventThumb, ListSkeleton, Pill, useAsync } from "../ui";
 
@@ -35,6 +35,7 @@ function byWhen(a: Event, b: Event): number {
 
 export function Home() {
   const nav = useNavigate();
+  const profile = useProfile();
   const { data, loading } = useAsync<EventsResp>(fetchDashboard);
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -66,7 +67,16 @@ export function Home() {
   const upcoming = all.filter((e) => e.status === "scheduled" && e.starts_at && new Date(e.starts_at).getTime() >= now);
 
   const activeHosting = hosting.filter((e) => e.status !== "draft" && !isPast(e));
-  const activeAttending = attending.filter((e) => e.status !== "draft" && !isPast(e) && !iDeclined(e));
+  // Attending = the attending array PLUS cohosted events you RSVP'd going or
+  // maybe to. Cohosted rows ride in `hosting` (the dashboard unions them), so
+  // without this an RSVP on an event you help run never surfaces here - e.g.
+  // every UCB series occurrence after the sync bot adopted it (you = cohost).
+  const attendingIds = new Set(attending.map((e) => e.id));
+  const cohostAttending = hosting.filter((e) => {
+    const r = data?.my_rsvps?.[e.id];
+    return e.host_id !== profile?.user_id && !attendingIds.has(e.id) && (r === "going" || r === "maybe");
+  });
+  const activeAttending = [...attending, ...cohostAttending].filter((e) => e.status !== "draft" && !isPast(e) && !iDeclined(e));
   // A recurring series shows as ONE tile: its next upcoming occurrence in the
   // active views, its most-recent one under Past (collapse then re-sort).
   const newestFirst = (a: Event, b: Event) => new Date(b.starts_at!).getTime() - new Date(a.starts_at!).getTime();

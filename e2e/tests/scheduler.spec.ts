@@ -1317,6 +1317,19 @@ test.describe("scheduler", () => {
       await co.getByTestId("comment-delete-0").click();
       await expect(co.getByText("Can I bring a friend?")).toHaveCount(0);
 
+      // A cohost who RSVPs going sees the event under Attending too - cohosted
+      // rows ride the hosting bucket, so Home must merge in the RSVP.
+      const eid = url.match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
+      await co.evaluate(async (id) => {
+        await fetch(`/api/events/${id}/rsvp`, {
+          method: "POST", headers: { "Content-Type": "application/json", "X-Dev-User": "cohostr" },
+          body: JSON.stringify({ rsvp: "going" }),
+        });
+      }, eid);
+      await co.goto("/");
+      await co.getByTestId("filter-attending").click();
+      await expect(co.getByTestId("event-row").filter({ hasText: title }).first()).toBeVisible();
+
       await guestCtx.close();
     } finally {
       await hostCtx.close();
