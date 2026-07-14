@@ -552,18 +552,35 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 
 /* landing hero */
-.land { text-align: center; padding: 3rem 1rem 2rem; }
+.land { text-align: center; padding: 2.2rem 1rem 2rem; }
+/* Staggered fade-up on load - one orchestrated moment, then stillness. */
+@keyframes land-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.land > * { animation: land-rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.land > *:nth-child(2) { animation-delay: 0.08s; }
+.land > *:nth-child(3) { animation-delay: 0.16s; }
+.land > *:nth-child(4) { animation-delay: 0.22s; }
+.land > *:nth-child(5) { animation-delay: 0.3s; }
+.land > *:nth-child(n+6) { animation-delay: 0.36s; }
+@media (prefers-reduced-motion: reduce) { .land > * { animation: none; } }
+.land-go { font-size: 1.1rem; padding: 0.9rem 2.2rem; }
+.land-micro { color: var(--muted); font-size: 0.85rem; margin-top: 0.7rem; }
+/* The product shot IS the pitch: centered, gently tilted, warm glow. */
+.land-shot {
+  width: min(300px, 76vw); height: auto; margin: 3rem auto 0.6rem; display: block;
+  border-radius: 28px; border: 1px solid var(--glass-line);
+  transform: rotate(-2deg);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45), 0 0 90px color-mix(in srgb, var(--accent) 22%, transparent);
+}
 .land-title {
-  font-size: clamp(2.4rem, 8vw, 4rem); font-weight: 850; letter-spacing: -0.03em;
-  line-height: 1.02; margin: 0.6rem auto 0; max-width: 12ch;
-  background: linear-gradient(120deg, var(--ink) 30%, var(--accent) 120%);
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  font-size: clamp(2.9rem, 9vw, 5rem);
+  font-weight: 850; letter-spacing: -0.045em; line-height: 0.98;
+  margin: 3.2rem auto 0;
 }
 .land-sub { color: var(--muted); max-width: 460px; margin: 1rem auto 1.6rem; font-size: 1.05rem; }
 .land-cta { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
 .land-showcase { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 2.2rem auto 0; max-width: 520px; }
 .land-showcase .chip { cursor: default; }
-.land-points { display: flex; gap: 1.4rem; justify-content: center; flex-wrap: wrap; margin-top: 2.4rem; color: var(--muted); font-size: 0.9rem; }
+.land-points { display: flex; gap: 0.6rem 1.4rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; color: var(--muted); font-size: 0.9rem; }
 .land-points b { color: var(--ink); }
 
 /* filter chip row - scrolls horizontally on mobile */

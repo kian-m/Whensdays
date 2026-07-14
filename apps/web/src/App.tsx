@@ -143,7 +143,11 @@ export function App() {
       <ConsentBanner />
       <AnalyticsPageviews />
       {DEV_AUTH ? (
-        DEV_GUEST ? (
+        window.location.pathname === "/landing" ? (
+          // Dev-only alias: the landing never renders in dev auth mode (no
+          // signed-out state exists), so E2E reaches it here.
+          <Landing />
+        ) : DEV_GUEST ? (
           <GuestFlow />
         ) : (
           <ApiContext.Provider value={devApi}>
@@ -354,24 +358,27 @@ function Landing() {
   const showcase = ["🍽️ Dinner", "🎬 Movie night", "⛺ Camping", "🎉 Party", "🏃 Run club", "🎲 Game night"];
   return (
     <div className="app">
+      {/* Quiet top bar: brand left, sign-in right - the hero carries the page. */}
+      <nav className="nav">
+        <span className="brand" aria-label="Whensdays"><span className="dot" /><span className="word" /></span>
+        {!DEV_AUTH && <a href="/sign-in" className="btn ghost sm" data-testid="sign-in">Sign in</a>}
+      </nav>
       <div className="land">
-        <div className="brand" aria-label="Whensdays" style={{ justifyContent: "center" }}>
-          <span className="dot" /><span className="word" />
-        </div>
-        <h1 className="land-title">Make plans that actually happen.</h1>
+        <h1 className="land-title">Hangouts,<br />handled.</h1>
         <p className="land-sub">
-          The group chat says “we should hang out.” Whensdays turns that into a
-          real plan: poll everyone on when they're free, lock the best time, drop one link. Its that easy.
+          One link finds the time everyone can make — friends vote with no app,
+          no account, and the plan locks itself in.
         </p>
         <div className="land-cta">
-          <a href="/start" className="btn" data-testid="start-plan">Start a plan - no account needed</a>
-          {!DEV_AUTH && (
-            <a href="/sign-in" className="btn ghost" data-testid="sign-in">Sign in</a>
-          )}
+          <a href="/start" className="btn land-go" data-testid="start-plan">Start a plan</a>
         </div>
+        <p className="land-micro">Free · no account needed</p>
         <div className="land-showcase" aria-hidden>
           {showcase.map((s) => <span key={s} className="chip">{s}</span>)}
         </div>
+        {/* The product is the pitch: a real event page, one glance = how it works. */}
+        <img className="land-shot" src="/landing-shot.jpg" width={553} height={1200}
+          alt="A Whensdays event: 9 of 9 friends in, one-tap RSVP" />
         <div className="land-points">
           <span><b>No app</b> to download</span>
           <span><b>No account</b> to RSVP</span>
@@ -379,7 +386,7 @@ function Landing() {
         </div>
         {/* Visible privacy link on the homepage - required for Google OAuth
             app verification (a crawler-only link doesn't count). */}
-        <p className="muted small" style={{ textAlign: "center", marginTop: "2rem" }}>
+        <p className="muted small" style={{ textAlign: "center", marginTop: "2.4rem" }}>
           <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy policy</a>{" · "}
           <a href="/terms/" style={{ textDecoration: "underline" }}>Terms</a>{" · "}
           <a href="/cookies/" style={{ textDecoration: "underline" }}>Cookies</a>

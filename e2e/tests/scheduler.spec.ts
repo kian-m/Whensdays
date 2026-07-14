@@ -2011,6 +2011,16 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("custom-bowling")).toBeVisible();
   });
 
+  test("landing: hero, product shot, and start CTA", async ({ page }) => {
+    // /landing is the dev-only alias (no signed-out state exists in the
+    // hermetic stack, so the landing is otherwise unreachable here).
+    await page.goto("/landing");
+    await expect(page.locator(".land-title")).toContainText("Hangouts");
+    await expect(page.locator(".land-shot")).toBeVisible();
+    await expect(page.getByTestId("start-plan")).toBeVisible();
+    await expect(page.locator(".land-points")).toContainText("One link");
+  });
+
   test("zero-signup: start a plan from scratch, share-ready", async ({ browser }) => {
     test.skip(!DEV_AUTH, "guest flow uses the dev ?guest=1 hook");
     const ctx = await browser.newContext();
