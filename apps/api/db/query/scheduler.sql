@@ -196,7 +196,7 @@ ORDER BY e.starts_at;
 -- initials-only — plus the total going count for the "+N more" tail.
 SELECT event_id, user_id, display_name, avatar_url, is_friend, going_count
 FROM (
-    SELECT a.event_id, a.user_id,
+    SELECT a.event_id, a.user_id, a.anonymous,
            COALESCE(p.display_name, 'Guest') AS display_name,
            COALESCE(p.avatar_url, '')        AS avatar_url,
            EXISTS (
@@ -207,7 +207,8 @@ FROM (
            count(*) OVER (PARTITION BY a.event_id)::int AS going_count,
            row_number() OVER (
                PARTITION BY a.event_id
-               ORDER BY EXISTS (
+               ORDER BY a.anonymous ASC,
+                        EXISTS (
                             SELECT 1 FROM friendships f WHERE f.status = 'accepted'
                               AND ((f.requester_id = $1 AND f.addressee_id = a.user_id)
                                 OR (f.requester_id = a.user_id AND f.addressee_id = $1))
@@ -219,7 +220,7 @@ FROM (
     LEFT JOIN profiles p ON p.user_id = a.user_id
     WHERE a.rsvp = 'going' AND a.event_id = ANY($2::uuid[])
 ) x
-WHERE rn <= 6;
+WHERE rn <= 6 AND NOT anonymous;
 
 -- ====================== event time options ========================
 
@@ -296,22 +297,28 @@ WHERE event_id = $1;
 -- "unchanged") won't re-notify the host. Race-safe: concurrent conflicting
 -- upserts serialize on the (event_id,user_id) unique index, so a second
 -- identical "going" sees the just-committed row and its WHERE is false.
-INSERT INTO event_attendees (event_id, user_id, rsvp)
-VALUES ($1, $2, $3)
+INSERT INTO event_attendees (event_id, user_id, rsvp, anonymous)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT (event_id, user_id) DO UPDATE
     SET rsvp = EXCLUDED.rsvp
     WHERE event_attendees.rsvp IS DISTINCT FROM EXCLUDED.rsvp
-RETURNING id, event_id, user_id, rsvp, created_at;
+RETURNING id, event_id, user_id, rsvp, created_at, anonymous;
+
+-- name: SetRsvpAnonymous :exec
+-- The anonymity toggle, separate from UpsertRsvp so flipping it never trips
+-- the changed-rsvp notify path, and so email-link re-RSVPs (which don't send
+-- the flag) leave a stored choice alone.
+UPDATE event_attendees SET anonymous = $3 WHERE event_id = $1 AND user_id = $2;
 
 -- name: ListAttendees :many
-SELECT a.user_id, a.rsvp, p.display_name, p.avatar_url, p.handle
+SELECT a.user_id, a.rsvp, a.anonymous, p.display_name, p.avatar_url, p.handle
 FROM event_attendees a
 LEFT JOIN profiles p ON p.user_id = a.user_id
 WHERE a.event_id = $1
 ORDER BY a.created_at;
 
 -- name: GetAttendee :one
-SELECT id, event_id, user_id, rsvp, created_at
+SELECT id, event_id, user_id, rsvp, created_at, anonymous
 FROM event_attendees
 WHERE event_id = $1 AND user_id = $2;
 

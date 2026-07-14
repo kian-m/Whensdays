@@ -87,6 +87,7 @@ type EventAttendee struct {
 	UserID    string             `json:"user_id"`
 	Rsvp      string             `json:"rsvp"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Anonymous bool               `json:"anonymous"`
 }
 
 type EventCohost struct {

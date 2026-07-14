@@ -1308,6 +1308,11 @@ test.describe("scheduler", () => {
       await co.goto(url);
       await expect(co.getByTestId("share-link")).toBeVisible(); // manager view
       await expect(co.getByTestId("host-controls")).toHaveCount(0); // but not host-only controls
+      // Cohosts get the guest-preview toggle too (was host-only).
+      await co.getByTestId("preview-toggle").click();
+      await expect(co.getByTestId("share-link")).toHaveCount(0); // guest view
+      await co.getByTestId("preview-toggle").click();
+      await expect(co.getByTestId("share-link")).toBeVisible();
       await co.getByTestId("edit-event-open").click();
       await co.getByTestId("edit-title").fill(`${title} (edited)`);
       await co.getByTestId("edit-save").click();
@@ -1543,6 +1548,56 @@ test.describe("scheduler", () => {
     await tile.click();
     await expect(page.getByTestId("hosted-by")).toContainText("UCB Schedule");
     await expect(page.getByTestId("series")).toContainText("of 3");
+  });
+
+  test("anonymous RSVP: counted in totals, name hidden from the host", async ({ browser }) => {
+    const hostCtx = await browser.newContext();
+    const guestCtx = await browser.newContext();
+    const host = await hostCtx.newPage();
+    const guest = await guestCtx.newPage();
+    try {
+      await ensureUser(host, "anonhost", "Anon Host", "anonhost");
+      await host.getByTestId("new-event").click();
+      const title = `Masquerade ${test.info().testId}-${Date.now()}`;
+      await host.getByTestId("event-title").fill(title);
+      await host.getByTestId("type-party").click();
+      await host.getByTestId("wiz-next").click();
+      await host.getByTestId("loc-host").click();
+      await host.getByTestId("wiz-next").click();
+      await host.getByTestId("sched-fixed").click();
+      await host.getByTestId("fixed-time").fill("2026-09-20T20:00");
+      await host.getByTestId("wiz-next").click();
+      await host.getByTestId("create-event").click();
+      await expect(host.getByTestId("event-title")).toHaveText(title);
+      const url = host.url();
+
+      // The invitee hides their name, then RSVPs going.
+      await ensureUser(guest, "maskguy", "Masked Marvel", "maskguy");
+      await guest.goto(url);
+      await guest.getByTestId("rsvp-anon").check();
+      const post = guest.waitForResponse((r) => r.url().includes("/rsvp") && r.request().method() === "POST");
+      await guest.getByTestId("rsvp-going").click();
+      await post;
+      // Their own row still shows their name + (you).
+      await expect(guest.getByTestId("guests")).toContainText("Masked Marvel");
+
+      // The host sees the count but never the name - masked server-side.
+      await host.reload();
+      await expect(host.getByTestId("guests")).toContainText("1 going");
+      await expect(host.getByTestId("guests")).toContainText("Anonymous");
+      await expect(host.getByTestId("guests")).not.toContainText("Masked Marvel");
+
+      // Un-hiding restores the name. (Register the response listener BEFORE
+      // the action - registering after is a lost-wakeup race.)
+      const post2 = guest.waitForResponse((r) => r.url().includes("/rsvp") && r.request().method() === "POST");
+      await guest.getByTestId("rsvp-anon").uncheck();
+      await post2;
+      await host.reload();
+      await expect(host.getByTestId("guests")).toContainText("Masked Marvel");
+    } finally {
+      await hostCtx.close();
+      await guestCtx.close();
+    }
   });
 
   test("skeletons: page chrome renders instantly while data loads", async ({ page }) => {

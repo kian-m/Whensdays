@@ -77,6 +77,8 @@ func (s *server) handleEmailRsvp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Same change-detection as the in-app handler: no row back = unchanged.
+	// Anonymous stays false on INSERT; a re-RSVP's conflict branch never touches
+	// a stored anonymity choice (see the UpsertRsvp query comment).
 	_, err = s.queries.UpsertRsvp(r.Context(), db.UpsertRsvpParams{EventID: id, UserID: userID, Rsvp: answer})
 	changed := true
 	if errors.Is(err, pgx.ErrNoRows) {

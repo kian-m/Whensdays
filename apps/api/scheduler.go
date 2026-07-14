@@ -1049,6 +1049,17 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "list attendees", err)
 		return
 	}
+	// Anonymous RSVPs: identity is masked for EVERYONE else - hosts included -
+	// before the response leaves the server. The viewer's own row stays intact
+	// so the UI can show (and toggle) their state.
+	for i := range attendees {
+		if attendees[i].Anonymous && attendees[i].UserID != uid {
+			attendees[i].UserID = ""
+			attendees[i].DisplayName = pgtype.Text{String: "Anonymous", Valid: true}
+			attendees[i].AvatarUrl = pgtype.Text{}
+			attendees[i].Handle = pgtype.Text{}
+		}
+	}
 	answers, err := s.queries.ListPreferenceAnswersForEvent(r.Context(), id)
 	if err != nil {
 		s.internal(w, "list answers", err)
@@ -1176,7 +1187,8 @@ func (s *server) handleRsvp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Rsvp string `json:"rsvp"`
+		Rsvp      string `json:"rsvp"`
+		Anonymous bool   `json:"anonymous"` // count me, don't name me
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -1204,7 +1216,7 @@ func (s *server) handleRsvp(w http.ResponseWriter, r *http.Request) {
 	// UpsertRsvp returns no row when the rsvp is unchanged (a re-submit) - treat
 	// that as "nothing happened": don't re-notify the host. Only a genuine change
 	// TO "going" emails the host, so double-clicks/reconfirms can't duplicate it.
-	a, err := s.queries.UpsertRsvp(r.Context(), db.UpsertRsvpParams{EventID: id, UserID: uid, Rsvp: in.Rsvp})
+	a, err := s.queries.UpsertRsvp(r.Context(), db.UpsertRsvpParams{EventID: id, UserID: uid, Rsvp: in.Rsvp, Anonymous: in.Anonymous})
 	changed := true
 	if errors.Is(err, pgx.ErrNoRows) {
 		changed = false
@@ -1214,10 +1226,21 @@ func (s *server) handleRsvp(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "rsvp", err)
 		return
 	}
+	// Anonymity is set explicitly (never via the upsert's conflict branch) so
+	// flipping it alone can't re-trigger the new-RSVP email, and email-link
+	// re-RSVPs (which don't carry the flag) go through UpsertRsvp untouched.
+	if err := s.queries.SetRsvpAnonymous(r.Context(), db.SetRsvpAnonymousParams{EventID: id, UserID: uid, Anonymous: in.Anonymous}); err != nil {
+		s.internal(w, "rsvp: anonymity", err)
+		return
+	}
 	s.analytics.Capture(uid, "rsvp_submitted", map[string]any{"event_id": r.PathValue("id"), "rsvp": in.Rsvp, "waitlisted": waitlisted})
 	if in.Rsvp == "going" && changed && s.notify.Enabled() {
 		if p, err := s.queries.GetProfile(r.Context(), uid); err == nil {
-			s.notifyNewRSVP(r.Context(), ev, uid, p.DisplayName)
+			name := p.DisplayName
+			if in.Anonymous {
+				name = "Someone" // the host email respects anonymity too
+			}
+			s.notifyNewRSVP(r.Context(), ev, uid, name)
 		}
 	}
 	// Someone stepping back from "going" can free a capped spot - promote the

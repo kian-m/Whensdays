@@ -632,7 +632,7 @@ func (q *Queries) FinalizeEvent(ctx context.Context, arg FinalizeEventParams) (E
 }
 
 const getAttendee = `-- name: GetAttendee :one
-SELECT id, event_id, user_id, rsvp, created_at
+SELECT id, event_id, user_id, rsvp, created_at, anonymous
 FROM event_attendees
 WHERE event_id = $1 AND user_id = $2
 `
@@ -651,6 +651,7 @@ func (q *Queries) GetAttendee(ctx context.Context, arg GetAttendeeParams) (Event
 		&i.UserID,
 		&i.Rsvp,
 		&i.CreatedAt,
+		&i.Anonymous,
 	)
 	return i, err
 }
@@ -833,7 +834,7 @@ func (q *Queries) ListAttendeeAvailabilityForEvent(ctx context.Context, eventID 
 }
 
 const listAttendees = `-- name: ListAttendees :many
-SELECT a.user_id, a.rsvp, p.display_name, p.avatar_url, p.handle
+SELECT a.user_id, a.rsvp, a.anonymous, p.display_name, p.avatar_url, p.handle
 FROM event_attendees a
 LEFT JOIN profiles p ON p.user_id = a.user_id
 WHERE a.event_id = $1
@@ -843,6 +844,7 @@ ORDER BY a.created_at
 type ListAttendeesRow struct {
 	UserID      string      `json:"user_id"`
 	Rsvp        string      `json:"rsvp"`
+	Anonymous   bool        `json:"anonymous"`
 	DisplayName pgtype.Text `json:"display_name"`
 	AvatarUrl   pgtype.Text `json:"avatar_url"`
 	Handle      pgtype.Text `json:"handle"`
@@ -860,6 +862,7 @@ func (q *Queries) ListAttendees(ctx context.Context, eventID pgtype.UUID) ([]Lis
 		if err := rows.Scan(
 			&i.UserID,
 			&i.Rsvp,
+			&i.Anonymous,
 			&i.DisplayName,
 			&i.AvatarUrl,
 			&i.Handle,
@@ -1250,7 +1253,7 @@ func (q *Queries) ListGeneralVotesForEvent(ctx context.Context, eventID pgtype.U
 const listGoingFaces = `-- name: ListGoingFaces :many
 SELECT event_id, user_id, display_name, avatar_url, is_friend, going_count
 FROM (
-    SELECT a.event_id, a.user_id,
+    SELECT a.event_id, a.user_id, a.anonymous,
            COALESCE(p.display_name, 'Guest') AS display_name,
            COALESCE(p.avatar_url, '')        AS avatar_url,
            EXISTS (
@@ -1261,7 +1264,8 @@ FROM (
            count(*) OVER (PARTITION BY a.event_id)::int AS going_count,
            row_number() OVER (
                PARTITION BY a.event_id
-               ORDER BY EXISTS (
+               ORDER BY a.anonymous ASC,
+                        EXISTS (
                             SELECT 1 FROM friendships f WHERE f.status = 'accepted'
                               AND ((f.requester_id = $1 AND f.addressee_id = a.user_id)
                                 OR (f.requester_id = a.user_id AND f.addressee_id = $1))
@@ -1273,7 +1277,7 @@ FROM (
     LEFT JOIN profiles p ON p.user_id = a.user_id
     WHERE a.rsvp = 'going' AND a.event_id = ANY($2::uuid[])
 ) x
-WHERE rn <= 6
+WHERE rn <= 6 AND NOT anonymous
 `
 
 type ListGoingFacesParams struct {
@@ -2106,6 +2110,24 @@ func (q *Queries) SetProfileEmail(ctx context.Context, arg SetProfileEmailParams
 	return i, err
 }
 
+const setRsvpAnonymous = `-- name: SetRsvpAnonymous :exec
+UPDATE event_attendees SET anonymous = $3 WHERE event_id = $1 AND user_id = $2
+`
+
+type SetRsvpAnonymousParams struct {
+	EventID   pgtype.UUID `json:"event_id"`
+	UserID    string      `json:"user_id"`
+	Anonymous bool        `json:"anonymous"`
+}
+
+// The anonymity toggle, separate from UpsertRsvp so flipping it never trips
+// the changed-rsvp notify path, and so email-link re-RSVPs (which don't send
+// the flag) leave a stored choice alone.
+func (q *Queries) SetRsvpAnonymous(ctx context.Context, arg SetRsvpAnonymousParams) error {
+	_, err := q.db.Exec(ctx, setRsvpAnonymous, arg.EventID, arg.UserID, arg.Anonymous)
+	return err
+}
+
 const setSeries = `-- name: SetSeries :exec
 UPDATE events SET series_id = $2, recurrence = $3 WHERE id = $1
 `
@@ -2351,18 +2373,19 @@ func (q *Queries) UpsertProfile(ctx context.Context, arg UpsertProfileParams) (U
 
 const upsertRsvp = `-- name: UpsertRsvp :one
 
-INSERT INTO event_attendees (event_id, user_id, rsvp)
-VALUES ($1, $2, $3)
+INSERT INTO event_attendees (event_id, user_id, rsvp, anonymous)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT (event_id, user_id) DO UPDATE
     SET rsvp = EXCLUDED.rsvp
     WHERE event_attendees.rsvp IS DISTINCT FROM EXCLUDED.rsvp
-RETURNING id, event_id, user_id, rsvp, created_at
+RETURNING id, event_id, user_id, rsvp, created_at, anonymous
 `
 
 type UpsertRsvpParams struct {
-	EventID pgtype.UUID `json:"event_id"`
-	UserID  string      `json:"user_id"`
-	Rsvp    string      `json:"rsvp"`
+	EventID   pgtype.UUID `json:"event_id"`
+	UserID    string      `json:"user_id"`
+	Rsvp      string      `json:"rsvp"`
+	Anonymous bool        `json:"anonymous"`
 }
 
 // ========================= attendees ==============================
@@ -2373,7 +2396,12 @@ type UpsertRsvpParams struct {
 // upserts serialize on the (event_id,user_id) unique index, so a second
 // identical "going" sees the just-committed row and its WHERE is false.
 func (q *Queries) UpsertRsvp(ctx context.Context, arg UpsertRsvpParams) (EventAttendee, error) {
-	row := q.db.QueryRow(ctx, upsertRsvp, arg.EventID, arg.UserID, arg.Rsvp)
+	row := q.db.QueryRow(ctx, upsertRsvp,
+		arg.EventID,
+		arg.UserID,
+		arg.Rsvp,
+		arg.Anonymous,
+	)
 	var i EventAttendee
 	err := row.Scan(
 		&i.ID,
@@ -2381,6 +2409,7 @@ func (q *Queries) UpsertRsvp(ctx context.Context, arg UpsertRsvpParams) (EventAt
 		&i.UserID,
 		&i.Rsvp,
 		&i.CreatedAt,
+		&i.Anonymous,
 	)
 	return i, err
 }

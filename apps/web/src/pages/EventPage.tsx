@@ -133,7 +133,7 @@ export function EventPage() {
 
       {!preview && e.status !== "cancelled" && <MuteToggle data={data} />}
 
-      {data.role === "host" && (
+      {data.can_manage && (
         <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="preview-toggle"
           onClick={() => setPreview((p) => { analytics.capture(EVENTS.previewToggled, { to: !p ? "guest" : "host" }); return !p; })}>
           {preview ? "← Back to host view" : "👀 Preview as guest"}
@@ -393,12 +393,13 @@ function IntentLinks({ event, attendees }: { event: EventDetail["event"]; attend
 
 function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) {
   const e = data.event;
-  const myRsvp = data.attendees.find((a) => a.user_id === data.viewer_id)?.rsvp;
+  const me = data.attendees.find((a) => a.user_id === data.viewer_id);
+  const myRsvp = me?.rsvp;
   const myAnswers = data.preference_answers.filter((a) => a.user_id === data.viewer_id);
   return (
     <div className="stack">
       <WhosIn data={data} />
-      <Rsvp eventId={e.id} current={myRsvp} reload={reload} isGuest={data.viewer_id.startsWith("guest_")} />
+      <Rsvp eventId={e.id} current={myRsvp} currentAnon={!!me?.anonymous} reload={reload} isGuest={data.viewer_id.startsWith("guest_")} />
       {pollClosed(e) && (
         <div className="card" data-testid="poll-closed">
           <span className="muted small">🗳️ This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
@@ -456,18 +457,21 @@ function WhosIn({ data }: { data: EventDetail }) {
   );
 }
 
-function Rsvp({ eventId, current, reload, isGuest }: { eventId: string; current?: string; reload: () => void; isGuest?: boolean }) {
+function Rsvp({ eventId, current, currentAnon, reload, isGuest }: { eventId: string; current?: string; currentAnon?: boolean; reload: () => void; isGuest?: boolean }) {
   const api = useApi();
   // OPTIMISTIC: the tap flips the selection instantly - waiting on the POST
   // plus a full event refetch before showing the choice felt broken (Cloud Run
   // + Neon round-trips add up). Server sync + reload happen in the background;
   // a failed POST reverts the flip.
   const [sel, setSel] = useState<string | undefined>(undefined);
+  // Anonymity: counted, not named. Rides every RSVP POST; flipping it after
+  // an RSVP re-posts the current answer with the new flag.
+  const [anon, setAnon] = useState(!!currentAnon);
   const active = sel ?? current;
-  function set(rsvp: string) {
+  function set(rsvp: string, anonymous = anon) {
     const prev = active;
     setSel(rsvp);
-    sendJSON(api, "POST", `/api/events/${eventId}/rsvp`, { rsvp })
+    sendJSON(api, "POST", `/api/events/${eventId}/rsvp`, { rsvp, anonymous })
       .then(async (res) => {
         if (!res.ok) return setSel(prev);
         // The server may convert a "going" on a full event into a waitlist
@@ -489,6 +493,17 @@ function Rsvp({ eventId, current, reload, isGuest }: { eventId: string; current?
           </button>
         ))}
       </div>
+      <label className="row muted small" style={{ gap: 6, cursor: "pointer" }}>
+        <input type="checkbox" data-testid="rsvp-anon" checked={anon}
+          onChange={(e) => {
+            const v = e.target.checked;
+            setAnon(v);
+            // Already answered? Sync the flag now (waitlist re-posts as going -
+            // the server's capacity gate re-derives the stored value).
+            if (active) set(active === "waitlist" ? "going" : active, v);
+          }} />
+        🕶️ Hide my name (you'll be counted, not named)
+      </label>
       {active === "waitlist" && (
         <p className="muted small" style={{ margin: 0 }} data-testid="waitlist-note">
           ⏳ The event is full - you're on the waitlist. If a spot opens you're bumped in automatically (and emailed).
@@ -1888,12 +1903,13 @@ function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: stri
         return (
           <div key={key} className="stack" style={{ gap: 6 }} data-testid={`rsvp-group-${key}`}>
             <div className="section-h" style={{ margin: 0 }}>{label} · {rows.length}</div>
-            {rows.map((a) => {
+            {rows.map((a, i) => {
               const isSelf = a.user_id === viewerId;
+              // Masked anonymous rows have no user_id/handle - never befriendable.
               const canAdd = !viewerIsGuest && !!a.handle && !isSelf && !friendIds.has(a.user_id);
               const already = a.handle ? (pending.has(a.handle) || requested.has(a.handle)) : false;
               return (
-                <div key={a.user_id} className="row between" data-testid="guest-row">
+                <div key={a.user_id || `anon-${i}`} className="row between" data-testid="guest-row">
                   <span className="row" style={{ gap: 8 }}>
                     <Avatar url={a.avatar_url} name={a.display_name} size={28} />
                     <span className="stack" style={{ gap: 0 }}>

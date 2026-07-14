@@ -312,7 +312,7 @@ export type Vote = { id: string; option_id: string; user_id: string; response: "
 // dimension: month + slot (general scope), day (month scope), dayslot (week scope),
 // timeslot (dates scope) -> value "YYYY-MM-DD:<minutes-from-midnight>".
 export type GeneralVote = { user_id: string; dimension: "month" | "slot" | "day" | "dayslot" | "timeslot"; value: string };
-export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined" | "waitlist"; display_name: string | null; avatar_url: string | null; handle: string | null };
+export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined" | "waitlist"; anonymous?: boolean; display_name: string | null; avatar_url: string | null; handle: string | null };
 export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
 
 export type EventDetail = {
