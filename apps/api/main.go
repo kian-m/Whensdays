@@ -147,6 +147,7 @@ func main() {
 	mux.Handle("GET /api/groups/{id}/og.png", readLimit(http.HandlerFunc(s.handleGroupOGImage)))
 	// Public browse (read-only, publishes only host-chosen fields) + cron.
 	mux.Handle("GET /api/discover", readLimit(http.HandlerFunc(s.handleDiscover)))
+	mux.Handle("GET /api/stats/landing", readLimit(http.HandlerFunc(s.handleLandingStats))) // cached proof counter (landing.go)
 	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
 	mux.HandleFunc("POST /api/cron/analytics", s.handleCronAnalytics) // CRON_KEY-gated daily digest
 	mux.HandleFunc("POST /api/cron/ucb-sync", s.handleCronUCBSync)    // CRON_KEY-gated venue-schedule sync (see ucbsync.go)

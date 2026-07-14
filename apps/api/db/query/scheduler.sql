@@ -222,6 +222,10 @@ FROM (
 ) x
 WHERE rn <= 6 AND NOT anonymous;
 
+-- name: CountScheduledEvents :one
+-- Landing-page proof counter: every plan that reached a locked-in time.
+SELECT count(*) FROM events WHERE status = 'scheduled';
+
 -- ====================== event time options ========================
 
 -- name: AddTimeOption :one
