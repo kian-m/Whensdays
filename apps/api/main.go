@@ -79,6 +79,11 @@ func main() {
 	if poolCfg.MaxConns < 16 {
 		poolCfg.MaxConns = 16
 	}
+	// Keep a warm floor: opening a fresh Neon connection costs ~100ms (TCP+TLS
+	// +auth), which the fan-out otherwise pays on every burst after idle.
+	if poolCfg.MinConns < 4 {
+		poolCfg.MinConns = 4
+	}
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		logger.Error("db connect", "err", err)
