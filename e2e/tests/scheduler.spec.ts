@@ -1383,7 +1383,7 @@ test.describe("scheduler", () => {
 
   test("recurring event: series occurrences created and navigable", async ({ page }) => {
     await ensureProfile(page);
-    const title = `Weekly run ${test.info().testId}`;
+    const title = `Weekly run ${test.info().testId}-${Date.now()}`;
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-other").click();
