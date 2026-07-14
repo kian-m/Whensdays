@@ -10,7 +10,9 @@ on:
 
 env:
   GCP_PROJECT: whensdays
-  GCP_REGION: us-central1
+  # us-west1 = same metro as Neon (aws-us-west-2); compute next to the DB is
+  # the single biggest latency lever (see CLAUDE.md "Latency rule").
+  GCP_REGION: us-west1
   AR_REPO: whensdays # Artifact Registry repo name
   SERVICE: whensdays-api # Cloud Run service name
 

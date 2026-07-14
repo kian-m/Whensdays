@@ -363,7 +363,7 @@ function GroupEventRow({ event, onClick, seriesN }: { event: Event; onClick: () 
       style={{ cursor: "pointer", borderLeftColor: TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other, "--tile-accent": TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other } as React.CSSProperties}
       onClick={onClick}
     >
-      <EventThumb photo={event.photo_url} emoji={eventEmoji(event)} color={TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other} size={event.photo_url ? 64 : 46} />
+      {event.photo_url && <EventThumb photo={event.photo_url} emoji={eventEmoji(event)} color={TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other} size={64} />}
       <div style={{ flex: 1 }}>
         <div className="title">{event.title}</div>
         <div className="muted small">

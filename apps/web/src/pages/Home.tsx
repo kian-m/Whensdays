@@ -181,7 +181,9 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe,
   return (
     <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : "type-tile"}`} data-testid="event-row" onClick={onClick}
       style={{ borderLeftColor: color, "--tile-accent": color } as React.CSSProperties}>
-      <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={color} size={e.photo_url ? 72 : 46} />
+      {/* Photo/GIF only - a photo-less tile leads with its title (the event
+          page hero still shows the type-emoji cover). */}
+      {e.photo_url && <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={color} size={72} />}
       <div style={{ flex: 1 }}>
         <div className="row between">
           {/* Long titles wrap onto new lines instead of pushing the status pill

@@ -150,7 +150,7 @@ function PublicEventRow({ e, onOpen, canFollow, following, toggleFollow, viewerI
       style={{ gap: 6, borderLeftColor: typeColor }}>
       <div className="row between">
         <span className="row" style={{ gap: 10, cursor: "pointer" }} onClick={onOpen}>
-          <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={typeColor} size={e.photo_url ? 64 : 40} />
+          {e.photo_url && <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={typeColor} size={64} />}
           <span className="stack" style={{ gap: 1 }}>
             <strong>{e.title}</strong>
             <span className="muted small">
