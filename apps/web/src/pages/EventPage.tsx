@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, PrefAnswer, ImportedEvent, TimeOption, Vote, WEEKDAYS, EVENT_THEMES, busyConflict, daysFromDate, dayLabel as dayCol, fmtDate, fmtDateTime, fmtMinutes, gridSlots, toDatetimeLocal, getJSON, guessCity, importedBusy, mapsUrl, appleMapsUrl, openGoogleMaps, isStandalone, nextMonths, sendJSON, timeAgo, useApi } from "../lib";
 import { QUESTIONS, eventLabel, questionLabel } from "../scheduler/questions";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, GifPicker, HomescreenPrompt, Linkify, Pill, QRButton, TimeGrid, fileToPhoto, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, GifPicker, HomescreenPrompt, Linkify, Pill, TimeGrid, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH, GuestSignupButton } from "../App";
 
@@ -32,7 +32,11 @@ export function EventPage() {
   // Navigating between series occurrences reuses this mounted page (only the
   // :id param changes), so per-event UI state must reset by hand here - the
   // rendered children below are keyed by event id instead (remount wholesale).
-  useEffect(() => { setThemePreview(null); setPreview(false); }, [id]);
+  // Host "management mode" = the hero's Edit is open: controls (cancel/draft/
+  // comments/cohosts/nudge/friend-invites) appear ONLY then - the default host
+  // page stays as calm as the guest view.
+  const [heroEditing, setHeroEditing] = useState(false);
+  useEffect(() => { setThemePreview(null); setPreview(false); setHeroEditing(false); }, [id]);
   // One-time add-to-homescreen prompt: fires on the event page right after
   // this device's FIRST event creation (see the create flows), phones only.
   const [showA2HS, setShowA2HS] = useState(false);
@@ -80,7 +84,7 @@ export function EventPage() {
       )}
       {showA2HS && <HomescreenPrompt onClose={() => { setShowA2HS(false); try { localStorage.setItem("whensdays.a2hs", "1"); sessionStorage.removeItem("whensdays.a2hs-pending"); } catch { /* private mode */ } }} />}
       <BackLink />
-      <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} />
+      <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} onEditing={setHeroEditing} />
 
       {e.status === "cancelled" && (
         <div className="card empty" data-testid="cancelled-note">
@@ -93,9 +97,11 @@ export function EventPage() {
       {e.status === "scheduled" && e.starts_at && <AddToCalendar event={e} />}
       {e.status === "scheduled" && e.starts_at && <IntentLinks event={e} attendees={data.attendees} />}
 
-      {e.status !== "cancelled" && (showManage ? <HostView data={data} reload={reload} /> : <GuestView data={data} reload={reload} />)}
+      {e.status !== "cancelled" && (showManage ? <HostView data={data} reload={reload} editing={heroEditing} /> : <GuestView data={data} reload={reload} />)}
 
-      {e.status !== "cancelled" && <InviteFriends data={data} reload={reload} />}
+      {/* Friend-by-friend invites are management, not the default view - hosts
+          see them while editing; guests (no edit mode) keep them. */}
+      {e.status !== "cancelled" && (!showManage || heroEditing) && <InviteFriends data={data} reload={reload} />}
 
       <EventComments data={data} reload={reload} />
 
@@ -812,21 +818,22 @@ function PrefFlow({ eventId, type, answers, reload }: {
 
 // ---------------- host management view ----------------
 
-function HostView({ data, reload }: { data: EventDetail; reload: () => void }) {
+function HostView({ data, reload, editing }: { data: EventDetail; reload: () => void; editing?: boolean }) {
   const e = data.event;
   return (
     <div className="stack">
-      <ShareLink eventId={e.id} title={e.title} />
-      <Nudge data={data} />
-      {e.scheduling_mode === "poll" && e.status === "polling" && (
+      <ShareLink eventId={e.id} />
+      {editing && <Nudge data={data} />}
+      {/* Results earn their card: nothing renders until someone has voted. */}
+      {e.scheduling_mode === "poll" && e.status === "polling" && data.votes.length > 0 && (
         <PollResults data={data} reload={reload} />
       )}
-      {e.scheduling_mode === "general" && e.status === "polling" && (
+      {e.scheduling_mode === "general" && e.status === "polling" && data.general_votes.length > 0 && (
         <GeneralResults data={data} reload={reload} />
       )}
       <Guests attendees={data.attendees} viewerId={data.viewer_id} />
       <AnswerSummary data={data} />
-      {data.role === "host" && <HostControls data={data} reload={reload} />}
+      {editing && data.role === "host" && <HostControls data={data} reload={reload} />}
     </div>
   );
 }
@@ -863,10 +870,11 @@ function Nudge({ data }: { data: EventDetail }) {
 // The hero card: cover art + title/meta, and - for the host/cohosts - an Edit
 // button that flips the card into in-place editing (details, visibility, a
 // square cover photo or Klipy GIF, and a page backdrop theme).
-function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail; reload: () => void; canEdit: boolean; onPreviewTheme: (t: string | null) => void }) {
+function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: EventDetail; reload: () => void; canEdit: boolean; onPreviewTheme: (t: string | null) => void; onEditing?: (v: boolean) => void }) {
   const api = useApi();
   const e = data.event;
   const [editing, setEditing] = useState(false);
+  useEffect(() => { onEditing?.(editing); }, [editing, onEditing]);
   const [title, setTitle] = useState(e.title);
   const [desc, setDesc] = useState(e.description);
   const [locMode, setLocMode] = useState(e.location_mode);
@@ -977,17 +985,9 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme }: { data: EventDetail
           </span>
         </div>
         {e.description && <p style={{ overflowWrap: "anywhere" }}><Linkify text={e.description} /></p>}
-        {(data.series?.length ?? 0) > 1 ? (
-          <div className="stack" style={{ gap: 2 }} data-testid="hero-dates">
-            {data.series!.map((occ) => (
-              <div key={occ.id} className={occ.id === e.id ? "small" : "muted small"}>
-                🗓️ {fmtDate(occ.starts_at, e.timezone)}
-                {occ.starts_at ? ` · ${fmtDateTime(occ.starts_at, e.timezone).split(", ").pop()}` : ""}
-                {occ.id === e.id && <span className="muted"> ← this one</span>}
-              </div>
-            ))}
-          </div>
-        ) : (
+        {/* One date line, even for a series - the full date list lives in the
+            Repeats card (listing every date here twice read as clutter). */}
+        {(
           <div className="muted small">
             🗓️ {e.status === "polling"
             ? (e.poll_deadline
@@ -1318,45 +1318,19 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
   );
 }
 
-// The live theme accent (the .event-theme wrapper overrides --accent) so the
-// QR matches the event's look; empty = brand default.
-function pageAccent(): string {
-  const el = document.querySelector(".event-theme");
-  return el ? getComputedStyle(el).getPropertyValue("--accent").trim() : "";
-}
-
-function ShareLink({ eventId, title }: { eventId: string; title?: string }) {
+function ShareLink({ eventId }: { eventId: string }) {
   const url = `${location.origin}/e/${eventId}`;
   const [copied, setCopied] = useState(false);
-  // Invites live in group chats - prefilled deep-links beat copy-paste there.
-  const msg = encodeURIComponent(`You're invited${title ? ` to ${title}` : ""} - RSVP here: ${url}`);
+  // ONE affordance by design: the link itself. Tap = copied. (QR, WhatsApp/SMS
+  // deep links, and web-share were removed - the link travels everywhere.)
   return (
     <div className="card stack">
       <h3>Invite people</h3>
-      <p className="muted small">Share this link - anyone who opens it can RSVP.</p>
-      <div className="row">
-        <input className="input" readOnly value={url} data-testid="share-link" onFocus={(ev) => ev.currentTarget.select()} />
-        <button className="btn soft sm" onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); analytics.capture(EVENTS.shareLinkCopied); }}>
-          {copied ? "Copied" : "Copy"}
-        </button>
-        {typeof navigator.share === "function" && (
-          <button className="btn sm" data-testid="share-native"
-            onClick={() => { navigator.share({ title: "Whensdays invite", url }).catch(() => {}); analytics.capture(EVENTS.shareLinkCopied, { via: "native" }); }}>
-            Share…
-          </button>
-        )}
-        {/* Theme-matched QR for the in-person moment: hold your phone up,
-            everyone scans, they land on RSVP. */}
-        <QRButton url={url} accent={pageAccent()} />
-      </div>
-      <div className="row" style={{ gap: 12 }}>
-        <a className="accent small" data-testid="share-whatsapp" target="_blank" rel="noopener noreferrer"
-          href={`https://wa.me/?text=${msg}`}
-          onClick={() => analytics.capture(EVENTS.shareLinkCopied, { via: "whatsapp" })}>WhatsApp ↗</a>
-        <a className="accent small" data-testid="share-sms"
-          href={`sms:?&body=${msg}`}
-          onClick={() => analytics.capture(EVENTS.shareLinkCopied, { via: "sms" })}>Text message ↗</a>
-      </div>
+      <button type="button" className="share-copy" data-testid="share-link" title="Tap to copy"
+        onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); analytics.capture(EVENTS.shareLinkCopied); setTimeout(() => setCopied(false), 1800); }}>
+        {copied ? "Copied ✓" : url.replace(/^https?:\/\//, "")}
+      </button>
+      <p className="muted small" style={{ margin: 0 }}>Tap to copy - anyone who opens it can RSVP.</p>
     </div>
   );
 }

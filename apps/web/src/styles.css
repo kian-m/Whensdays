@@ -390,6 +390,15 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 /* Photo-less events have NO cover slot - the title leads, with a small
    inline type emoji (the big emoji tile read as filler). */
+/* Invite card: the link is the button - tap to copy. */
+.share-copy {
+  font: inherit; color: var(--accent); font-weight: 700;
+  background: var(--glass-2); border: 1px dashed var(--glass-line);
+  border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; cursor: pointer;
+  overflow-wrap: anywhere; text-align: left;
+}
+.share-copy:active { transform: scale(0.99); }
+
 /* event tile thumbnail (cover photo/gif as the tile's main visual) */
 .thumb { border-radius: 10px; object-fit: cover; flex: none; display: block; box-shadow: var(--shadow); }
 /* comment thread: chat-style bubbles (avatar + glass bubble; own = accent tint) */

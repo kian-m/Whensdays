@@ -27,7 +27,12 @@ services:
       API_PORT: "8080"
       APP_ENV: production
       DATABASE_URL: postgres://clsandbox:clsandbox@db:5432/clsandbox?sslmode=disable
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      # Local default = dev auth (stubbed users, no Clerk keys needed) so
+      # `make up` works out of the box. Prod-shaped run: AUTH_MODE="" (or
+      # unset via `AUTH_MODE= docker compose up`) + real keys in .env.
+      AUTH_MODE: ${AUTH_MODE:-dev}
+      RUN_MIGRATIONS: "true"
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
       POSTHOG_HOST: ${POSTHOG_HOST:-https://us.i.posthog.com}
       POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
       POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
@@ -43,7 +48,8 @@ services:
     build:
       context: ./apps/web
       args:
-        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
+        VITE_AUTH_MODE: ${VITE_AUTH_MODE:-dev} # match the api's dev default
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
         VITE_PUBLIC_POSTHOG_KEY: ${VITE_PUBLIC_POSTHOG_KEY:-}
         VITE_PUBLIC_POSTHOG_HOST: ${VITE_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
         VITE_PUBLIC_POSTHOG_RECORD: ${VITE_PUBLIC_POSTHOG_RECORD:-true}

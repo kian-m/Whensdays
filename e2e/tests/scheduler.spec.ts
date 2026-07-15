@@ -423,15 +423,16 @@ test.describe("scheduler", () => {
     // hero card lists EVERY date, not just this occurrence's.
     await expect(page.getByTestId("series")).toContainText("1 of 2");
     await expect(page.getByTestId("series")).toContainText("on picked dates");
-    await expect(page.getByTestId("hero-dates").locator("div")).toHaveCount(2);
 
     // Every date is editable from the edit form: retime the sibling occurrence.
     const sibWhen = dt(7);
-    const sibLabel = new Date(sibWhen).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
     await page.getByTestId("edit-event-open").click();
     await page.getByTestId("edit-time-sib-0").fill(sibWhen);
     await page.getByTestId("edit-save").click();
-    await expect(page.getByTestId("hero-dates")).toContainText(sibLabel);
+    // The retime stuck: reopen the edit form and read the sibling input back.
+    await page.getByTestId("edit-event-open").click();
+    await expect(page.getByTestId("edit-time-sib-0")).toHaveValue(sibWhen);
+    await page.getByTestId("edit-cancel").click();
     // Series-wide editing: retitle with "apply to all dates" → the sibling
     // occurrence picks up the new title (its own date untouched).
     const newTitle = `${title} v2`;
@@ -479,21 +480,13 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
-    await expect(page.getByTestId("hero-dates")).toHaveCount(0); // one date - no series list
 
     // "+ Add another date" in the edit form turns it into a 2-date series.
     await page.getByTestId("edit-event-open").click();
     await page.getByTestId("edit-add-date").click();
     await page.getByTestId("edit-add-date-0").fill(dt(6));
     await page.getByTestId("edit-save").click();
-    await expect(page.getByTestId("hero-dates").locator("div")).toHaveCount(2);
     await expect(page.getByTestId("series")).toContainText("1 of 2");
-
-    // The invite card offers a one-tap QR for the in-person "scan this" moment.
-    await page.getByTestId("qr-open").click();
-    await expect(page.getByTestId("qr-img")).toHaveAttribute("src", /^data:image\/png/);
-    await page.getByTestId("qr-close").click();
-    await expect(page.getByTestId("qr-modal")).toHaveCount(0);
   });
 
   test("slide-to-paint availability; poll picks sync to main availability", async ({ page }) => {
@@ -742,7 +735,8 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().split("/e/")[1];
 
-    // Park it: banner appears, RSVPs 409, other users get a 404.
+    // Park it (host controls live behind Edit): banner appears, RSVPs 409.
+    await page.getByTestId("edit-event-open").click();
     await page.getByTestId("draft-park").click();
     await expect(page.getByTestId("draft-banner")).toBeVisible();
     const guest = await page.evaluate(async (eid) => {
@@ -827,12 +821,6 @@ test.describe("scheduler", () => {
     // The hero advertises the close date while the poll is open.
     await expect(page.getByText(/poll closes/i)).toBeVisible();
 
-    // Prefilled chat shares carry the title + invite link.
-    const wa = await page.getByTestId("share-whatsapp").getAttribute("href");
-    expect(wa).toContain("wa.me");
-    expect(wa).toContain(encodeURIComponent(`/e/${id}`));
-    await expect(page.getByTestId("share-sms")).toHaveAttribute("href", /^sms:/);
-
     // Host moves the deadline into the past (dev-exempt) - the poll closes.
     await page.getByTestId("edit-event-open").click();
     await page.getByTestId("edit-deadline").fill(dt(-1));
@@ -888,6 +876,12 @@ test.describe("scheduler", () => {
       const rsvpDone = g.waitForResponse((r) => r.url().includes("/rsvp") && r.ok());
       await g.getByTestId("rsvp-going").click();
       await rsvpDone;
+      // Cast a vote too - the host's results card only renders once someone
+      // has actually voted (calm-by-default host view).
+      await g.getByTestId("vote-0-yes").click();
+      const voteDone = g.waitForResponse((r) => r.url().includes("/votes") && r.ok());
+      await g.getByTestId("save-votes").click();
+      await voteDone;
     } finally {
       await ctx.close();
     }
@@ -1118,7 +1112,9 @@ test.describe("scheduler", () => {
       const wc2 = await ctx.newPage();
       await ensureUser(wc2, "wc2", "W C Two", "wc2");
       await wc2.goto(`/e/${id}`);
+      const rsvpPost = wc2.waitForResponse((r) => r.url().includes("/rsvp") && r.request().method() === "POST");
       await wc2.getByTestId("rsvp-going").click();
+      await rsvpPost; // optimistic UI - the host reads the DB next, so the POST must land
 
       // Host sees them under "Who's coming → Going" and can add them as a friend.
       await page.goto(`/e/${id}`);
@@ -1254,6 +1250,7 @@ test.describe("scheduler", () => {
     await expect(page.getByText("Looking forward to it!")).toHaveCount(0);
 
     // Host turns comments off → the composer disappears.
+    await page.getByTestId("edit-event-open").click();
     await page.getByTestId("toggle-comments").click();
     await expect(page.getByTestId("comments-off")).toBeVisible();
     await expect(page.getByTestId("comment-input")).toHaveCount(0);
@@ -1286,6 +1283,7 @@ test.describe("scheduler", () => {
       await expect(host.getByTestId("event-title")).toHaveText(title);
       const url = host.url();
 
+      await host.getByTestId("edit-event-open").click(); // cohost mgmt lives behind Edit
       await host.getByTestId("cohost-handle").fill("cohostr");
       await host.getByTestId("cohost-add").click();
       await expect(host.getByTestId("cohost")).toBeVisible();
@@ -1720,6 +1718,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+    await page.getByTestId("edit-event-open").click(); // cancel lives behind Edit
     await page.getByTestId("cancel-event").click(); // arm…
     await page.getByTestId("cancel-event").click(); // …confirm
     await expect(page.getByTestId("cancelled-note")).toBeVisible();
@@ -1955,7 +1954,11 @@ test.describe("scheduler", () => {
       await page.getByTestId("winvite-invb").click(); // invite from the wizard's Who step
       await page.getByTestId("create-event").click();
       await expect(page.getByTestId("event-title")).toHaveText(title);
+      // The invited list rides the friend-invite card, which hosts see while
+      // editing (calm-by-default host view).
+      await page.getByTestId("edit-event-open").click();
       await expect(page.getByText("Invited: Inv Bee")).toBeVisible();
+      await page.getByTestId("edit-cancel").click();
 
       // B: red count on Events + the event on the dashboard (no link needed),
       // marked NEW. The alert PERSISTS across dashboard views - it only clears
@@ -2146,9 +2149,17 @@ test.describe("scheduler", () => {
     await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
-    // RSVP as a participant so someone is carried onto the extra dates.
+    // RSVP as a participant so someone is carried onto the extra dates - and
+    // cast a vote, since the host's results/finalize card only renders once
+    // someone has voted (calm-by-default host view).
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
+    // Vote for NEXT month (gp-month-1) - the host's target-month chips list
+    // voted months, and the test schedules into next month below.
+    await page.getByTestId("gp-month-1").click();
+    await page.getByTestId("gp-cell-1-evening").click();
+    await page.getByTestId("save-general").click();
+    await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
     await page.getByTestId("preview-toggle").click();
 
     // The manually-typed time can be CLEARED again (the old bug: with a cell
