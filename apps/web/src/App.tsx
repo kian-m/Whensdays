@@ -355,7 +355,7 @@ function Landing() {
   useEffect(() => {
     analytics.reset();
   }, []);
-  const showcase = ["📚 Book club", "🎲 D&D night", "🏃 Run club", "🎭 Improv jam", "🎮 Game night", "🍽️ Supper club"];
+  const showcase = ["📚 Book club", "🎲 D&D night", "🏃 Run club", "🎭 Improv jam", "🎮 Game night", "🍽️ Dinner parties"];
   return (
     <div className="app">
       {/* Quiet top bar: brand left, sign-in right - the hero carries the page. */}
@@ -364,7 +364,7 @@ function Landing() {
         {!DEV_AUTH && <a href="/sign-in" className="btn ghost sm" data-testid="sign-in">Sign in</a>}
       </nav>
       <div className="land">
-        <h1 className="land-title">Your weekly thing,<br />handled.</h1>
+        <h1 className="land-title">Your weekly meet ups,<br />handled.</h1>
         <p className="land-sub">
           Book club, run club, game night, the jam — one link finds when the
           whole group is free, locks the winning dates as a series, and keeps
