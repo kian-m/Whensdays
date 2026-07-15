@@ -355,7 +355,7 @@ function Landing() {
   useEffect(() => {
     analytics.reset();
   }, []);
-  const showcase = ["🍽️ Dinner", "🎬 Movie night", "⛺ Camping", "🎉 Party", "🏃 Run club", "🎲 Game night"];
+  const showcase = ["📚 Book club", "🎲 D&D night", "🏃 Run club", "🎭 Improv jam", "🎮 Game night", "🍽️ Supper club"];
   return (
     <div className="app">
       {/* Quiet top bar: brand left, sign-in right - the hero carries the page. */}
@@ -364,13 +364,14 @@ function Landing() {
         {!DEV_AUTH && <a href="/sign-in" className="btn ghost sm" data-testid="sign-in">Sign in</a>}
       </nav>
       <div className="land">
-        <h1 className="land-title">Hangouts,<br />handled.</h1>
+        <h1 className="land-title">Your weekly thing,<br />handled.</h1>
         <p className="land-sub">
-          One link finds the time everyone can make — friends vote with no app,
-          no account, and the plan locks itself in.
+          Book club, run club, game night, the jam — one link finds when the
+          whole group is free, locks the winning dates as a series, and keeps
+          the streak alive.
         </p>
         <div className="land-cta">
-          <a href="/start" className="btn land-go" data-testid="start-plan">Start a plan</a>
+          <a href="/start" className="btn land-go" data-testid="start-plan">Get your link</a>
         </div>
         <p className="land-micro">Free · no account needed</p>
         <div className="land-showcase" aria-hidden>
@@ -386,8 +387,8 @@ function Landing() {
         </div>
         <div className="land-points">
           <span><b>No app</b> to download</span>
-          <span><b>No account</b> to RSVP</span>
-          <span><b>One link</b>, everyone's in</span>
+          <span><b>No account</b> for the group to RSVP</span>
+          <span><b>A whole series</b> locked at once, not one date</span>
         </div>
         {/* Visible privacy link on the homepage - required for Google OAuth
             app verification (a crawler-only link doesn't count). */}

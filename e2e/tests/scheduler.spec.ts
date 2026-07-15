@@ -2015,10 +2015,10 @@ test.describe("scheduler", () => {
     // /landing is the dev-only alias (no signed-out state exists in the
     // hermetic stack, so the landing is otherwise unreachable here).
     await page.goto("/landing");
-    await expect(page.locator(".land-title")).toContainText("Hangouts");
+    await expect(page.locator(".land-title")).toContainText("weekly thing");
     await expect(page.locator(".land-shot")).toHaveCount(2); // event page + availability heatmap
     await expect(page.getByTestId("start-plan")).toBeVisible();
-    await expect(page.locator(".land-points")).toContainText("One link");
+    await expect(page.locator(".land-points")).toContainText("whole series");
   });
 
   test("zero-signup: start a plan from scratch, share-ready", async ({ browser }) => {
