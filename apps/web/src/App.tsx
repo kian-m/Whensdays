@@ -200,6 +200,10 @@ function storedGuest(): GuestAuth | null {
 // round-trip. `routing="virtual"` keeps every step inside this one component
 // (no URL sub-paths / catch-all route needed).
 function AuthPage({ kind }: { kind: "in" | "up" }) {
+  // An invite link's "Log in" passes where to land after auth. Same-origin
+  // paths only - anything else falls back to "/" (open-redirect guard).
+  const raw = new URLSearchParams(window.location.search).get("redirect_url") || "/";
+  const dest = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
   return (
     <div className="app">
       <nav className="nav">
@@ -207,8 +211,8 @@ function AuthPage({ kind }: { kind: "in" | "up" }) {
       </nav>
       <div style={{ display: "grid", placeItems: "center", padding: "1.5rem 0" }}>
         {kind === "in"
-          ? <SignIn routing="virtual" signUpUrl="/sign-up" fallbackRedirectUrl="/" />
-          : <SignUp routing="virtual" signInUrl="/sign-in" fallbackRedirectUrl="/" />}
+          ? <SignIn routing="virtual" signUpUrl="/sign-up" fallbackRedirectUrl={dest} />
+          : <SignUp routing="virtual" signInUrl="/sign-in" fallbackRedirectUrl={dest} />}
       </div>
     </div>
   );
@@ -320,6 +324,17 @@ function GuestJoin({ eventId, onJoined }: { eventId: string | null; onJoined: (a
           <button className="btn" data-testid="guest-join">Join</button>
         </form>
         {err && <p className="err">{err}</p>}
+        {/* Existing users shouldn't have to join as a guest: sign in and land
+            right back on this invite. */}
+        {!DEV_AUTH && (
+          <p className="muted small" style={{ margin: 0 }}>
+            Already have an account?{" "}
+            <a data-testid="guest-login" style={{ textDecoration: "underline" }}
+              href={`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`}>
+              Log in
+            </a>
+          </p>
+        )}
       </div>
     </div>
   );
