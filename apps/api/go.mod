@@ -5,7 +5,7 @@ go 1.25.7
 require (
 	github.com/clerk/clerk-sdk-go/v2 v2.7.0
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/posthog/posthog-go v1.17.5
+	github.com/posthog/posthog-go v1.19.0
 	github.com/pressly/goose/v3 v3.27.2
 	golang.org/x/image v0.44.0
 )
