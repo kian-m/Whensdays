@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
+	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -668,6 +671,22 @@ func (s *server) startNotificationFlusher(ctx context.Context) {
 			s.flushActivityDigests(ctx)
 		}
 	}
+}
+
+// handleCronFlush drains the activity-digest queue on demand - CRON_KEY-gated,
+// so it can run from Cloud Scheduler. This is what lets the service scale to
+// zero (min-instances=0): the in-process ticker only fires while an instance
+// happens to be warm, but a scheduler poke both WAKES the instance and flushes,
+// so digests still go out when the app is otherwise asleep. Idempotent +
+// multi-instance-safe (DrainDueNotifications claims rows atomically).
+func (s *server) handleCronFlush(w http.ResponseWriter, r *http.Request) {
+	key := os.Getenv("CRON_KEY")
+	if key == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Cron-Key")), []byte(key)) != 1 {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	s.flushActivityDigests(r.Context())
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *server) flushActivityDigests(ctx context.Context) {

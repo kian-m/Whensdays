@@ -2392,6 +2392,10 @@ test.describe("scheduler", () => {
     const noKey = await request.post("/api/cron/reminders");
     expect(noKey.status()).toBe(401); // no CRON_KEY configured/matched
     expect((await request.post("/api/cron/analytics")).status()).toBe(401);
+    expect((await request.post("/api/cron/flush")).status()).toBe(401);
+    // With the key, the flush endpoint drains the digest queue and returns ok.
+    const ok = await request.post("/api/cron/flush", { headers: { "X-Cron-Key": "e2e-cron-key" } });
+    expect(ok.ok()).toBeTruthy();
   });
 
   test("intent links on scheduled events", async ({ page }) => {

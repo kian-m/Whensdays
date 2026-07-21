@@ -38,17 +38,19 @@ jobs:
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
       - name: Deploy to Cloud Run
         run: |
-          # min-instances 1 + cpu-boost kill cold starts (the biggest perceived-
-          # latency source for a scale-to-zero API). Costs a few $/mo of idle —
-          # speed outranks hosting cost in this repo's priorities; set back to 0
-          # to return to ~$0 idle.
+          # SCALE TO ZERO (min-instances 0): idle cost ~$0. A warm instance
+          # (min-instances 1) bills ~24h/day; pre-launch that's not worth it.
+          # cpu-boost still softens the cold start. The digest flusher no longer
+          # needs a warm instance - a Cloud Scheduler job hits POST /api/cron/
+          # flush (~10 min) to drain the queue (see notifications.go). Set
+          # min-instances back to 1 when real traffic makes cold starts hurt.
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
             --platform managed \
             --allow-unauthenticated \
-            --min-instances 1 \
+            --min-instances 0 \
             --max-instances 2 \
             --cpu-boost \
             --port 8080 \
