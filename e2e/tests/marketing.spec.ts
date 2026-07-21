@@ -122,10 +122,10 @@ test.describe("marketing screenshots", () => {
     await page.waitForTimeout(150);
     await shot("02-heatmap.png");
 
-    // SHOT 3 - a date being selected: tap the two hottest cells, they become
-    // picked chips; keep the heatmap + picks both in frame.
+    // SHOT 3 - ONE winning time picked: tap the single hottest cell (not two -
+    // two back-to-back dates read as "scheduling two events" and confused
+    // people). One outlined cell + one picked chip = "here's the time."
     await page.getByTestId(`grw-pick-${dates[2]}-evening`).click();
-    await page.getByTestId(`grw-pick-${dates[4]}-evening`).click();
     await page.waitForSelector('[data-testid="picked-cells"] button');
     await scrollTo('[data-testid="general-results"]');
     await page.waitForTimeout(150);
@@ -137,5 +137,62 @@ test.describe("marketing screenshots", () => {
     await page.waitForSelector('[data-testid="event-title"]');
     await page.evaluate(() => window.scrollTo(0, 0));
     await shot("04-hero.png");
+
+    // SHOT 5 - MONTH scope, a SPREAD recurring series: everyone marks a month
+    // of availability, the host schedules three dates on different weeks
+    // (Tue wk1, Wed wk2, Thu wk3) at once - the recurring-group superpower.
+    // ?as=demo-user resets the dev user (SHOT 4 left it as maya) so demo-user
+    // hosts this event and gets the results view below.
+    await page.goto("/?as=demo-user");
+    await page.getByTestId("new-event").click();
+    await page.getByTestId("event-title").fill("Improv practice 🎭");
+    await page.getByTestId("type-practice").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("loc-host").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("sched-general").click();
+    await page.getByTestId("scope-month").click();
+    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("create-event").click();
+    await page.waitForSelector('[data-testid="event-title"]');
+    const mid = page.url().split("/e/")[1];
+
+    // The three target dates: the Tuesday of week 1, Wednesday of week 2,
+    // Thursday of week 3, inside the event's 28-day answer window. (Any 7
+    // consecutive days contain exactly one of each weekday.)
+    const targets: string[] = await page.evaluate(async (mid) => {
+      const ev = await (await fetch(`/api/events/${mid}`, { headers: { "X-Dev-User": "demo-user" } })).json();
+      const s = new Date(ev.event.created_at);
+      const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const dayN = (i: number) => new Date(s.getFullYear(), s.getMonth(), s.getDate() + i);
+      const pick = (from: number, to: number, weekday: number) => {
+        for (let i = from; i <= to; i++) if (dayN(i).getDay() === weekday) return ymd(dayN(i));
+        return ymd(dayN(from));
+      };
+      return [pick(0, 6, 2), pick(7, 13, 3), pick(14, 20, 4)]; // Tue, Wed, Thu
+    }, mid);
+
+    // Everyone RSVPs + marks those three evenings free (a couple afternoons for
+    // texture). The month heatmap shows ONLY rows with votes -> a clean 3-row grid.
+    await page.evaluate(async ({ mid, people, targets }) => {
+      for (let i = 0; i < people.length; i++) {
+        const [handle, name] = people[i];
+        const h = { "Content-Type": "application/json", "X-Dev-User": handle };
+        await fetch("/api/profile", { method: "PUT", headers: h, body: JSON.stringify({ display_name: name, handle }) });
+        await fetch(`/api/events/${mid}/rsvp`, { method: "POST", headers: h, body: JSON.stringify({ rsvp: "going" }) });
+        const slots = targets.map((day) => ({ day, daypart: "evening" }));
+        if (i % 2 === 0) slots.push({ day: targets[0], daypart: "afternoon" }, { day: targets[2], daypart: "afternoon" });
+        await fetch(`/api/events/${mid}/general-votes`, { method: "POST", headers: h, body: JSON.stringify({ day_slots: slots }) });
+      }
+    }, { mid, people: PEOPLE, targets });
+
+    // Host view: pick all three evenings -> "Schedule 3 dates" as one series.
+    await page.goto(`/e/${mid}?as=demo-user`);
+    await page.waitForSelector('[data-testid="gr-month-heat"]');
+    for (const day of targets) await page.getByTestId(`grm-pick-${day}-evening`).click();
+    await page.waitForSelector('[data-testid="picked-cells"] button');
+    await scrollTo('[data-testid="general-results"]');
+    await page.waitForTimeout(150);
+    await shot("05-month-series.png");
   });
 });
