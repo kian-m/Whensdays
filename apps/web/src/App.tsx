@@ -370,7 +370,7 @@ function Landing() {
   useEffect(() => {
     analytics.reset();
   }, []);
-  const showcase = ["📚 Book club", "🎲 D&D night", "🏃 Run club", "🎭 Improv jam", "🎮 Game night", "🍽️ Dinner parties"];
+  const showcase = ["📚 Book club", "🎲 D&D night", "🏃 Run club", "🎤 Karaoke night", "🎮 Game night", "🍽️ Dinner parties"];
   return (
     <div className="app">
       {/* Quiet top bar: brand left, sign-in right - the hero carries the page. */}
@@ -381,7 +381,7 @@ function Landing() {
       <div className="land">
         <h1 className="land-title">Your weekly meet ups,<br />handled.</h1>
         <p className="land-sub">
-          Book club, run club, game night, the jam — one link finds when the
+          Book club, run club, game night, karaoke - one link finds when the
           whole group is free, locks the winning dates as a series, and keeps
           the streak alive.
         </p>
@@ -405,9 +405,17 @@ function Landing() {
           <span><b>No account</b> for the group to RSVP</span>
           <span><b>A whole series</b> locked at once, not one date</span>
         </div>
+        {/* Support: a friendly line above the legal links (kept separate so
+            feedback doesn't read as fine print). Subject prefill aids triage. */}
+        <p className="muted small" style={{ textAlign: "center", marginTop: "2.4rem" }}>
+          Questions, feedback, or something broken?{" "}
+          <a href="mailto:support@whensdays.com?subject=Whensdays%20support" style={{ textDecoration: "underline" }}>
+            support@whensdays.com
+          </a>
+        </p>
         {/* Visible privacy link on the homepage - required for Google OAuth
             app verification (a crawler-only link doesn't count). */}
-        <p className="muted small" style={{ textAlign: "center", marginTop: "2.4rem" }}>
+        <p className="muted small" style={{ textAlign: "center", marginTop: "0.5rem" }}>
           <a href="/privacy/" style={{ textDecoration: "underline" }}>Privacy policy</a>{" · "}
           <a href="/terms/" style={{ textDecoration: "underline" }}>Terms</a>{" · "}
           <a href="/cookies/" style={{ textDecoration: "underline" }}>Cookies</a>

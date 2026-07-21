@@ -2065,6 +2065,8 @@ test.describe("scheduler", () => {
     await expect(page.locator(".land-shot")).toHaveCount(2); // event page + availability heatmap
     await expect(page.getByTestId("start-plan")).toBeVisible();
     await expect(page.locator(".land-points")).toContainText("whole series");
+    // Support contact in the footer.
+    await expect(page.locator('a[href^="mailto:support@whensdays.com"]')).toBeVisible();
   });
 
   test("zero-signup: start a plan from scratch, share-ready", async ({ browser }) => {
@@ -2592,6 +2594,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("avail-cell-2-noon").click();
     await page.getByTestId("save-availability").click();
     await expect(page.getByText("Availability saved ✓")).toBeVisible();
+    // In-app support contact (where signed-in users look for help).
+    await expect(page.getByTestId("help-card").locator('a[href^="mailto:support@whensdays.com"]')).toBeVisible();
   });
 
   test("availability: recurring weekly and paginated specific dates", async ({ page }) => {

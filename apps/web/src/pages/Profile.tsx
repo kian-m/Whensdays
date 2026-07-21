@@ -395,6 +395,19 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
 
       <CalendarConnections />
 
+      {/* Support: signed-in users look here for help, not the landing footer. */}
+      <div className="card" data-testid="help-card">
+        <div className="section-h" style={{ marginTop: 0 }}>Help &amp; feedback</div>
+        <p className="muted small" style={{ margin: 0 }}>
+          Having trouble, want to report something, or have an idea? Email{" "}
+          <a href="mailto:support@whensdays.com?subject=Whensdays%20support"
+            style={{ textDecoration: "underline", color: "var(--accent)" }}>
+            support@whensdays.com
+          </a>{" "}
+          and a human will read it.
+        </p>
+      </div>
+
       <Toast msg={savedMsg} onDone={() => setSavedMsg(null)} />
     </div>
   );
