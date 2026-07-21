@@ -49,6 +49,7 @@ type server struct {
 	klipyKey  string
 	klipyStub bool
 	geoStub   bool
+	wgisStub  bool
 	alerts    *alerter
 }
 
@@ -110,6 +111,7 @@ func main() {
 		klipyKey:  os.Getenv("KLIPY_API_KEY"),
 		klipyStub: os.Getenv("KLIPY_MODE") == "stub",
 		geoStub:   os.Getenv("GEO_MODE") == "stub",
+		wgisStub:  os.Getenv("WGIS_MODE") == "stub",
 	}
 	// Email volume telemetry: every send becomes a PostHog event so the daily
 	// digest can show usage against the provider's free tier.
@@ -150,6 +152,7 @@ func main() {
 	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
 	mux.HandleFunc("POST /api/cron/analytics", s.handleCronAnalytics) // CRON_KEY-gated daily digest
 	mux.HandleFunc("POST /api/cron/ucb-sync", s.handleCronUCBSync)    // CRON_KEY-gated venue-schedule sync (see ucbsync.go)
+	mux.HandleFunc("POST /api/cron/wgis-sync", s.handleCronWGISSync)  // CRON_KEY-gated WGIS feed sync (see wgissync.go)
 	// Follows + personal feed.
 	mux.Handle("GET /api/feed", auth(http.HandlerFunc(s.handleFeed)))
 	mux.Handle("GET /api/event-types", auth(http.HandlerFunc(s.handleListCustomTypes)))

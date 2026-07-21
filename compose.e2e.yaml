@@ -25,6 +25,7 @@ services:
       CALENDAR_MODE: stub # stubbed calendar providers — hermetic test only
       KLIPY_MODE: stub # deterministic gif picker, no key/network
       GEO_MODE: stub # deterministic address type-ahead, no network
+      WGIS_MODE: stub # fixed WGIS feed, no network (venue sync test)
       CRON_KEY: e2e-cron-key # lets the spec exercise key-gated cron routes (no-key posts still 401)
       RUN_MIGRATIONS: "true" # apply schema on boot
     depends_on:
