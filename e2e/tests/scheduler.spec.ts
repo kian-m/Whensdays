@@ -2226,6 +2226,12 @@ test.describe("scheduler", () => {
     await insts.nth(2).click(); // 1st AND 3rd Monday
     await expect(page.getByTestId("picked-cells")).toContainText(nmShort);
     await expect(page.getByTestId("picked-cells").locator("button")).toHaveCount(2);
+    // ONE time control re-times every picked date at once (evening default is
+    // 7 PM; nudge it to 6:30 and both picks follow).
+    await expect(page.getByTestId("picked-cells")).toContainText("7:00 PM");
+    await page.getByTestId("pick-time").fill("18:30");
+    await expect(page.getByTestId("picked-cells")).toContainText("6:30 PM");
+    await expect(page.getByTestId("picked-cells")).not.toContainText("7:00 PM");
     // "All" fills the month; "None" clears it - back to manual for the rest.
     await page.getByTestId("inst-all").click();
     expect(await page.getByTestId("picked-cells").locator("button").count()).toBeGreaterThanOrEqual(4);

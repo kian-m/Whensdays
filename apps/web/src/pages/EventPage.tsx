@@ -1486,18 +1486,37 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
   // types times manually) - one or several. Extra dates become a series with
   // everyone (RSVPs intact) carried onto each occurrence.
   const [moreWhens, setMoreWhens] = useState<string[]>([]);
-  // picked: heat-cell selections, cellKey -> datetime-local (daypart mapped to
-  // a sensible start hour; the host can still fine-tune via the manual inputs).
+  // picked: heat-cell selections, cellKey -> datetime-local. A daypart cell
+  // ("evening") maps to a representative hour, but the host sets ONE clock time
+  // for the whole set via pickTime below - it applies to every picked date.
   const [picked, setPicked] = useState<Map<string, string>>(new Map());
+  // Daypart scopes let the host pick a "time of day"; dates scope carries exact
+  // clock times already, so the uniform-time control only shows for the former.
+  const daypartScope = scope === "week" || scope === "month" || scope === "general";
+  // Uniform start time for every picked cell ("" = follow each cell's daypart
+  // default until the host adjusts it). Once set, new picks adopt it too.
+  const [pickTime, setPickTime] = useState<string>("");
+  const timeOf = (dt: string) => dt.slice(11, 16);     // "…THH:MM" -> "HH:MM"
+  const withTime = (dt: string, hm: string) => dt.slice(0, 11) + hm;
   const canPick = data.can_manage;
   const togglePick = (key: string, dtLocal: string) => {
     if (!canPick) return;
     setPicked((m) => {
       const next = new Map(m);
-      if (next.has(key)) next.delete(key);
-      else next.set(key, dtLocal);
+      if (next.has(key)) { next.delete(key); return next; }
+      // New pick adopts the shared time: the host's explicit pickTime, else the
+      // time already on the existing picks, else this cell's own daypart hour.
+      const uniform = daypartScope ? (pickTime || (m.size > 0 ? timeOf([...m.values()][0]) : timeOf(dtLocal))) : timeOf(dtLocal);
+      next.set(key, withTime(dtLocal, uniform));
       return next;
     });
+  };
+  // The time shown in the control + written onto picks (once there are any).
+  const effPickTime = pickTime || (picked.size > 0 ? timeOf([...picked.values()][0]) : "19:00");
+  // Adjusting it re-times EVERY picked date (dates keep their day, share the hour).
+  const setUniformTime = (hm: string) => {
+    setPickTime(hm);
+    setPicked((m) => new Map([...m].map(([k, v]) => [k, withTime(v, hm)])));
   };
   const cellPickStyle = (key: string): React.CSSProperties =>
     picked.has(key)
@@ -1754,13 +1773,26 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
         {canPick ? " - or type times manually:" : ":"}
       </div>
       {picked.size > 0 && (
-        <div className="row wrap" style={{ gap: 6 }} data-testid="picked-cells">
-          {[...picked.entries()].map(([key, v]) => (
-            <button key={key} type="button" className="chip sm on" data-testid={`picked-${key}`}
-              onClick={() => togglePick(key, v)} title="Tap to remove">
-              {fmtDateTime(new Date(v).toISOString())} ✕
-            </button>
-          ))}
+        <div className="stack" style={{ gap: 8 }}>
+          {/* One time for every picked date - the recurring-series case. Change
+              it here and all the chips below re-time together. Per-date
+              precision still lives in the manual datetime inputs. */}
+          {daypartScope && canPick && (
+            <label className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <span className="muted small">At</span>
+              <input type="time" className="input" style={{ width: "auto" }} data-testid="pick-time"
+                value={effPickTime} onChange={(ev) => ev.target.value && setUniformTime(ev.target.value)} />
+              <span className="muted small">· applies to all {picked.size} picked date{picked.size > 1 ? "s" : ""}</span>
+            </label>
+          )}
+          <div className="row wrap" style={{ gap: 6 }} data-testid="picked-cells">
+            {[...picked.entries()].map(([key, v]) => (
+              <button key={key} type="button" className="chip sm on" data-testid={`picked-${key}`}
+                onClick={() => togglePick(key, v)} title="Tap to remove">
+                {fmtDateTime(new Date(v).toISOString())} ✕
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div className="row" style={{ gap: 6 }}>
