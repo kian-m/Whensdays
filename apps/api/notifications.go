@@ -655,23 +655,6 @@ func collapseActivity(rows []db.DrainDueNotificationsRow) map[string][]digestLin
 	return out
 }
 
-// startNotificationFlusher drains + sends activity digests on a fixed cadence.
-// Safe with multiple instances: DrainDueNotifications claims rows atomically.
-func (s *server) startNotificationFlusher(ctx context.Context) {
-	if !s.notify.Enabled() {
-		return
-	}
-	t := time.NewTicker(5 * time.Minute)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			s.flushActivityDigests(ctx)
-		}
-	}
-}
 
 // handleCronFlush drains the activity-digest queue on demand - CRON_KEY-gated,
 // so it can run from Cloud Scheduler. This is what lets the service scale to

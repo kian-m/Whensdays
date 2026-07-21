@@ -80,11 +80,14 @@ func main() {
 	if poolCfg.MaxConns < 16 {
 		poolCfg.MaxConns = 16
 	}
-	// Keep a warm floor: opening a fresh Neon connection costs ~100ms (TCP+TLS
-	// +auth), which the fan-out otherwise pays on every burst after idle.
-	if poolCfg.MinConns < 4 {
-		poolCfg.MinConns = 4
-	}
+	// NEON COST: MinConns stays 0 (no warm floor) and idle connections close
+	// quickly, so once a request finishes the pool goes empty and Neon's compute
+	// can AUTOSUSPEND. A warm floor + the default 1-min health check pinged Neon
+	// every 60s and kept it billing 24/7. The fan-out re-opens connections on the
+	// next burst (~100ms cold) - a fine trade for a mostly-idle pre-launch DB.
+	poolCfg.MinConns = 0
+	poolCfg.MaxConnIdleTime = 30 * time.Second
+	poolCfg.HealthCheckPeriod = time.Hour // effectively off; nothing to keep warm
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		logger.Error("db connect", "err", err)
@@ -138,6 +141,11 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
+	// Same no-DB health check, but UNDER /api/ so it routes through the prod
+	// proxy (which only forwards /api/*). Point the uptime check here, NOT at a
+	// DB-querying route like /api/discover - the latter woke Neon every few
+	// minutes and blocked its autosuspend (a big free-tier compute drain).
+	mux.HandleFunc("GET /api/health", s.handleHealth)
 	// Unauthenticated by design: the event id is the capability (invite link).
 	mux.Handle("POST /api/csp-report", readLimit(http.HandlerFunc(s.handleCSPReport))) // browser CSP beacon
 	mux.Handle("POST /api/guest/join", writeLimit(http.HandlerFunc(s.handleGuestJoin)))
@@ -246,11 +254,11 @@ func main() {
 	mux.Handle("GET /api/flags", auth(http.HandlerFunc(s.handleFlags)))
 
 	port := envOr("API_PORT", "8080")
-	// Activity emails (comments/RSVPs) are digested: the flusher drains the
-	// notification queue every 5 minutes and sends one email per host instead of
-	// per action. No-ops when email is disabled. min-instances=1 keeps it alive;
-	// the drain is atomic so a second instance can't double-send.
-	go s.startNotificationFlusher(context.Background())
+	// Activity emails (comments/RSVPs) are digested and drained by the
+	// CRON_KEY-gated POST /api/cron/flush (Cloud Scheduler). We deliberately do
+	// NOT run an in-process ticker: it queried Neon every 5 minutes and kept the
+	// DB from ever autosuspending (a big free-tier compute drain). The cron both
+	// wakes the instance and flushes; the drain is atomic (multi-instance safe).
 
 	srv := &http.Server{
 		Addr: ":" + port,

@@ -2404,6 +2404,8 @@ test.describe("scheduler", () => {
     // With the key, the flush endpoint drains the digest queue and returns ok.
     const ok = await request.post("/api/cron/flush", { headers: { "X-Cron-Key": "e2e-cron-key" } });
     expect(ok.ok()).toBeTruthy();
+    // The no-DB health endpoint (uptime-check target) is open and cheap.
+    expect((await request.get("/api/health")).ok()).toBeTruthy();
   });
 
   test("intent links on scheduled events", async ({ page }) => {
