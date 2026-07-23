@@ -288,6 +288,11 @@ SELECT start_min, end_min, slot_min
 FROM event_poll_time_grid
 WHERE event_id = $1;
 
+-- name: SetEventScope :exec
+-- Configure a general poll's scope after creation (the host finishes setup from
+-- the event page). Only flips an as-yet-unconfigured ('unset') poll.
+UPDATE events SET general_scope = $2 WHERE id = $1 AND general_scope = 'unset';
+
 -- ========================= attendees ==============================
 
 -- name: UpsertRsvp :one

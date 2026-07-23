@@ -2053,6 +2053,22 @@ func (q *Queries) SetEventLook(ctx context.Context, arg SetEventLookParams) erro
 	return err
 }
 
+const setEventScope = `-- name: SetEventScope :exec
+UPDATE events SET general_scope = $2 WHERE id = $1 AND general_scope = 'unset'
+`
+
+type SetEventScopeParams struct {
+	ID           pgtype.UUID `json:"id"`
+	GeneralScope string      `json:"general_scope"`
+}
+
+// Configure a general poll's scope after creation (the host finishes setup from
+// the event page). Only flips an as-yet-unconfigured ('unset') poll.
+func (q *Queries) SetEventScope(ctx context.Context, arg SetEventScopeParams) error {
+	_, err := q.db.Exec(ctx, setEventScope, arg.ID, arg.GeneralScope)
+	return err
+}
+
 const setPollTimeGrid = `-- name: SetPollTimeGrid :exec
 INSERT INTO event_poll_time_grid (event_id, start_min, end_min, slot_min)
 VALUES ($1, $2, $3, $4)

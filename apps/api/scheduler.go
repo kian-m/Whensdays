@@ -691,11 +691,16 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The scope shapes what a general poll asks ("this week" / "this month" /
-	// "generally"); it's meaningless for other modes, so normalize those.
-	if in.GeneralScope == "" || in.SchedulingMode != "general" {
+	// "generally" / "pick days"); it's meaningless for other modes, so normalize
+	// those to "general". For a general poll the wizard no longer asks the scope
+	// at creation - the host completes that setup step from the event page - so a
+	// general poll with no scope is created "unset" and configured later.
+	if in.SchedulingMode != "general" {
 		in.GeneralScope = "general"
+	} else if in.GeneralScope == "" {
+		in.GeneralScope = "unset"
 	}
-	if !oneOf(in.GeneralScope, "week", "month", "general", "dates") {
+	if !oneOf(in.GeneralScope, "week", "month", "general", "dates", "unset") {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid general_scope"})
 		return
 	}
@@ -990,6 +995,111 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		"occurrences":     in.RepeatCount,
 	})
 	writeJSON(w, http.StatusCreated, ev)
+}
+
+// handlePollSetup configures a general poll's scope AFTER creation. The create
+// wizard was slimmed to two screens and no longer asks the scope (it was a heavy
+// step: a chip row + a month calendar + time-window selects), so a general poll
+// is born "unset" and the host finishes this one setup step from the fresh event
+// page. Manager-only; valid only while the poll is still unset.
+func (s *server) handlePollSetup(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	id, ok := parseUUID(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
+		return
+	}
+	ev, role, err := s.eventAndRole(r.Context(), id, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err != nil {
+		s.internal(w, "poll setup: load", err)
+		return
+	}
+	if !isManager(role) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not allowed"})
+		return
+	}
+	if ev.SchedulingMode != "general" {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "not a general poll"})
+		return
+	}
+	if ev.Status == "cancelled" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "event is cancelled"})
+		return
+	}
+	if ev.GeneralScope != "unset" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "poll is already set up"})
+		return
+	}
+	var in struct {
+		GeneralScope string   `json:"general_scope"`
+		PollDays     []string `json:"poll_days"`
+		GridStart    int      `json:"grid_start"`
+		GridEnd      int      `json:"grid_end"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if !oneOf(in.GeneralScope, "week", "month", "general", "dates") {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid general_scope"})
+		return
+	}
+	// 'dates' scope: the host hand-picks specific days + a time window (mirrors
+	// the validation in handleCreateEvent - kept in step with it).
+	var pollDays []pgtype.Date
+	gridStart, gridEnd, gridSlot := 540, 1260, 30 // 9am-9pm, 30-min slots (defaults)
+	if in.GeneralScope == "dates" {
+		if in.GridStart != 0 || in.GridEnd != 0 {
+			gridStart, gridEnd = in.GridStart, in.GridEnd
+		}
+		gridStart -= gridStart % gridSlot
+		gridEnd -= gridEnd % gridSlot
+		if gridStart < 0 || gridEnd > 1440 || gridEnd-gridStart < gridSlot || gridEnd-gridStart > 1440 {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid time window"})
+			return
+		}
+		if len(in.PollDays) < 1 || len(in.PollDays) > 60 {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "pick 1-60 days"})
+			return
+		}
+		seen := map[string]bool{}
+		for _, d := range in.PollDays {
+			t, perr := time.Parse("2006-01-02", d)
+			if perr != nil || seen[d] {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid day"})
+				return
+			}
+			if os.Getenv("AUTH_MODE") != "dev" && t.Before(time.Now().Truncate(24*time.Hour).AddDate(0, 0, -1)) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "days can't be in the past"})
+				return
+			}
+			seen[d] = true
+			pollDays = append(pollDays, pgtype.Date{Time: t, Valid: true})
+		}
+	}
+	if err := s.queries.SetEventScope(r.Context(), db.SetEventScopeParams{ID: id, GeneralScope: in.GeneralScope}); err != nil {
+		s.internal(w, "set event scope", err)
+		return
+	}
+	if in.GeneralScope == "dates" {
+		for _, d := range pollDays {
+			if err := s.queries.AddPollDay(r.Context(), db.AddPollDayParams{EventID: id, Day: d}); err != nil {
+				s.internal(w, "add poll day", err)
+				return
+			}
+		}
+		if err := s.queries.SetPollTimeGrid(r.Context(), db.SetPollTimeGridParams{
+			EventID: id, StartMin: int32(gridStart), EndMin: int32(gridEnd), SlotMin: int32(gridSlot),
+		}); err != nil {
+			s.internal(w, "set poll grid", err)
+			return
+		}
+	}
+	s.analytics.Capture(uid, "poll_setup", map[string]any{"event_id": r.PathValue("id"), "general_scope": in.GeneralScope})
+	writeJSON(w, http.StatusOK, map[string]string{"general_scope": in.GeneralScope})
 }
 
 func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {

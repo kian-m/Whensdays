@@ -57,6 +57,23 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("new-event")).toBeVisible();
   }
 
+  // The slimmed 2-screen create flow builds a general poll WITHOUT a scope; the
+  // host completes "what does this poll ask?" on the fresh event page (the scope
+  // picker relocated out of the wizard). This drives that one setup step; call it
+  // right after create-event, while still in the host view.
+  async function finishGeneralSetup(
+    page: import("@playwright/test").Page,
+    scope: "week" | "month" | "general" | "dates",
+    opts: { days?: string[]; next?: number } = {},
+  ) {
+    await expect(page.getByTestId("general-setup")).toBeVisible();
+    await page.getByTestId(`scope-${scope}`).click();
+    for (let i = 0; i < (opts.next ?? 0); i++) await page.getByTestId("cal-next").click();
+    for (const d of opts.days ?? []) await page.getByTestId(`cal-day-${d}`).click();
+    await page.getByTestId("poll-setup-save").click();
+    await expect(page.getByTestId("general-setup")).toBeHidden();
+  }
+
   test("create an event, respond as a guest, host sees preferences", async ({ page }) => {
     await ensureProfile(page);
 
@@ -64,12 +81,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-08-01T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
 
     // Lands on the event page in the host view (share link is host-only).
@@ -104,18 +117,21 @@ test.describe("scheduler", () => {
     const title = `Hangout ${test.info().testId}`;
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-other").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-other").click();
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
 
     await expect(page.getByTestId("event-title")).toHaveText(title);
+    // The poll ships unset - the host finishes setup on the event page (this was
+    // the general-scope picker, moved out of the wizard). Default "generally".
+    await finishGeneralSetup(page, "general");
 
     // Preview as a guest: pick a month and a per-day time cell (Sat evening), save.
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
+    // Voting is gated behind the RSVP and collapsed - expand it to reach the grid.
+    await page.getByTestId("vote-summary").click();
     await page.getByTestId("gp-month-0").click();
     await page.getByTestId("gp-cell-6-evening").click();
     // Slide-to-paint works on poll grids too: one drag marks a row of cells.
@@ -145,6 +161,50 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("responder-dots")).toContainText("Tap someone");
   });
 
+  test("slimmed create flow: two screens, no emoji picker, More sheet, post-create poll setup", async ({ page }) => {
+    await ensureProfile(page);
+    await page.getByTestId("new-event").click();
+
+    // Screen 1 fits the essentials: title, a 5-chip type row, a segmented
+    // scheduling control (poll is the default), and one Create CTA. The old
+    // step-progress bar is gone.
+    await expect(page.getByTestId("wiz-progress")).toHaveCount(0);
+    await expect(page.getByTestId("sched-poll")).toHaveClass(/on/); // default
+    // The dense optional stuff is behind text links, not always-on UI.
+    await expect(page.getByTestId("go-details")).toBeVisible();
+
+    // The "More" sheet lists non-primary presets + a name box - and NO emoji
+    // picker anywhere (it was deleted; every type gets a system icon).
+    await page.getByTestId("type-more").click();
+    await expect(page.getByTestId("type-sheet")).toBeVisible();
+    await expect(page.getByTestId("sheet-type-camping")).toBeVisible();
+    await expect(page.getByTestId("newtype-emojis")).toHaveCount(0);
+    await expect(page.locator('[data-testid^="newtype-emoji-"]')).toHaveCount(0);
+    await page.getByTestId("sheet-type-camping").click();
+    await expect(page.getByTestId("type-sheet")).toHaveCount(0);
+    await expect(page.getByTestId("type-chosen")).toContainText("Camping");
+
+    // Create a "Not sure yet" (general) poll - no scope is chosen at creation.
+    const title = `Slim ${test.info().testId}`;
+    await page.getByTestId("event-title").fill(title);
+    await page.getByTestId("sched-general").click();
+    await expect(page.getByTestId("general-note")).toBeVisible();
+    await page.getByTestId("create-event").click();
+    await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // The event page prompts the host to finish setup; a guest can't vote yet.
+    await expect(page.getByTestId("general-setup")).toBeVisible();
+    await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("rsvp-going").click();
+    await expect(page.getByTestId("vote-details")).toHaveCount(0); // nothing to vote on
+    await page.getByTestId("preview-toggle").click();
+
+    // Host completes setup → the prompt clears and voting opens.
+    await finishGeneralSetup(page, "general");
+    await page.getByTestId("preview-toggle").click();
+    await expect(page.getByTestId("vote-details")).toBeVisible();
+  });
+
   test("pick-days poll: host chooses dates, guests paint real times", async ({ page }) => {
     await ensureProfile(page);
 
@@ -157,23 +217,27 @@ test.describe("scheduler", () => {
     const title = `Pick days ${test.info().testId}`;
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-other").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-other").click();
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("scope-dates").click();
-    if (rollover) await page.getByTestId("cal-next").click();
-    // Can't advance until at least one day is chosen.
-    await expect(page.getByTestId("wiz-next")).toBeDisabled();
-    await page.getByTestId(`cal-day-${ymd}`).click();
-    await expect(page.getByTestId(`cal-day-${ymd}`)).toHaveClass(/\bon\b/);
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Host finishes setup: "pick days" scope, then the exact day(s) + time window.
+    await expect(page.getByTestId("general-setup")).toBeVisible();
+    await page.getByTestId("scope-dates").click();
+    if (rollover) await page.getByTestId("cal-next").click();
+    // Can't save the poll until at least one day is chosen.
+    await expect(page.getByTestId("poll-setup-save")).toBeDisabled();
+    await page.getByTestId(`cal-day-${ymd}`).click();
+    await expect(page.getByTestId(`cal-day-${ymd}`)).toHaveClass(/\bon\b/);
+    await page.getByTestId("poll-setup-save").click();
+    await expect(page.getByTestId("general-setup")).toBeHidden();
 
     // Preview as a guest and paint real clock times (7:00 & 7:30 PM = 1140/1170).
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("vote-summary").click();
     await page.getByTestId(`gpt-cell-${ymd}-1140`).click();
     await page.getByTestId(`gpt-cell-${ymd}-1170`).click();
     await expect(page.getByTestId(`gpt-cell-${ymd}-1140`)).toHaveClass(/\bon\b/);
@@ -212,6 +276,7 @@ test.describe("scheduler", () => {
     // It's a real-times poll: the guest grid shows actual clock-time cells.
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("vote-summary").click();
     await expect(page.getByTestId("gp-time-grid")).toBeVisible();
     await expect(page.getByTestId(`gpt-cell-${ymd}-1140`)).toBeVisible();
   });
@@ -225,17 +290,15 @@ test.describe("scheduler", () => {
 
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(`Paginate ${test.info().testId}`);
-    await page.getByTestId("type-other").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-other").click();
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("scope-dates").click();
-    await page.getByTestId("cal-next").click(); // → next month
-    for (const d of days) await page.getByTestId(`cal-day-${d}`).click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
+    // Host finishes setup with the 5 next-month days.
+    await finishGeneralSetup(page, "dates", { days, next: 1 });
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("vote-summary").click();
 
     // 5 days > 4/page ⇒ a pager appears; the last day is off the first page and
     // only shows after Later → (proving you don't have to hunt for a scrollbar).
@@ -279,28 +342,31 @@ test.describe("scheduler", () => {
   test("performance preset types + deletable custom types", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();
-    // New presets for the local-scene crowd.
+    // Primary chips for the local-scene crowd sit on Screen 1.
     await expect(page.getByTestId("type-show")).toBeVisible();
     await expect(page.getByTestId("type-practice")).toBeVisible();
-    await expect(page.getByTestId("type-openmic")).toBeVisible();
-    // Save a custom type, then delete it via the chip's ✕.
-    await page.getByTestId("type-add").click();
+    // Less-common presets live behind "More" (not on the primary row).
+    await expect(page.getByTestId("type-openmic")).toHaveCount(0);
+    await page.getByTestId("type-more").click();
+    await expect(page.getByTestId("sheet-type-openmic")).toBeVisible();
+    // The emoji picker is GONE - a custom type is just a name; the system assigns
+    // its icon automatically.
+    await expect(page.getByTestId("newtype-emojis")).toHaveCount(0);
     await page.getByTestId("newtype-name").fill("Jam Sesh");
     await page.getByTestId("newtype-save").click();
     await page.getByTestId("event-title").fill(`Custom del ${test.info().testId}`);
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-08-02T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(`Custom del ${test.info().testId}`);
-    // The saved chip is offered on the next create - delete it.
+    // The saved type is offered again inside the next create's "More" sheet -
+    // delete it there via its ✕.
     await page.goto("/new");
-    await expect(page.getByTestId("custom-jam sesh")).toBeVisible();
+    await page.getByTestId("type-more").click();
+    await expect(page.getByTestId("sheet-custom-jam sesh")).toBeVisible();
     await page.getByTestId("custom-del-jam sesh").click(); // arm
     await page.getByTestId("custom-del-jam sesh").click(); // confirm
-    await expect(page.getByTestId("custom-jam sesh")).toHaveCount(0);
+    await expect(page.getByTestId("sheet-custom-jam sesh")).toHaveCount(0);
   });
 
   test("hero edit-in-place: cover photo + backdrop theme", async ({ page }) => {
@@ -315,6 +381,9 @@ test.describe("scheduler", () => {
     // The Edit affordance lives on the hero card and flips it in place.
     await page.getByTestId("edit-event-open").click();
     await expect(page.getByTestId("hero-edit")).toBeVisible();
+    // The edit form is grouped into single-open sections - the cover/theme live
+    // under "Look".
+    await page.getByTestId("edit-sec-look").click();
     // Upload a square cover (client-resized like avatars).
     const png =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -363,8 +432,10 @@ test.describe("scheduler", () => {
     // Clean up the theme+cover so other shared-user tests see a plain hero, and
     // reschedule - the start time stays editable after the event has a time.
     await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-sec-look").click();
     await page.getByTestId("cover-remove").click();
     await page.getByTestId("theme-none").click();
+    await page.getByTestId("edit-sec-when").click();
     await expect(page.getByTestId("edit-time")).toBeVisible();
     await page.getByTestId("edit-time").fill("2026-10-11T20:30");
     await page.getByTestId("edit-save").click();
@@ -380,12 +451,8 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-party").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-12-01T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
@@ -407,15 +474,13 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-party").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill(dt(2));
+    // The repeat/extra-date controls are collapsed behind a text link now.
+    await page.getByTestId("show-repeat").click();
     // Add a second, non-pattern date (different weekday) → an irregular series.
     await page.getByTestId("add-date").click();
     await page.getByTestId("more-date-0").fill(dt(5));
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -437,7 +502,9 @@ test.describe("scheduler", () => {
     // occurrence picks up the new title (its own date untouched).
     const newTitle = `${title} v2`;
     await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-sec-details").click(); // title lives under "Details"
     await page.getByTestId("edit-title").fill(newTitle);
+    await page.getByTestId("edit-sec-when").click(); // apply-series rides the "When" section
     await page.getByTestId("edit-apply-series").check();
     await page.getByTestId("edit-save").click();
     await expect(page.getByTestId("event-title")).toHaveText(newTitle);
@@ -455,8 +522,6 @@ test.describe("scheduler", () => {
     await expect(page).toHaveURL(/\/new/);
     await expect(page.getByText("What's the plan?")).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId("event-title")).toHaveValue(newTitle, { timeout: 15000 });
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
     await expect(page.getByTestId("sched-poll")).toHaveClass(/on/);
   });
 
@@ -472,12 +537,8 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill(dt(3));
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -598,11 +659,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("group-new-event").click();
     await page.getByTestId("event-title").fill(etitle);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(etitle);
 
@@ -650,16 +707,14 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-party").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     const d = new Date(Date.now() + 3 * 24 * 3600_000);
     const p2 = (n: number) => String(n).padStart(2, "0");
     await page.getByTestId("fixed-time").fill(`${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T19:00`);
-    await page.getByTestId("wiz-next").click();
+    // Capacity lives on the optional "Add details" screen now.
+    await page.getByTestId("go-details").click();
     await page.getByTestId("event-capacity").fill("1");
-    await page.getByTestId("create-event").click();
+    await page.getByTestId("create-event-details").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().split("/e/")[1];
 
@@ -777,18 +832,23 @@ test.describe("scheduler", () => {
     const p2 = (n: number) => String(n).padStart(2, "0");
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-movie").click();
-    // A pasted link in the description must come out clickable.
-    await page.getByTestId("event-desc").fill("Trailer: https://example.com/trailer then hang out");
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-virtual").click();
-    await page.getByTestId("meeting-url").fill("https://meet.google.com/abc-defg-hij");
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-movie").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill(`${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T20:00`);
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("create-event").click();
+    // The online meeting link lives on the optional details screen now.
+    await page.getByTestId("go-details").click();
+    await page.getByTestId("loc-virtual").click();
+    await page.getByTestId("meeting-url").fill("https://meet.google.com/abc-defg-hij");
+    await page.getByTestId("create-event-details").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // Description moved to edit-in-place: a pasted link must come out clickable.
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-sec-details").click();
+    await page.getByTestId("edit-desc").fill("Trailer: https://example.com/trailer then hang out");
+    await page.getByTestId("edit-save").click();
+    await expect(page.getByTestId("hero-edit")).toHaveCount(0);
 
     await expect(page.getByTestId("join-link")).toHaveAttribute("href", "https://meet.google.com/abc-defg-hij");
     await expect(page.getByTestId("join-link")).toContainText("meet.google.com");
@@ -808,15 +868,19 @@ test.describe("scheduler", () => {
     };
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-other").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-other").click();
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("poll-deadline").fill(dt(2));
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().split("/e/")[1];
+    // Finish poll setup, then set a future close date via the hero edit (the
+    // poll-deadline field is offered only for "Poll a few times" on the create
+    // screen; a general poll's deadline is set here).
+    await finishGeneralSetup(page, "general");
+    await page.getByTestId("edit-event-open").click();
+    await page.getByTestId("edit-deadline").fill(dt(2));
+    await page.getByTestId("edit-save").click();
 
     // The hero advertises the close date while the poll is open.
     await expect(page.getByText(/poll closes/i)).toBeVisible();
@@ -849,11 +913,8 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-party").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-poll").click();
     await page.getByTestId("poll-option-0").fill(dt(1, "19:00")); // tomorrow evening
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
@@ -877,7 +938,9 @@ test.describe("scheduler", () => {
       await g.getByTestId("rsvp-going").click();
       await rsvpDone;
       // Cast a vote too - the host's results card only renders once someone
-      // has actually voted (calm-by-default host view).
+      // has actually voted (calm-by-default host view). Voting is gated behind
+      // the RSVP and collapsed, so expand it first.
+      await g.getByTestId("vote-summary").click();
       await g.getByTestId("vote-0-yes").click();
       const voteDone = g.waitForResponse((r) => r.url().includes("/votes") && r.ok());
       await g.getByTestId("save-votes").click();
@@ -910,11 +973,8 @@ test.describe("scheduler", () => {
     for (const [i, when] of [monthDate(-1), monthDate(0)].entries()) {
       await page.goto(`/new?group=${gid}`);
       await page.getByTestId("event-title").fill(`Streak ev${i} ${uniq}`);
-      await page.getByTestId("wiz-next").click();
-      await page.getByTestId("wiz-next").click();
       await page.getByTestId("sched-fixed").click();
       await page.getByTestId("fixed-time").fill(when);
-      await page.getByTestId("wiz-next").click();
       await page.getByTestId("create-event").click();
       await page.getByTestId("event-title").waitFor();
     }
@@ -934,13 +994,10 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-party").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill(dt(3, "19:00"));
+    await page.getByTestId("show-repeat").click(); // end time is behind the disclosure
     await page.getByTestId("fixed-end").fill(dt(3, "22:00"));
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     // Hero shows the range (start – end).
@@ -952,7 +1009,7 @@ test.describe("scheduler", () => {
     await expect(page.getByText(/– 11:00 PM/)).toBeVisible();
   });
 
-  test("pure availability voters (no RSVP) show their real name", async ({ page, browser }) => {
+  test("availability voters show their real name", async ({ page, browser }) => {
     test.skip(!DEV_AUTH, "uses ?as for isolated users");
     await ensureUser(page, "vn1", "Voter Host", "vn1");
     const title = `Voters ${test.info().testId}-${Date.now()}`;
@@ -963,12 +1020,15 @@ test.describe("scheduler", () => {
     await page.getByTestId("event-title").waitFor();
     const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
 
-    // Second user fills availability WITHOUT ever RSVPing.
+    // Second user RSVPs (voting is gated behind the RSVP now) then fills
+    // availability - their real name must surface on the responder dot.
     const ctx = await browser.newContext();
     try {
       const g = await ctx.newPage();
       await ensureUser(g, "vn2", "Norah NoRsvp", "vn2");
       await g.goto(`/e/${id}`);
+      await g.getByTestId("rsvp-maybe").click();
+      await g.getByTestId("vote-summary").click();
       await g.getByTestId("gpw-cell-1-evening").click();
       const saved = g.waitForResponse((r) => r.url().includes("general-votes") && r.ok());
       await g.getByTestId("save-general").click();
@@ -995,13 +1055,10 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-drinks").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill(at(-4)); // started 4h ago...
+    await page.getByTestId("show-repeat").click(); // end time is behind the disclosure
     await page.getByTestId("fixed-end").fill(at(-2));  // ...ended 2h ago
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -1051,12 +1108,8 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-party").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-11-20T18:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -1079,8 +1132,10 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-party").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
+    await page.getByTestId("sched-fixed").click();
+    await page.getByTestId("fixed-time").fill("2026-10-15T19:00");
+    // Address entry lives on the optional details screen now.
+    await page.getByTestId("go-details").click();
     // Address type-ahead: GEO_MODE=stub serves fixed suggestions. Letters-first
     // input (a venue name) gets NO suggestions; digits-first (a street address) does.
     await page.getByTestId("event-address").fill("main street");
@@ -1090,11 +1145,7 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("addr-menu")).toBeVisible();
     await page.getByTestId("addr-opt-0").click();
     await expect(page.getByTestId("event-address")).toHaveValue(/Brooklyn/);
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("sched-fixed").click();
-    await page.getByTestId("fixed-time").fill("2026-10-15T19:00");
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("create-event").click();
+    await page.getByTestId("create-event-details").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
 
@@ -1130,9 +1181,13 @@ test.describe("scheduler", () => {
   test("create form visual baseline", async ({ page }) => {
     await ensureProfile(page);
     await page.getByTestId("new-event").click();
-    // Deterministic state: step 1 (What) with a known type selected, title
-    // empty, and nothing focused (a focus ring would be pass-dependent).
+    // Deterministic state: Screen 1 ("Start") with a known type selected and
+    // "Not sure yet" scheduling (no datetime-local inputs - empty native
+    // date/time controls render sub-pixel-differently across runs), title empty
+    // and nothing focused (a focus ring would be pass-dependent).
     await page.getByTestId("type-dinner").click();
+    await page.getByTestId("sched-general").click();
+    await expect(page.getByTestId("general-note")).toBeVisible();
     await page.getByTestId("event-title").fill("");
     await page.getByTestId("event-title").blur();
     await expect(page.locator("form")).toHaveScreenshot("new-event-form.png");
@@ -1145,12 +1200,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-08-01T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -1196,6 +1247,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("quick-when").fill("2026-10-11T18:00");
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+    // Comments are collapsed by default now - expand the disclosure first.
+    await page.getByTestId("comments-summary").click();
     // Pick a gif (KLIPY_MODE=stub serves fixed results), post with no text.
     await page.getByTestId("comment-gif-open").click();
     // Trending loads on open; "Load more" pages via the cursor and appends.
@@ -1229,15 +1282,12 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-08-01T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await expect(page.getByTestId("comments")).toBeVisible();
+    await page.getByTestId("comments-summary").click(); // collapsed by default
 
     // Post a comment, then delete it (host moderates).
     await page.getByTestId("comment-input").fill("Looking forward to it!");
@@ -1273,12 +1323,8 @@ test.describe("scheduler", () => {
       const title = `Cohosted ${test.info().testId}`;
       await host.getByTestId("event-title").fill(title);
       await host.getByTestId("type-dinner").click();
-      await host.getByTestId("wiz-next").click();
-      await host.getByTestId("loc-host").click();
-      await host.getByTestId("wiz-next").click();
       await host.getByTestId("sched-fixed").click();
       await host.getByTestId("fixed-time").fill("2026-08-02T19:00");
-      await host.getByTestId("wiz-next").click();
       await host.getByTestId("create-event").click();
       await expect(host.getByTestId("event-title")).toHaveText(title);
       const url = host.url();
@@ -1293,6 +1339,7 @@ test.describe("scheduler", () => {
       const guest = await guestCtx.newPage();
       await ensureUser(guest, "cguest", "C Guest", "cguest");
       await guest.goto(url);
+      await guest.getByTestId("comments-summary").click(); // comments collapsed by default
       await guest.getByTestId("comment-input").fill("Can I bring a friend?");
       await guest.getByTestId("comment-post").click();
       await expect(guest.getByText("Can I bring a friend?")).toBeVisible();
@@ -1312,10 +1359,13 @@ test.describe("scheduler", () => {
       await co.getByTestId("preview-toggle").click();
       await expect(co.getByTestId("share-link")).toBeVisible();
       await co.getByTestId("edit-event-open").click();
+      await co.getByTestId("edit-sec-details").click(); // title lives under "Details"
       await co.getByTestId("edit-title").fill(`${title} (edited)`);
       await co.getByTestId("edit-save").click();
       await expect(co.getByTestId("event-title")).toHaveText(`${title} (edited)`);
-      // Cohost moderates the guest's comment (two-tap confirm).
+      // Cohost moderates the guest's comment (two-tap confirm). Comments are
+      // collapsed by default, so expand the disclosure first.
+      await co.getByTestId("comments-summary").click();
       await co.getByTestId("comment-delete-0").click();
       await co.getByTestId("comment-delete-0").click();
       await expect(co.getByText("Can I bring a friend?")).toHaveCount(0);
@@ -1385,12 +1435,8 @@ test.describe("scheduler", () => {
       const eventTitle = `Group dinner ${testId}`;
       await ownerPage.getByTestId("event-title").fill(eventTitle);
       await ownerPage.getByTestId("type-dinner").click();
-      await ownerPage.getByTestId("wiz-next").click();
-      await ownerPage.getByTestId("loc-host").click();
-      await ownerPage.getByTestId("wiz-next").click();
       await ownerPage.getByTestId("sched-fixed").click();
       await ownerPage.getByTestId("fixed-time").fill("2026-08-10T19:00");
-      await ownerPage.getByTestId("wiz-next").click();
       await ownerPage.getByTestId("create-event").click();
       await expect(ownerPage.getByTestId("event-title")).toHaveText(eventTitle);
 
@@ -1409,15 +1455,13 @@ test.describe("scheduler", () => {
     const title = `Weekly run ${test.info().testId}-${Date.now()}`;
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-other").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-other").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-08-11T18:00");
+    await page.getByTestId("show-repeat").click(); // repeat controls are collapsed
     await page.getByTestId("repeat-weekly").click();
     await page.getByTestId("repeat-count").selectOption("3");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const eventUrl = page.url();
@@ -1602,19 +1646,17 @@ test.describe("scheduler", () => {
       const title = `Masquerade ${test.info().testId}-${Date.now()}`;
       await host.getByTestId("event-title").fill(title);
       await host.getByTestId("type-party").click();
-      await host.getByTestId("wiz-next").click();
-      await host.getByTestId("loc-host").click();
-      await host.getByTestId("wiz-next").click();
       await host.getByTestId("sched-fixed").click();
       await host.getByTestId("fixed-time").fill("2026-09-20T20:00");
-      await host.getByTestId("wiz-next").click();
       await host.getByTestId("create-event").click();
       await expect(host.getByTestId("event-title")).toHaveText(title);
       const url = host.url();
 
-      // The invitee hides their name, then RSVPs going.
+      // The invitee hides their name, then RSVPs going. Anonymity lives behind
+      // a one-tap text toggle now, so reveal the checkbox first.
       await ensureUser(guest, "maskguy", "Masked Marvel", "maskguy");
       await guest.goto(url);
+      await guest.getByTestId("rsvp-anon-toggle").click();
       await guest.getByTestId("rsvp-anon").check();
       const post = guest.waitForResponse((r) => r.url().includes("/rsvp") && r.request().method() === "POST");
       await guest.getByTestId("rsvp-going").click();
@@ -1700,13 +1742,10 @@ test.describe("scheduler", () => {
     const title = `Stream ${test.info().testId}`;
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-other").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-other").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-09-01T20:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     // Visibility has no UI while Discover is denavved - publish via the API.
@@ -1753,12 +1792,8 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-09-10T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await page.getByTestId("edit-event-open").click(); // cancel lives behind Edit
@@ -1823,12 +1858,8 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-09-05T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await setVisibility(page, page.url().split("/e/")[1], "fv1", "friends");
@@ -1898,12 +1929,10 @@ test.describe("scheduler", () => {
     const title = `Went public ${test.info().testId}`;
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-movie").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-movie").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-09-12T20:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click(); // private by default
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -1920,11 +1949,9 @@ test.describe("scheduler", () => {
     const title = `Open poll ${test.info().testId}`;
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-other").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-other").click();
     await page.getByTestId("sched-general").click(); // polling: no time yet
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await setVisibility(page, page.url().split("/e/")[1], "pollpub", "public", "social");
@@ -1942,12 +1969,10 @@ test.describe("scheduler", () => {
     const title = `Oakland meetup ${test.info().testId}`;
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-other").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-other").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-09-15T18:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await setVisibility(page, page.url().split("/e/")[1], "regionist", "public", "tech", "Oakland");
@@ -1988,18 +2013,14 @@ test.describe("scheduler", () => {
       await page.goto("/new");
       await page.getByTestId("event-title").fill(title);
       await page.getByTestId("type-dinner").click();
-      await page.getByTestId("wiz-next").click();
-      await page.getByTestId("loc-host").click();
-      await page.getByTestId("wiz-next").click();
       await page.getByTestId("sched-fixed").click();
       await page.getByTestId("fixed-time").fill("2026-09-20T19:00");
-      await page.getByTestId("wiz-next").click();
-      await page.getByTestId("winvite-invb").click(); // invite from the wizard's Who step
       await page.getByTestId("create-event").click();
       await expect(page.getByTestId("event-title")).toHaveText(title);
-      // The invited list rides the friend-invite card, which hosts see while
-      // editing (calm-by-default host view).
+      // Invites happen from the event page now (the wizard's Who step is gone) -
+      // the friend-invite card shows while the host is editing.
       await page.getByTestId("edit-event-open").click();
+      await page.getByTestId("invite-invb").click();
       await expect(page.getByText("Invited: Inv Bee")).toBeVisible();
       await page.getByTestId("edit-cancel").click();
 
@@ -2029,32 +2050,32 @@ test.describe("scheduler", () => {
     }
   });
 
-  test("custom event types: + chip, emoji + short name, saved for reuse", async ({ page }) => {
+  test("custom event types: named in the More sheet, system icon, saved for reuse", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for an isolated user");
     await ensureUser(page, "typer", "Ty Per", "typer");
     const title = `Strike night ${test.info().testId}`;
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-add").click();
-    await page.getByTestId("newtype-emoji-🎳").click();
+    // A custom type is named in the "More" sheet - NO emoji picker; the system
+    // assigns the icon automatically.
+    await page.getByTestId("type-more").click();
+    await expect(page.getByTestId("newtype-emojis")).toHaveCount(0);
     await page.getByTestId("newtype-name").fill("Bowling");
     await page.getByTestId("newtype-save").click();
-    // The new type appears as a SELECTED chip, styled like the preset types.
-    await expect(page.getByTestId("custom-bowling")).toHaveClass(/on/);
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    // The new type shows as the SELECTED chip on Screen 1.
+    await expect(page.getByTestId("type-chosen")).toContainText("Bowling");
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-09-25T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
 
-    // The event displays the custom emoji + name instead of a preset type.
+    // The event displays the custom name (with its system-assigned icon).
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await expect(page.getByText("Bowling").first()).toBeVisible();
 
-    // The type is saved and reappears as a chip for next time.
+    // The type is saved and reappears inside the More sheet next time.
     await page.goto("/new");
-    await expect(page.getByTestId("custom-bowling")).toBeVisible();
+    await page.getByTestId("type-more").click();
+    await expect(page.getByTestId("sheet-custom-bowling")).toBeVisible();
   });
 
   test("landing: hero, product shot, and start CTA", async ({ page }) => {
@@ -2113,7 +2134,9 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await expect(page.getByText("Time being decided")).toBeVisible();
     await page.getByTestId("preview-toggle").click();
-    await expect(page.getByText("When are you free this week?")).toBeVisible();
+    // Voting is gated behind the RSVP and collapsed - RSVP then expand it.
+    await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("vote-summary").click();
     await expect(page.getByTestId("gpw-cell-0-evening")).toBeVisible();
   });
 
@@ -2129,6 +2152,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("quick-create").click();
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("vote-summary").click();
     await page.getByTestId("gpw-cell-1-evening").click();
     await page.getByTestId("gpw-cell-2-noon").click();
     await page.getByTestId("save-general").click();
@@ -2136,25 +2160,25 @@ test.describe("scheduler", () => {
     // Saved picks survive a reload (persisted, not just local state).
     await page.reload();
     await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("vote-summary").click();
     await expect(page.getByTestId("gpw-cell-1-evening")).toHaveClass(/on/);
     await page.getByTestId("preview-toggle").click();
     await expect(page.getByTestId("gr-week-heat")).toBeVisible();
     await expect(page.getByTestId("gr-week-heat")).toContainText("1");
 
-    // Month scope via the wizard: attendee taps day chips; host sees ranked days.
+    // Month scope: created general, then the host picks "This month" in the
+    // post-create setup step; attendee gets a dates×dayparts grid.
     await page.goto("/");
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(`Month scope ${test.info().testId}`);
-    await page.getByTestId("type-other").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-other").click();
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("scope-month").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
+    await finishGeneralSetup(page, "month");
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
-    await expect(page.getByText("Which days work this month?")).toBeVisible();
+    await page.getByTestId("vote-summary").click();
     // Month is a dates × dayparts grid now (28 days) - pick times, not just days.
     await page.getByTestId("gpm-cell-5-evening").click();
     await page.getByTestId("gpm-cell-12-noon").click();
@@ -2188,17 +2212,16 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-party").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+    await finishGeneralSetup(page, "general");
     // RSVP as a participant so someone is carried onto the extra dates - and
     // cast a vote, since the host's results/finalize card only renders once
     // someone has voted (calm-by-default host view).
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("vote-summary").click();
     // Vote for NEXT month (gp-month-1) - the host's target-month chips list
     // voted months, and the test schedules into next month below.
     await page.getByTestId("gp-month-1").click();
@@ -2307,11 +2330,8 @@ test.describe("scheduler", () => {
       const title = `Shared ${test.info().testId}`;
       await host.getByTestId("event-title").fill(title);
       await host.getByTestId("type-dinner").click();
-      await host.getByTestId("wiz-next").click();
-      await host.getByTestId("wiz-next").click();
       await host.getByTestId("sched-fixed").click();
       await host.getByTestId("fixed-time").fill("2026-10-10T19:00");
-      await host.getByTestId("wiz-next").click();
       await host.getByTestId("create-event").click();
       await expect(host.getByTestId("event-title")).toHaveText(title);
       const url = host.url();
@@ -2343,11 +2363,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-11-01T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -2416,12 +2433,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-08-01T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -2450,12 +2463,8 @@ test.describe("scheduler", () => {
       await g.getByTestId("new-event").click();
       await g.getByTestId("event-title").fill(title);
       await g.getByTestId("type-dinner").click();
-      await g.getByTestId("wiz-next").click();
-      await g.getByTestId("loc-host").click();
-      await g.getByTestId("wiz-next").click();
       await g.getByTestId("sched-fixed").click();
       await g.getByTestId("fixed-time").fill("2026-08-20T19:00");
-      await g.getByTestId("wiz-next").click();
       await g.getByTestId("create-event").click();
       await expect(g.getByTestId("event-title")).toHaveText(title);
 
@@ -2490,12 +2499,8 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
     await page.getByTestId("type-dinner").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-fixed").click();
     await page.getByTestId("fixed-time").fill("2026-08-09T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const url = page.url();
@@ -2516,6 +2521,7 @@ test.describe("scheduler", () => {
       // peak intent, right after they said yes.
       await expect(guest.getByTestId("rsvp-signup-nudge")).toBeVisible();
       await expect(guest.getByTestId("rsvp-signup")).toBeVisible();
+      await guest.getByTestId("comments-summary").click(); // comments collapsed by default
       await guest.getByTestId("comment-input").fill("So excited!");
       await guest.getByTestId("comment-post").click();
       await expect(guest.getByText("So excited!")).toBeVisible();
@@ -2543,18 +2549,19 @@ test.describe("scheduler", () => {
     // A poll with one option inside the busy window and one outside.
     await page.goto("/new");
     await page.getByTestId("event-title").fill(`Busy ${test.info().testId}`);
-    await page.getByTestId("type-movie").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-movie").click();
     await page.getByTestId("sched-poll").click();
     await page.getByTestId("poll-option-0").fill("2026-08-03T09:30");
     await page.getByTestId("add-option").click();
     await page.getByTestId("poll-option-1").fill("2026-08-20T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
 
     // Voting view (host previews as guest) shows the conflict badge on option 0 only.
+    // Voting is gated behind the RSVP and collapsed - RSVP then expand it.
     await page.getByTestId("preview-toggle").click();
+    await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("vote-summary").click();
     await expect(page.getByTestId("busy-0")).toBeVisible();
     await expect(page.getByTestId("busy-1")).toHaveCount(0);
   });
@@ -2565,20 +2572,19 @@ test.describe("scheduler", () => {
     const title = `Movie ${test.info().testId}`;
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill(title);
-    await page.getByTestId("type-movie").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await page.getByTestId("type-more").click();
+    await page.getByTestId("sheet-type-movie").click();
     await page.getByTestId("sched-poll").click();
     await page.getByTestId("poll-option-0").fill("2026-08-01T19:00");
     await page.getByTestId("add-option").click();
     await page.getByTestId("poll-option-1").fill("2026-08-02T19:00");
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
     // Vote as a guest on both options.
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
+    await page.getByTestId("vote-summary").click();
     await page.getByTestId("vote-0-yes").click();
     await page.getByTestId("vote-1-yes").click();
     await page.getByTestId("save-votes").click();

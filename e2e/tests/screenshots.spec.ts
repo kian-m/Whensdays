@@ -39,13 +39,17 @@ test.describe("docs screenshots", () => {
     // Feature: general-availability poll - the per-day time grid (guest view).
     await page.goto("/new");
     await page.getByTestId("event-title").fill("Camping trip");
-    await page.getByTestId("type-camping").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("wiz-next").click();
+    await pickType(page, "camping");
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
-    await page.getByTestId("preview-toggle").click(); // host → guest view shows the grid
+    // A general poll ships with no scope; the host finishes setup on the event
+    // page (the scope picker moved out of the wizard).
+    await page.getByTestId("scope-general").click();
+    await page.getByTestId("poll-setup-save").click();
+    await expect(page.getByTestId("general-setup")).toBeHidden();
+    await page.getByTestId("preview-toggle").click(); // host → guest view
+    await page.getByTestId("rsvp-going").click();      // voting is gated behind the RSVP
+    await page.getByTestId("vote-summary").click();    // …and collapsed by default
     for (const cell of ["gp-cell-5-evening", "gp-cell-6-afternoon", "gp-cell-6-evening", "gp-cell-0-noon"]) {
       await page.getByTestId(cell).click();
     }
@@ -72,15 +76,24 @@ test.describe("docs screenshots", () => {
   });
 });
 
+// The 5 primary type chips on Screen 1; every other preset lives in the "More"
+// sheet. Mirrors PRIMARY_TYPES in NewEvent.tsx.
+const PRIMARY_TYPES = ["practice", "show", "party", "dinner", "drinks"];
+async function pickType(page: import("@playwright/test").Page, type: string) {
+  if (PRIMARY_TYPES.includes(type)) {
+    await page.getByTestId(`type-${type}`).click();
+  } else {
+    await page.getByTestId("type-more").click();
+    await page.getByTestId(`sheet-type-${type}`).click();
+  }
+}
+
 async function createFixed(page: import("@playwright/test").Page, title: string, type: string, when: string) {
   await page.goto("/new");
   await page.getByTestId("event-title").fill(title);
-  await page.getByTestId(`type-${type}`).click();
-  await page.getByTestId("wiz-next").click(); // What → Where
-  await page.getByTestId("wiz-next").click(); // Where → When
+  await pickType(page, type);
   await page.getByTestId("sched-fixed").click();
   await page.getByTestId("fixed-time").fill(when);
-  await page.getByTestId("wiz-next").click();
   await page.getByTestId("create-event").click();
   await page.getByTestId("share-link").waitFor();
 }
@@ -88,15 +101,12 @@ async function createFixed(page: import("@playwright/test").Page, title: string,
 async function createPoll(page: import("@playwright/test").Page, title: string, type: string, times: string[]) {
   await page.goto("/new");
   await page.getByTestId("event-title").fill(title);
-  await page.getByTestId(`type-${type}`).click();
-  await page.getByTestId("wiz-next").click(); // What → Where
-  await page.getByTestId("wiz-next").click(); // Where → When
+  await pickType(page, type);
   await page.getByTestId("sched-poll").click();
   for (let i = 0; i < times.length; i++) {
-    if (i > 0) await page.getByTestId("add-option").click();
+    if (i > 1) await page.getByTestId("add-option").click(); // 2 rows exist by default
     await page.getByTestId(`poll-option-${i}`).fill(times[i]);
   }
-  await page.getByTestId("wiz-next").click();
   await page.getByTestId("create-event").click();
   await page.getByTestId("share-link").waitFor();
 }

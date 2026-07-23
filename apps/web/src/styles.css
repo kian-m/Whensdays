@@ -219,6 +219,28 @@ a { color: inherit; text-decoration: none; }
 }
 .stack { display: flex; flex-direction: column; gap: 0.9rem; }
 
+/* Host event-edit form: grouped disclosure sections (single-open) + a sticky
+   action bar so Save/Cancel stay reachable in the taller sectioned form. */
+.edit-sec { border: 1px solid var(--glass-line); border-radius: var(--radius-sm); }
+.edit-sec > summary {
+  cursor: pointer; font-weight: 600; padding: 0.7rem 0.85rem; list-style: none; user-select: none;
+}
+.edit-sec > summary::-webkit-details-marker { display: none; }
+.edit-sec > summary::after { content: "⌄"; float: right; opacity: 0.55; }
+.edit-sec[open] > summary::after { content: "⌃"; }
+.edit-sec > div { padding: 0 0.85rem 0.85rem; }
+.edit-actions {
+  position: sticky; bottom: 0; z-index: 5;
+  margin: 0.2rem -1.2rem -1.1rem; padding: 0.75rem 1.2rem;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(12px) saturate(1.5); backdrop-filter: blur(12px) saturate(1.5);
+  border-top: 1px solid var(--glass-line); border-radius: 0 0 var(--radius) var(--radius);
+}
+@media (max-width: 640px) {
+  /* keep the sticky bar clear of the fixed mobile tabbar */
+  .edit-actions { bottom: calc(58px + env(safe-area-inset-bottom)); }
+}
+
 /* skeleton placeholders - a first load renders the page's real chrome with
    shimmer blocks where data will land (see Skel/ListSkeleton in ui.tsx),
    never a bare "Loading…" wall. Gradient-only motion, same policy as themes. */
@@ -298,6 +320,37 @@ a { color: inherit; text-decoration: none; }
 .btn.sm { padding: 0.35rem 0.85rem; font-size: 0.85rem; }
 .btn-block { width: 100%; text-align: center; }
 
+/* segmented control - joined single-choice buttons, visually distinct from
+   chips (which are for optional multi-select). Used by the create flow's
+   scheduling mode. Labels wrap rather than overflow on a narrow phone. */
+.segmented {
+  display: flex; width: 100%; border: 1px solid var(--glass-line);
+  border-radius: var(--radius-sm); overflow: hidden; background: var(--glass-2);
+  box-shadow: inset 0 1px 0 var(--glass-glint);
+}
+.segmented button {
+  flex: 1 1 0; min-width: 0; font: inherit; font-weight: 600; font-size: 0.82rem;
+  line-height: 1.15; white-space: normal; cursor: pointer; color: var(--ink);
+  padding: 0.55rem 0.4rem; min-height: 44px; background: transparent; border: none;
+  border-left: 1px solid var(--glass-line); transition: background 0.12s ease, color 0.12s ease;
+}
+.segmented button:first-child { border-left: none; }
+.segmented button.on {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
+  color: #fff;
+}
+.segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* plain text link - for secondary/optional actions that must NOT read as a chip
+   or a primary button (create flow's "More", "Where + more", disclosures). */
+.linklike {
+  background: none; border: none; padding: 0; font: inherit; font-weight: 600;
+  color: var(--accent); cursor: pointer; text-align: left; white-space: nowrap;
+}
+.linklike:hover { text-decoration: underline; }
+.linklike:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+.linklike.muted { color: var(--muted); font-weight: 500; }
+
 /* inputs */
 label.field { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35rem; }
 .input, select.input, textarea.input {
@@ -353,12 +406,43 @@ textarea.input { resize: vertical; min-height: 64px; }
 .grid {
   display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 0.35rem; align-items: center;
 }
-.grid .hd { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-align: center; }
-.grid .day { font-size: 0.85rem; font-weight: 600; }
+/* Availability/time grids (DayGrid + TimeGrid). Column count rides in `--cols`
+   (set inline per component) so the media query can retrack them without
+   inline-style specificity fighting it; `--col-w` lets TimeGrid opt into a
+   per-day min-width. `.snapgrid` is deliberately NOT on the MonthPicker calendar
+   or the host results heatmaps - only these two scroll-snap on mobile. */
+.snapgrid {
+  --vis: 3; --label-w: 3.8rem;
+  grid-template-columns: auto repeat(var(--cols, 3), var(--col-w, 1fr));
+}
+.snapgrid.tg { --vis: 2; --label-w: 4.4rem; --col-w: minmax(46px, 1fr); }
+/* Under 640px the daypart/day columns scroll horizontally with scroll-snap
+   (DayGrid shows 3 at a time, TimeGrid 2) while the date/time LABEL column stays
+   pinned left and the header row stays pinned top. Cells scrolling under the
+   sticky label/header are masked by an opaque surface fill + a box-shadow the
+   width of the grid gap. ≥640px keeps the original full-width grid. */
+@media (max-width: 639px) {
+  .snapgrid {
+    grid-template-columns:
+      var(--label-w) repeat(var(--cols, 3), calc((100% - var(--label-w)) / var(--vis)));
+    overflow: auto; max-height: 62vh;
+    scroll-snap-type: x mandatory; scroll-padding-left: var(--label-w);
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  }
+  .snapgrid > .hd { position: sticky; top: 0; z-index: 2; background: var(--surface);
+    box-shadow: 0 0.35rem 0 var(--surface); scroll-snap-align: start; }
+  .snapgrid > .day { position: sticky; left: 0; z-index: 2; background: var(--surface);
+    box-shadow: 0.35rem 0 0 var(--surface); }
+  .snapgrid > .corner { position: sticky; left: 0; top: 0; z-index: 3; background: var(--surface);
+    box-shadow: 0.35rem 0 0 var(--surface), 0 0.35rem 0 var(--surface); }
+  .snapgrid > .cell { scroll-snap-align: start; }
+}
+.grid .hd { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid .day { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Availability cells are tri-state:
    neutral (unselected) · green .on (free) · red .busy-mark (busy). */
 .cell {
-  height: 34px; border: 1px solid var(--glass-line); border-radius: 6px;
+  min-height: 44px; min-width: 44px; border: 1px solid var(--glass-line); border-radius: 6px;
   background: var(--glass-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
 }
 .cell.on { background: var(--go); border-color: var(--go); }
@@ -374,7 +458,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* Color key shown under every availability grid. */
 .legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 0.8rem; color: var(--muted); }
 .legend .sw { display: inline-flex; align-items: center; gap: 6px; }
-.legend .sw i { width: 15px; height: 15px; border-radius: 4px; display: inline-block; }
+.legend .sw i { width: 15px; height: 15px; min-width: 0; min-height: 0; border-radius: 4px; display: inline-block; }
 /* clickable row/column labels in the availability grid */
 .gp-head { background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
 .gp-head:hover { color: var(--accent); }

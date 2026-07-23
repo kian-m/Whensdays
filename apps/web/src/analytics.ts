@@ -17,6 +17,7 @@ const RECORD = (import.meta.env.VITE_PUBLIC_POSTHOG_RECORD as string | undefined
 // server can't see. Keep names snake_case to match the backend.
 export const EVENTS = {
   createEventOpened: "create_event_opened",
+  pollSetup: "poll_setup",
   previewToggled: "preview_as_guest_toggled",
   notificationsMuted: "event_notifications_muted",
   shareLinkCopied: "share_link_copied",

@@ -1,23 +1,28 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Event, EventType, Friend, fmtMinutes, getJSON, gridSlots, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
-// (custom types: saved per user, offered as chips next to the presets)
+import { Event, EventType, getJSON, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
 import { EVENT_TYPES } from "../scheduler/questions";
-import { AddressInput, Avatar, MonthPicker, useAsync } from "../ui";
+import { AddressInput, useAsync } from "../ui";
 import { DEV_AUTH } from "../App";
+import { EVENTS, analytics } from "../analytics";
 
 // Native min-validation would block dev/E2E backdating - server enforces the
 // same rule with the same dev exemption.
 const MIN_DT = DEV_AUTH ? undefined : toDatetimeLocal(new Date().toISOString());
-import { EVENTS, analytics } from "../analytics";
 
-// Event creation is a one-step-at-a-time wizard (à la Airtable forms): What →
-// Where → When → Who, with Back/Next. The Who step lets
-// the host invite friends before the event even exists.
-const STEPS = ["What", "Where", "When", "Who"] as const;
+// Event creation is TWO screens, not a 4-step wizard. Screen 1 ("Start") holds
+// the three decisions that matter - title, type, and how you'll schedule - and
+// fits on a phone without scrolling. Screen 2 ("Add details") is fully optional
+// (location, capacity) and reached only by a plain text link. Cover/theme/
+// description/friend-invites all moved to edit-in-place on the created event.
 
-// 30-min time choices for the 'dates'-poll grid window (12:00 AM → 11:30 PM).
-const TIME_CHOICES = gridSlots(0, 1440, 30);
+// The five most common types get plain chips on Screen 1; every other preset,
+// the user's saved custom types, and a "name a new one" box live behind "More".
+const PRIMARY_TYPES: EventType[] = ["practice", "show", "party", "dinner", "drinks"];
+// Custom types get a SYSTEM icon automatically - there is no emoji picker. A
+// generic calendar covers any type the user names themselves.
+const CUSTOM_TYPE_ICON = "🗓️";
 
 export function NewEvent() {
   const api = useApi();
@@ -26,19 +31,53 @@ export function NewEvent() {
   const [params] = useSearchParams();
   const groupId = params.get("group") || "";
   // "Plan the next one" (?again=<eventId>, from the recap email / a past event):
-  // prefill the wizard from that event so re-hosting is one pass of Next-taps.
+  // prefill from that event so re-hosting is a couple of taps.
   const againId = params.get("again") || "";
-  // Re-poll (?repoll=1, from the series-ended email / series card): default to a
-  // time poll and re-invite everyone from the source event on create.
+  // Re-poll (?repoll=1): default to a time poll and re-invite everyone from the
+  // source event on create.
   const repoll = params.get("repoll") === "1" && !!againId;
 
   useEffect(() => {
     analytics.capture(EVENTS.createEventOpened, againId ? { again: true } : undefined);
   }, []);
 
+  const [screen, setScreen] = useState<"start" | "details">("start");
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState<EventType>("practice");
+  // Custom type: a name + a system-assigned icon (never user-picked). Present =
+  // the event is stored as `other` with this label/emoji.
+  const [custom, setCustom] = useState<{ emoji: string; label: string } | null>(null);
+  // Description is no longer entered at creation, but a re-host prefill carries
+  // the old one through silently so re-posting doesn't lose it (edited later on
+  // the event page).
+  const [description, setDescription] = useState("");
+  const [locationMode, setLocationMode] = useState<"host_place" | "find_venue" | "virtual">("host_place");
+  const [address, setAddress] = useState("");
+  // Poll-a-few-times is the default: it's the group-scheduling wedge.
+  const [schedulingMode, setSchedulingMode] = useState<"fixed" | "poll" | "general">("poll");
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
+  const [repeat, setRepeat] = useState<"" | "weekly" | "biweekly" | "monthly">("");
+  const [repeatCount, setRepeatCount] = useState(4);
+  const [moreStarts, setMoreStarts] = useState<string[]>([]);
+  const [showRepeat, setShowRepeat] = useState(false); // "+ Repeat or add more dates" (fixed)
+  const [pollDeadline, setPollDeadline] = useState("");
+  const [showDeadline, setShowDeadline] = useState(false); // "+ Set a poll deadline" (poll)
+  const [options, setOptions] = useState<string[]>(["", ""]);
+  const [capacity, setCapacity] = useState("");
+  const [typeSheet, setTypeSheet] = useState(false); // "More" type bottom sheet
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const { data: ct, reload: reloadTypes } = useAsync<{ types: { label: string; emoji: string }[] }>((a) => getJSON(a, "/api/event-types"));
+  const savedTypes = ct?.types ?? [];
+  // Group context (name) when launched from a group page - implicit, read-only.
+  const { data: grp } = useAsync<{ name: string; emoji: string }>(
+    (a) => (groupId ? getJSON(a, `/api/groups/${groupId}/preview`) : Promise.resolve({ name: "", emoji: "" })), [groupId]);
+
   useEffect(() => {
     if (!againId) return;
-    getJSON<{ event: { title: string; event_type: EventType; description: string; location_mode: "host_place" | "find_venue" | "virtual"; location_address: string } }>(
+    getJSON<{ event: { title: string; event_type: EventType; description: string; location_mode: "host_place" | "find_venue" | "virtual"; location_address: string; custom_emoji: string; custom_label: string } }>(
       api, `/api/events/${againId}`,
     ).then((d) => {
       if (repoll) setSchedulingMode("poll");
@@ -47,83 +86,24 @@ export function NewEvent() {
       setDescription(d.event.description);
       setLocationMode(d.event.location_mode);
       setAddress(d.event.location_address);
+      if (d.event.custom_label) setCustom({ emoji: d.event.custom_emoji || CUSTOM_TYPE_ICON, label: d.event.custom_label });
     }).catch(() => { /* stale link - start blank */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [againId]);
 
-  const [step, setStep] = useState(0);
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState<EventType>("dinner");
-  const [description, setDescription] = useState("");
-  const [locationMode, setLocationMode] = useState<"host_place" | "find_venue" | "virtual">("host_place");
-  const [address, setAddress] = useState("");
-  const [schedulingMode, setSchedulingMode] = useState<"fixed" | "poll" | "general">("fixed");
-  const [generalScope, setGeneralScope] = useState<"week" | "month" | "general" | "dates">("general");
-  // 'dates' scope: host-picked days (YYYY-MM-DD) + the grid's time window.
-  const [pollDays, setPollDays] = useState<Set<string>>(new Set());
-  const [gridStart, setGridStart] = useState(540); // 9:00 AM
-  const [gridEnd, setGridEnd] = useState(1260); // 9:00 PM
-  const [startsAt, setStartsAt] = useState("");
-  const [endsAt, setEndsAt] = useState(""); // optional end time (fixed mode)
-  const [repeat, setRepeat] = useState<"" | "weekly" | "biweekly" | "monthly">("");
-  const [repeatCount, setRepeatCount] = useState(4);
-  // Irregular series: extra explicit dates (any days - recurring, no pattern).
-  const [moreStarts, setMoreStarts] = useState<string[]>([]);
-  const [pollDeadline, setPollDeadline] = useState("");
-  const [armedDel, setArmedDel] = useState<string | null>(null);
-  const [capacity, setCapacity] = useState("");
-  const [options, setOptions] = useState<string[]>([""]);
-  const [invitees, setInvitees] = useState<Set<string>>(new Set());
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const { data: fr } = useAsync<{ friends: Friend[] }>((a) => getJSON(a, "/api/friends"));
-  const friends = fr?.friends ?? [];
-  const { data: ct, reload: reloadTypes } = useAsync<{ types: { label: string; emoji: string }[] }>((a) => getJSON(a, "/api/event-types"));
-  const savedTypes = ct?.types ?? [];
-
-  // User-defined type: emoji + short name (server caps at 10 chars).
-  const [custom, setCustom] = useState<{ emoji: string; label: string } | null>(null);
-  const [addingType, setAddingType] = useState(false);
-  const [newEmoji, setNewEmoji] = useState("🌀");
-  const [newName, setNewName] = useState("");
-  const CUSTOM_EMOJIS = [
-    "🌀", "🎳", "🎤", "🎧", "🎹", "🎸", "🥁", "🎻", "🎭", "🎪", "🎨", "🖌️", "📸", "🎬",
-    "🧑‍🍳", "🍕", "🌮", "🍣", "🥘", "🧁", "🍦", "☕️", "🍵", "🥂", "🍷", "🫕", "🥩", "🥗",
-    "🛶", "🏓", "🎾", "⚽️", "🏀", "🏈", "⚾️", "🏐", "🏸", "🥏", "🎿", "🏂", "⛸️", "🛼",
-    "🚴", "🏃", "🧗", "🏋️", "🧘", "🤸", "🏹", "🎣", "🏇", "🏄", "🤿", "🛹", "⛳️", "🥾",
-    "🐕", "🐈", "🐎", "🦜", "🌊", "🏔️", "🏕️", "🌅", "🌸", "🍂", "❄️", "🔥", "⭐️", "🌙",
-    "🧺", "🎡", "🎢", "🎯", "🎰", "🃏", "♟️", "🧩", "🪁", "🪅", "📚", "✍️", "🔭", "🔬",
-    "🚗", "✈️", "🚂", "⛵️", "🎫", "🗺️", "🏛️", "⛪️", "💃", "🕺", "👾", "🤖", "🛍️", "💐",
-  ];
-
   function setOption(i: number, v: string) {
     setOptions((o) => o.map((x, j) => (j === i ? v : x)));
   }
-  function toggleInvite(id: string) {
-    setInvitees((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  function pickPreset(v: EventType) { setType(v); setCustom(null); }
+  function pickSaved(t: { emoji: string; label: string }) { setType("other"); setCustom({ emoji: t.emoji, label: t.label }); }
 
-  // Per-step validation gates Next/Create.
-  function stepValid(i: number): boolean {
-    if (i === 0) return title.trim() !== "";
-    if (i === 2) {
-      if (schedulingMode === "fixed") return startsAt !== "";
-      if (schedulingMode === "poll") return options.some((o) => o.trim() !== "");
-      if (schedulingMode === "general" && generalScope === "dates") return pollDays.size > 0;
-    }
-    return true;
-  }
+  const startValid = title.trim() !== "" &&
+    (schedulingMode === "fixed" ? startsAt !== ""
+      : schedulingMode === "poll" ? options.some((o) => o.trim() !== "")
+        : true); // general: no time chosen at creation - host sets up the poll after
 
   async function submit() {
     setError(null);
-    // No past dates (server enforces too; dev mode is exempt so hermetic E2E
-    // can simulate history for streaks / the Past tab).
     if (!DEV_AUTH) {
       const chosen = schedulingMode === "fixed" ? [startsAt, ...moreStarts] : schedulingMode === "poll" ? options : [];
       if (chosen.some((v) => v.trim() !== "" && new Date(v).getTime() < Date.now() - 3600_000)) {
@@ -146,9 +126,7 @@ export function NewEvent() {
       body.custom_emoji = custom.emoji;
       body.custom_label = custom.label;
     }
-    // Visibility isn't asked at creation (Discover/feed are out of nav until
-    // group density exists - see README); events start invite-only and the
-    // host can open them up later from the event page's Edit form.
+    // Events start invite-only; the host opens them up later from the event page.
     body.visibility = "private";
     if (schedulingMode === "fixed") {
       body.starts_at = startsAt ? new Date(startsAt).toISOString() : "";
@@ -164,16 +142,8 @@ export function NewEvent() {
         .filter((o) => o.trim() !== "")
         .map((o) => new Date(o).toISOString());
     }
-    if (schedulingMode === "general") {
-      // Scope shapes the question guests answer (this week / this month / generally / specific days).
-      body.general_scope = generalScope;
-      if (generalScope === "dates") {
-        body.poll_days = [...pollDays].sort();
-        body.grid_start = gridStart;
-        body.grid_end = gridEnd;
-      }
-    }
-    // Optional close date - the cron chases non-voters then hands the host results.
+    // A general poll is created WITHOUT a scope - the host completes that setup
+    // step (this week / this month / generally / pick days) on the event page.
     if (schedulingMode !== "fixed" && pollDeadline) body.poll_deadline = new Date(pollDeadline).toISOString();
     if (capacity.trim() !== "") body.capacity = Number(capacity);
     const res = await sendJSON(api, "POST", "/api/events", body);
@@ -183,312 +153,301 @@ export function NewEvent() {
       return setError(b.error || "could not create event");
     }
     const ev: Event = await res.json();
-    // First event ever created on this device -> suggest add-to-homescreen
-    // once (the event page shows it; localStorage is the once-gate).
+    // First event ever on this device -> suggest add-to-homescreen once.
     try {
       if (!localStorage.getItem("whensdays.a2hs")) sessionStorage.setItem("whensdays.a2hs-pending", "1");
     } catch { /* private mode */ }
-    // Fire the wizard-selected invites (best-effort; the event page can retry).
-    for (const friendId of invitees) {
-      await sendJSON(api, "POST", `/api/events/${ev.id}/invites`, { friend_id: friendId }).catch(() => {});
-    }
     nav(`/e/${ev.id}`);
   }
+
+  const typeLabel = custom ? `${custom.emoji} ${custom.label}` : (() => {
+    const et = EVENT_TYPES.find((e) => e.value === type);
+    return et ? `${et.emoji} ${et.label}` : "";
+  })();
+  // Types offered inside the "More" sheet = every preset not on the primary row.
+  const moreTypes = EVENT_TYPES.filter((et) => !PRIMARY_TYPES.includes(et.value));
 
   return (
     <div className="stack">
       <div className="row between">
-        <h1>New event</h1>
-        <span className="muted small" data-testid="wiz-progress">Step {step + 1} of {STEPS.length} · {STEPS[step]}</span>
-      </div>
-      <div className="row" style={{ gap: 5 }}>
-        {STEPS.map((s, i) => (
-          <span key={s} style={{
-            flex: 1, height: 4, borderRadius: 999,
-            background: i <= step ? "var(--accent)" : "var(--line)",
-          }} />
-        ))}
+        <h1>{screen === "start" ? "New event" : "Add details"}</h1>
+        {grp?.name && screen === "start" && (
+          <span className="muted small" data-testid="wiz-group">{grp.emoji} {grp.name}</span>
+        )}
       </div>
 
-      <form className="card stack" style={{ minHeight: 460 }} onSubmit={(e) => e.preventDefault()}>
-        {step === 0 && (
+      <form className="card stack" onSubmit={(e) => e.preventDefault()}>
+        {screen === "start" && (
           <>
             <div>
               <label className="field" htmlFor="t">What's the plan?</label>
               <input id="t" className="input" maxLength={140} data-testid="event-title" value={title}
-                onChange={(e) => setTitle(e.target.value)} placeholder="Friday dinner" autoFocus />
+                onChange={(e) => setTitle(e.target.value)} placeholder="Friday rehearsal" autoFocus />
             </div>
+
             <div>
               <label className="field">Type</label>
-              <div className="row wrap">
-                {EVENT_TYPES.map((et) => (
-                  <button type="button" key={et.value}
-                    className={`chip ${type === et.value && !custom ? "on" : ""}`}
-                    data-testid={`type-${et.value}`}
-                    onClick={() => { setType(et.value); setCustom(null); }}>
-                    {et.emoji} {et.label}
-                  </button>
-                ))}
-                {custom && !savedTypes.some((t) => t.label === custom.label) && (
-                  <button type="button" className="chip on"
-                    data-testid={`custom-${custom.label.toLowerCase()}`}
-                    onClick={() => setAddingType(true)}>
-                    {custom.emoji} {custom.label}
-                  </button>
+              <div className="row wrap" style={{ gap: 6, alignItems: "center" }}>
+                {PRIMARY_TYPES.map((v) => {
+                  const et = EVENT_TYPES.find((e) => e.value === v)!;
+                  return (
+                    <button type="button" key={v} className={`chip ${type === v && !custom ? "on" : ""}`}
+                      data-testid={`type-${v}`} onClick={() => pickPreset(v)}>
+                      {et.emoji} {et.label}
+                    </button>
+                  );
+                })}
+                {/* A chosen type that isn't a primary chip (a preset from "More"
+                    or a custom type) shows as one extra selected chip. */}
+                {((custom) || (!PRIMARY_TYPES.includes(type) && !custom)) && (
+                  <button type="button" className="chip on" data-testid="type-chosen"
+                    onClick={() => setTypeSheet(true)}>{typeLabel}</button>
                 )}
-                {savedTypes.map((t) => (
-                  /* Selectable chip with a nested delete ✕. The wrapper carries
-                     the testid + `on` styling and handles selection (buttons
-                     can't nest, so only the ✕ is a real <button>). */
-                  <span key={t.label} role="button" tabIndex={0}
-                    className={`chip ${custom?.label === t.label ? "on" : ""}`}
-                    data-testid={`custom-${t.label.toLowerCase()}`}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                    onClick={() => { setType("other"); setCustom({ emoji: t.emoji, label: t.label }); }}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setType("other"); setCustom({ emoji: t.emoji, label: t.label }); } }}>
-                    {t.emoji} {t.label}
-                    <button type="button" aria-label={`Delete ${t.label}`}
-                      data-testid={`custom-del-${t.label.toLowerCase()}`}
-                      style={{ all: "unset", cursor: "pointer", paddingLeft: 2,
-                        opacity: armedDel === t.label ? 1 : 0.6,
-                        color: armedDel === t.label ? "var(--no)" : undefined,
-                        fontWeight: armedDel === t.label ? 800 : undefined }}
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        // Two-tap like every other remove: first arms, second deletes.
-                        if (armedDel !== t.label) { setArmedDel(t.label); return; }
-                        setArmedDel(null);
-                        await api(`/api/event-types/${encodeURIComponent(t.label)}`, { method: "DELETE" });
-                        if (custom?.label === t.label) setCustom(null);
-                        reloadTypes();
-                      }}>{armedDel === t.label ? "✕?" : "✕"}</button>
-                  </span>
-                ))}
-                <button type="button" className={`chip ${addingType ? "on" : ""}`} data-testid="type-add"
-                  onClick={() => setAddingType((a) => !a)}>＋</button>
+                <button type="button" className="linklike" data-testid="type-more"
+                  onClick={() => setTypeSheet(true)}>More…</button>
               </div>
-              {addingType && (
-                <div className="stack" style={{ marginTop: 8, gap: 6 }}>
-                  <div className="emoji-strip" data-testid="newtype-emojis">
-                    {CUSTOM_EMOJIS.map((em) => (
-                      <button key={em} type="button" className={`chip sm ${newEmoji === em ? "on" : ""}`}
-                        data-testid={`newtype-emoji-${em}`} onClick={() => setNewEmoji(em)}>{em}</button>
-                    ))}
-                  </div>
-                  <div className="row">
-                    <input className="input" data-testid="newtype-name" value={newName} maxLength={20}
-                      placeholder="Name" onChange={(e) => setNewName(e.target.value)} />
-                    <button type="button" className="btn sm" data-testid="newtype-save"
-                      disabled={!newName.trim()}
-                      onClick={() => {
-                        setType("other");
-                        setCustom({ emoji: newEmoji, label: newName.trim() });
-                        setAddingType(false);
-                        setNewName("");
-                      }}>Use it</button>
-                  </div>
+            </div>
+
+            <div>
+              <label className="field">When</label>
+              <div className="segmented" role="group" aria-label="How to schedule">
+                <button type="button" className={schedulingMode === "fixed" ? "on" : ""}
+                  data-testid="sched-fixed" aria-pressed={schedulingMode === "fixed"}
+                  onClick={() => setSchedulingMode("fixed")}>Pick a time</button>
+                <button type="button" className={schedulingMode === "poll" ? "on" : ""}
+                  data-testid="sched-poll" aria-pressed={schedulingMode === "poll"}
+                  onClick={() => setSchedulingMode("poll")}>Poll a few times</button>
+                <button type="button" className={schedulingMode === "general" ? "on" : ""}
+                  data-testid="sched-general" aria-pressed={schedulingMode === "general"}
+                  onClick={() => setSchedulingMode("general")}>Not sure yet</button>
+              </div>
+
+              {schedulingMode === "fixed" && (
+                <div className="stack" style={{ marginTop: 8 }}>
+                  <input type="datetime-local" className="input" min={MIN_DT}
+                    data-testid="fixed-time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+                  {!showRepeat ? (
+                    <button type="button" className="linklike" data-testid="show-repeat"
+                      onClick={() => setShowRepeat(true)}>+ Repeat or add more dates</button>
+                  ) : (
+                    <div className="stack" style={{ gap: 6 }}>
+                      <label className="field" style={{ marginBottom: 0 }}>Ends <span className="muted small">(optional)</span>
+                        <span className="row" style={{ gap: 6 }}>
+                          <input type="datetime-local" className="input" min={startsAt || MIN_DT}
+                            data-testid="fixed-end" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+                          {endsAt !== "" && (
+                            <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="fixed-end-clear"
+                              onClick={() => setEndsAt("")} title="Remove the end time">✕</button>
+                          )}
+                        </span>
+                      </label>
+                      {moreStarts.map((d, i) => (
+                        <div key={i} className="row" style={{ gap: 6 }}>
+                          <input type="datetime-local" className="input" min={MIN_DT} data-testid={`more-date-${i}`}
+                            value={d} onChange={(e) => setMoreStarts((m) => m.map((x, j) => (j === i ? e.target.value : x)))} />
+                          <button type="button" className="btn ghost sm" data-testid={`more-date-remove-${i}`}
+                            onClick={() => setMoreStarts((m) => m.filter((_, j) => j !== i))}>✕</button>
+                        </div>
+                      ))}
+                      <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
+                        data-testid="add-date" onClick={() => { setRepeat(""); setMoreStarts((m) => [...m, ""]); }}>
+                        + Add another date
+                      </button>
+                      {moreStarts.length === 0 && (
+                        <div className="row wrap" style={{ gap: 6 }}>
+                          <span className="muted small">Repeats:</span>
+                          {([["", "Never"], ["weekly", "Weekly"], ["biweekly", "Every 2 weeks"], ["monthly", "Monthly"]] as const).map(([v, l]) => (
+                            <button key={v} type="button" className={`chip sm ${repeat === v ? "on" : ""}`}
+                              data-testid={`repeat-${v || "never"}`} onClick={() => setRepeat(v)}>{l}</button>
+                          ))}
+                          {repeat && (
+                            <select className="input" style={{ width: "auto" }} data-testid="repeat-count"
+                              value={repeatCount} onChange={(e) => setRepeatCount(Number(e.target.value))}>
+                              {[2, 3, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{n} times</option>)}
+                            </select>
+                          )}
+                        </div>
+                      )}
+                      {moreStarts.length > 0 && (
+                        <p className="muted small" style={{ margin: 0 }}>These dates become one series - everyone RSVPs per date.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
+              {schedulingMode === "poll" && (
+                <div className="stack" style={{ marginTop: 8 }}>
+                  {options.map((o, i) => (
+                    <input key={i} type="datetime-local" className="input" min={MIN_DT} data-testid={`poll-option-${i}`}
+                      value={o} onChange={(e) => setOption(i, e.target.value)} />
+                  ))}
+                  {options.length < 4 && (
+                    <button type="button" className="linklike" data-testid="add-option"
+                      onClick={() => setOptions((o) => [...o, ""])}>+ Add another time</button>
+                  )}
+                  {!showDeadline ? (
+                    <button type="button" className="linklike" data-testid="show-deadline"
+                      onClick={() => setShowDeadline(true)}>+ Set a poll deadline</button>
+                  ) : (
+                    <label className="field" style={{ marginBottom: 0 }}>Poll closes <span className="muted small">(optional)</span>
+                      <span className="row" style={{ gap: 6 }}>
+                        <input type="datetime-local" className="input" min={MIN_DT} data-testid="poll-deadline"
+                          value={pollDeadline} onChange={(e) => setPollDeadline(e.target.value)} />
+                        {pollDeadline !== "" && (
+                          <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="poll-deadline-clear"
+                            onClick={() => setPollDeadline("")} title="Remove the close date">✕</button>
+                        )}
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {schedulingMode === "general" && (
+                <p className="muted small" style={{ marginTop: 8 }} data-testid="general-note">
+                  You'll pick the dates to ask about after creating this.
+                </p>
+              )}
             </div>
-            <div>
-              <label className="field" htmlFor="d">Details <span className="muted small">(optional)</span></label>
-              <textarea id="d" className="input" maxLength={2000} data-testid="event-desc" value={description}
-                onChange={(e) => setDescription(e.target.value)} placeholder="Anything guests should know" />
+
+            {error && <p className="err">{error}</p>}
+
+            <div className="row between" style={{ alignItems: "center" }}>
+              <button type="button" className="linklike" data-testid="go-details"
+                onClick={() => setScreen("details")}>Where + more…</button>
+              <button type="button" className="btn" data-testid="create-event"
+                disabled={saving || !startValid} onClick={submit}>
+                {saving ? "Creating…" : "Create"}
+              </button>
             </div>
           </>
         )}
 
-        {step === 1 && (
-          <div>
-            <label className="field">Where</label>
-            <div className="row wrap">
-              <button type="button" className={`chip ${locationMode === "host_place" ? "on" : ""}`}
-                data-testid="loc-host" onClick={() => setLocationMode("host_place")}>📍 I’ll set the address</button>
-              <button type="button" className={`chip ${locationMode === "virtual" ? "on" : ""}`}
-                data-testid="loc-virtual" onClick={() => setLocationMode("virtual")}>💻 Online</button>
-              <button type="button" className={`chip ${locationMode === "find_venue" ? "on" : ""}`}
-                data-testid="loc-venue" onClick={() => setLocationMode("find_venue")}>📍 Set location later</button>
-            </div>
-            {locationMode === "virtual" && (
-              <input className="input" style={{ marginTop: 8 }} maxLength={300} data-testid="meeting-url" value={address} inputMode="url"
-                placeholder="https://zoom.us/j/… or https://meet.google.com/…"
-                onChange={(e) => setAddress(e.target.value)} />
-            )}
-            {locationMode === "host_place" && (
-              <div style={{ marginTop: 8 }}>
-                <AddressInput value={address} onChange={setAddress} placeholder="Start typing an address…" testid="event-address" />
-              </div>
-            )}
-            {locationMode === "find_venue" && (
-              <p className="muted small" style={{ marginTop: 8 }}>We'll help pick a spot once the group is set.</p>
-            )}
-          </div>
-        )}
-
-        {step === 2 && (
-          <div>
-            <label className="field">When</label>
-            <div className="row wrap">
-              <button type="button" className={`chip ${schedulingMode === "fixed" ? "on" : ""}`}
-                data-testid="sched-fixed" onClick={() => setSchedulingMode("fixed")}>I'll set a time</button>
-              <button type="button" className={`chip ${schedulingMode === "poll" ? "on" : ""}`}
-                data-testid="sched-poll" onClick={() => setSchedulingMode("poll")}>Poll specific times</button>
-              <button type="button" className={`chip ${schedulingMode === "general" ? "on" : ""}`}
-                data-testid="sched-general" onClick={() => setSchedulingMode("general")}>Poll general availability</button>
-            </div>
-
-            {schedulingMode === "fixed" && (
-              <div className="stack" style={{ marginTop: 8 }}>
-                <input type="datetime-local" className="input" min={MIN_DT}
-                  data-testid="fixed-time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
-                <label className="field" style={{ marginBottom: 0 }}>Ends <span className="muted small">(optional)</span>
-                  <span className="row" style={{ gap: 6 }}>
-                    <input type="datetime-local" className="input" min={startsAt || MIN_DT}
-                      data-testid="fixed-end" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
-                    {endsAt !== "" && (
-                      <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="fixed-end-clear"
-                        onClick={() => setEndsAt("")} title="Remove the end time">✕</button>
-                    )}
-                  </span>
-                </label>
-                {/* Irregular series: stack more explicit dates (any days). Mutually
-                    exclusive with a repeat pattern - picking dates clears it. */}
-                {moreStarts.map((d, i) => (
-                  <div key={i} className="row" style={{ gap: 6 }}>
-                    <input type="datetime-local" className="input" min={MIN_DT} data-testid={`more-date-${i}`}
-                      value={d} onChange={(e) => setMoreStarts((m) => m.map((x, j) => (j === i ? e.target.value : x)))} />
-                    <button type="button" className="btn ghost sm" data-testid={`more-date-remove-${i}`}
-                      onClick={() => setMoreStarts((m) => m.filter((_, j) => j !== i))}>✕</button>
-                  </div>
-                ))}
-                <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
-                  data-testid="add-date" onClick={() => { setRepeat(""); setMoreStarts((m) => [...m, ""]); }}>
-                  + Add another date
-                </button>
-                {moreStarts.length === 0 && (
-                  <div className="row wrap" style={{ gap: 6 }}>
-                    <span className="muted small">Repeats:</span>
-                    {([["", "Never"], ["weekly", "Weekly"], ["biweekly", "Every 2 weeks"], ["monthly", "Monthly"]] as const).map(([v, l]) => (
-                      <button key={v} type="button" className={`chip sm ${repeat === v ? "on" : ""}`}
-                        data-testid={`repeat-${v || "never"}`} onClick={() => setRepeat(v)}>{l}</button>
-                    ))}
-                    {repeat && (
-                      <select className="input" style={{ width: "auto" }} data-testid="repeat-count"
-                        value={repeatCount} onChange={(e) => setRepeatCount(Number(e.target.value))}>
-                        {[2, 3, 4, 6, 8, 12].map((n) => <option key={n} value={n}>{n} times</option>)}
-                      </select>
-                    )}
-                  </div>
-                )}
-                {moreStarts.length > 0 && (
-                  <p className="muted small">These dates become one series - everyone RSVPs per date.</p>
-                )}
-              </div>
-            )}
-            {schedulingMode === "poll" && (
-              <div className="stack" style={{ marginTop: 8 }}>
-                {options.map((o, i) => (
-                  <input key={i} type="datetime-local" className="input" min={MIN_DT} data-testid={`poll-option-${i}`}
-                    value={o} onChange={(e) => setOption(i, e.target.value)} />
-                ))}
-                <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
-                  data-testid="add-option" onClick={() => setOptions((o) => [...o, ""])}>+ Add another time</button>
-              </div>
-            )}
-            {schedulingMode !== "fixed" && (
-              <label className="field" style={{ marginTop: 8 }}>Poll closes <span className="muted small">(optional - non-voters get a last-chance email, then you get the results)</span>
-                <span className="row" style={{ gap: 6 }}>
-                  <input type="datetime-local" className="input" min={MIN_DT} data-testid="poll-deadline"
-                    value={pollDeadline} onChange={(e) => setPollDeadline(e.target.value)} />
-                  {pollDeadline !== "" && (
-                    <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="poll-deadline-clear"
-                      onClick={() => setPollDeadline("")} title="Remove the close date">✕</button>
-                  )}
-                </span>
-              </label>
-            )}
-            {schedulingMode === "general" && (
-              <div className="stack" style={{ marginTop: 8, gap: 6 }}>
-                <div className="row wrap" style={{ gap: 6 }}>
-                  <span className="muted small">Ask about:</span>
-                  {([["week", "This week"], ["month", "This month"], ["general", "Generally"], ["dates", "Pick days"]] as const).map(([v, l]) => (
-                    <button key={v} type="button" className={`chip sm ${generalScope === v ? "on" : ""}`}
-                      data-testid={`scope-${v}`} onClick={() => setGeneralScope(v)}>{l}</button>
-                  ))}
-                </div>
-                <p className="muted small" style={{ margin: 0 }}>
-                  {generalScope === "week" && "Guests mark which days and times work over the next 7 days. You'll lock in a time from the results."}
-                  {generalScope === "month" && "Guests tap the days that work over the next 4 weeks. You'll lock in a time from the results."}
-                  {generalScope === "general" && "Guests pick their ideal months, days of the week, and times of day (early morning → night). You'll lock in a time from the results."}
-                  {generalScope === "dates" && "Pick the exact days you're considering, then guests paint the actual times that work on each. You'll lock in a time from the results."}
-                </p>
-                {generalScope === "dates" && (
-                  <div className="stack" style={{ gap: 8, marginTop: 4 }}>
-                    <MonthPicker selected={pollDays} onToggle={(d) => setPollDays((s) => {
-                      const n = new Set(s); n.has(d) ? n.delete(d) : n.add(d); return n;
-                    })} />
-                    <div className="row wrap" style={{ gap: 8, alignItems: "center" }}>
-                      <span className="muted small">Between</span>
-                      <select className="input" style={{ maxWidth: 130 }} data-testid="grid-start" value={gridStart}
-                        onChange={(e) => setGridStart(Number(e.target.value))}>
-                        {TIME_CHOICES.filter((m) => m < gridEnd).map((m) => <option key={m} value={m}>{fmtMinutes(m)}</option>)}
-                      </select>
-                      <span className="muted small">and</span>
-                      <select className="input" style={{ maxWidth: 130 }} data-testid="grid-end" value={gridEnd}
-                        onChange={(e) => setGridEnd(Number(e.target.value))}>
-                        {TIME_CHOICES.filter((m) => m > gridStart).map((m) => <option key={m} value={m}>{fmtMinutes(m)}</option>)}
-                      </select>
-                    </div>
-                    {pollDays.size === 0 && <p className="muted small" style={{ margin: 0 }} data-testid="dates-hint">Tap at least one day above.</p>}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {step === 3 && (
+        {screen === "details" && (
           <>
             <div>
-              <label className="field">Max spots <span className="muted small">(optional - beyond it people join a waitlist)</span></label>
-              <input type="number" min={0} max={500} inputMode="numeric" className="input" data-testid="event-capacity"
+              <label className="field">Where</label>
+              <div className="row wrap">
+                <button type="button" className={`chip ${locationMode === "host_place" ? "on" : ""}`}
+                  data-testid="loc-host" onClick={() => setLocationMode("host_place")}>📍 I’ll set the address</button>
+                <button type="button" className={`chip ${locationMode === "virtual" ? "on" : ""}`}
+                  data-testid="loc-virtual" onClick={() => setLocationMode("virtual")}>💻 Online</button>
+                <button type="button" className={`chip ${locationMode === "find_venue" ? "on" : ""}`}
+                  data-testid="loc-venue" onClick={() => setLocationMode("find_venue")}>📍 Help me find a venue</button>
+              </div>
+              {locationMode === "virtual" && (
+                <input className="input" style={{ marginTop: 8 }} maxLength={300} data-testid="meeting-url" value={address} inputMode="url"
+                  placeholder="https://zoom.us/j/… or https://meet.google.com/…"
+                  onChange={(e) => setAddress(e.target.value)} />
+              )}
+              {locationMode === "host_place" && (
+                <div style={{ marginTop: 8 }}>
+                  <AddressInput value={address} onChange={setAddress} placeholder="Start typing an address…" testid="event-address" />
+                </div>
+              )}
+              {locationMode === "find_venue" && (
+                <p className="muted small" style={{ marginTop: 8 }}>We'll help pick a spot once the group is set.</p>
+              )}
+            </div>
+
+            <div>
+              <label className="field" htmlFor="cap">Max spots <span className="muted small">(optional - beyond it people join a waitlist)</span></label>
+              <input id="cap" type="number" min={0} max={500} inputMode="numeric" className="input" data-testid="event-capacity"
                 value={capacity} placeholder="Unlimited" onChange={(e) => setCapacity(e.target.value)} />
             </div>
-            <div>
-              <label className="field">Invite friends? <span className="muted small">(optional - they'll see it on their dashboard)</span></label>
-              {friends.length === 0 && <p className="muted small">No friends yet - add some on the Friends page, or share the invite link after creating.</p>}
-              <div className="row wrap" style={{ gap: 6 }}>
-                {friends.map((f) => (
-                  <button key={f.friend_id} type="button"
-                    className={`chip sm ${invitees.has(f.friend_id) ? "on" : ""}`}
-                    data-testid={`winvite-${f.handle}`}
-                    onClick={() => toggleInvite(f.friend_id)}>
-                    <Avatar url={f.avatar_url} name={f.display_name} size={18} /> {f.display_name}
-                  </button>
-                ))}
-              </div>
-              {invitees.size > 0 && <p className="muted small" style={{ marginTop: 6 }}>{invitees.size} to invite</p>}
+
+            {error && <p className="err">{error}</p>}
+
+            <div className="row between" style={{ alignItems: "center" }}>
+              <button type="button" className="linklike" data-testid="details-back"
+                onClick={() => setScreen("start")}>← Back</button>
+              <button type="button" className="btn" data-testid="create-event-details"
+                disabled={saving || !startValid} onClick={submit}>
+                {saving ? "Creating…" : "Create"}
+              </button>
             </div>
+            <button type="button" className="linklike muted small" style={{ alignSelf: "center" }}
+              data-testid="details-skip" onClick={submit} disabled={saving || !startValid}>Skip for now</button>
           </>
         )}
-
-        {error && <p className="err">{error}</p>}
-
-        <div className="row between">
-          <button type="button" className="btn ghost sm" data-testid="wiz-back"
-            onClick={() => (step === 0 ? nav("/") : setStep((s) => s - 1))}>← Back</button>
-          {step < STEPS.length - 1 ? (
-            <button type="button" className="btn" data-testid="wiz-next"
-              disabled={!stepValid(step)} onClick={() => setStep((s) => s + 1)}>Next →</button>
-          ) : (
-            <button type="button" className="btn" data-testid="create-event"
-              disabled={saving || !stepValid(2)} onClick={submit}>
-              {saving ? "Creating…" : "Create event"}
-            </button>
-          )}
-        </div>
       </form>
+
+      {typeSheet && createPortal(
+        <div className="crop-overlay" data-testid="type-sheet" onClick={() => setTypeSheet(false)}>
+          <div className="card stack crop-card" onClick={(e) => e.stopPropagation()}>
+            <div className="row between"><strong>Pick a type</strong>
+              <button type="button" className="btn ghost sm" data-testid="type-sheet-close" onClick={() => setTypeSheet(false)}>Close</button>
+            </div>
+            <div className="row wrap" style={{ gap: 6 }}>
+              {moreTypes.map((et) => (
+                <button type="button" key={et.value} className={`chip sm ${type === et.value && !custom ? "on" : ""}`}
+                  data-testid={`sheet-type-${et.value}`}
+                  onClick={() => { pickPreset(et.value); setTypeSheet(false); }}>{et.emoji} {et.label}</button>
+              ))}
+            </div>
+            {savedTypes.length > 0 && (
+              <>
+                <label className="field" style={{ marginBottom: 0 }}>Your types</label>
+                <div className="row wrap" style={{ gap: 6 }}>
+                  {savedTypes.map((t) => (
+                    <span key={t.label} role="button" tabIndex={0}
+                      className={`chip sm ${custom?.label === t.label ? "on" : ""}`}
+                      data-testid={`sheet-custom-${t.label.toLowerCase()}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                      onClick={() => { pickSaved(t); setTypeSheet(false); }}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { pickSaved(t); setTypeSheet(false); } }}>
+                      {t.emoji} {t.label}
+                      <SavedTypeDelete label={t.label} onDeleted={() => { if (custom?.label === t.label) setCustom(null); reloadTypes(); }} />
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+            <NewTypeInput onCreate={(label) => {
+              setType("other");
+              setCustom({ emoji: CUSTOM_TYPE_ICON, label });
+              setTypeSheet(false);
+            }} />
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
+  );
+}
+
+// Name a brand-new custom type - no emoji picker; the system assigns the icon.
+function NewTypeInput({ onCreate }: { onCreate: (label: string) => void }) {
+  const [name, setName] = useState("");
+  return (
+    <div>
+      <label className="field" htmlFor="nt" style={{ marginBottom: 4 }}>Something else?</label>
+      <div className="row" style={{ gap: 6 }}>
+        <input id="nt" className="input" data-testid="newtype-name" value={name} maxLength={20}
+          placeholder="Name a new type" onChange={(e) => setName(e.target.value)} />
+        <button type="button" className="btn sm" style={{ flex: "none" }} data-testid="newtype-save"
+          disabled={!name.trim()} onClick={() => onCreate(name.trim())}>Use it</button>
+      </div>
+    </div>
+  );
+}
+
+// Two-tap delete for a saved custom type (mirrors every other remove).
+function SavedTypeDelete({ label, onDeleted }: { label: string; onDeleted: () => void }) {
+  const api = useApi();
+  const [armed, setArmed] = useState(false);
+  return (
+    <button type="button" aria-label={`Delete ${label}`}
+      data-testid={`custom-del-${label.toLowerCase()}`}
+      style={{ all: "unset", cursor: "pointer", paddingLeft: 2, opacity: armed ? 1 : 0.6,
+        color: armed ? "var(--no)" : undefined, fontWeight: armed ? 800 : undefined }}
+      onClick={async (e) => {
+        e.stopPropagation();
+        if (!armed) { setArmed(true); return; }
+        setArmed(false);
+        await api(`/api/event-types/${encodeURIComponent(label)}`, { method: "DELETE" });
+        onDeleted();
+      }}>{armed ? "✕?" : "✕"}</button>
   );
 }

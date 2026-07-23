@@ -24,7 +24,7 @@ export type Event = {
   city: string;
   custom_emoji: string;
   custom_label: string;
-  general_scope: "week" | "month" | "general" | "dates";
+  general_scope: "week" | "month" | "general" | "dates" | "unset";
   photo_url: string;
   theme: string;
   timezone: string;

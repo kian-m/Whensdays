@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
 // Marketing screenshots: seeds a RICH scenario (many people RSVP'd, a full
 // availability heatmap, a date being picked) and captures clean crops for
@@ -46,15 +46,15 @@ test.describe("marketing screenshots", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill("Board game night 🎲");
     await page.getByTestId("type-party").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("scope-week").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await page.waitForSelector('[data-testid="event-title"]');
     const id = page.url().split("/e/")[1];
+    // Finish poll setup: week scope (the scope picker moved out of the wizard
+    // onto the event page).
+    await page.getByTestId("scope-week").click();
+    await page.getByTestId("poll-setup-save").click();
+    await expect(page.getByTestId("general-setup")).toBeHidden();
 
     // Give the event a party GIF cover (generated animated data:image/gif; the
     // hermetic stack has no real Klipy). Re-PUT the event with photo_url set.
@@ -147,15 +147,14 @@ test.describe("marketing screenshots", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("event-title").fill("Improv practice 🎭");
     await page.getByTestId("type-practice").click();
-    await page.getByTestId("wiz-next").click();
-    await page.getByTestId("loc-host").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("sched-general").click();
-    await page.getByTestId("scope-month").click();
-    await page.getByTestId("wiz-next").click();
     await page.getByTestId("create-event").click();
     await page.waitForSelector('[data-testid="event-title"]');
     const mid = page.url().split("/e/")[1];
+    // Finish poll setup: month scope (the scope picker moved onto the event page).
+    await page.getByTestId("scope-month").click();
+    await page.getByTestId("poll-setup-save").click();
+    await expect(page.getByTestId("general-setup")).toBeHidden();
 
     // The three target dates: the Tuesday of week 1, Wednesday of week 2,
     // Thursday of week 3, inside the event's 28-day answer window. (Any 7
