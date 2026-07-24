@@ -47,7 +47,9 @@ test.describe("docs screenshots", () => {
     await page.getByTestId("preview-toggle").click(); // host → guest view
     await page.getByTestId("rsvp-going").click();      // voting is gated behind the RSVP
     await page.getByTestId("vote-summary").click();    // …and collapsed by default
-    for (const cell of ["gp-cell-5-evening", "gp-cell-6-afternoon", "gp-cell-6-evening", "gp-cell-0-noon"]) {
+    await page.getByTestId("gp-cell-0-noon").click(); // page 1 (early_morning/morning/noon)
+    await page.getByTestId("gp-col-later").click(); // page 2 (afternoon/evening/night)
+    for (const cell of ["gp-cell-5-evening", "gp-cell-6-afternoon", "gp-cell-6-evening"]) {
       await page.getByTestId(cell).click();
     }
     await page.getByTestId("gp-month-0").click();
@@ -57,7 +59,11 @@ test.describe("docs screenshots", () => {
     await page.goto("/profile");
     await page.getByTestId("avail-edit").click();
     await page.getByTestId("availability-grid").waitFor();
-    for (const c of ["avail-cell-1-evening", "avail-cell-2-noon", "avail-cell-2-afternoon", "avail-cell-5-morning", "avail-cell-6-evening"]) {
+    for (const c of ["avail-cell-2-noon", "avail-cell-5-morning"]) { // page 1
+      await page.getByTestId(c).click();
+    }
+    await page.getByTestId("avail-col-later").click(); // page 2 (afternoon/evening/night)
+    for (const c of ["avail-cell-1-evening", "avail-cell-2-afternoon", "avail-cell-6-evening"]) {
       await page.getByTestId(c).click();
     }
     await page.screenshot({ path: `${OUT}/04-scheduler-availability.png`, fullPage: true, animations: "disabled" });

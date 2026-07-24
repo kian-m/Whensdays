@@ -160,6 +160,27 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, testid }: {
 // Cells are tri-state: `free` (green), `busy` (red, user-marked), or neither
 // (neutral gray = unselected). `locked` cells come from an imported calendar -
 // hatched red and non-interactive (you can't edit what your calendar says).
+// Compound "Weekday, Mon D" labels (dayLabel in lib.tsx) render as two short
+// stacked lines instead of one line that has to fit ~11 characters - each
+// line is short enough to comfortably fit a narrow column, so the ellipsis
+// fallback on .grid .day/.hd stops being load-bearing.
+function LabelStack({ label, align = "center" }: { label: string; align?: "left" | "right" | "center" }) {
+  const i = label.indexOf(", ");
+  if (i === -1) return <>{label}</>;
+  const items = align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
+  return (
+    <span className="label-stack" style={{ alignItems: items }}>
+      <span>{label.slice(0, i)}</span>
+      <span className="label-stack-sub">{label.slice(i + 2)}</span>
+    </span>
+  );
+}
+
+// DayGrid paginates its columns past this many, so 6 dayparts don't crush the
+// row-label column to zero on a narrow phone (WEEK_PARTS's 3 columns stay on
+// one page - the trigger is strictly more than this).
+const MAX_COLS_PER_PAGE = 3;
+
 export function DayGrid({
   dates, free, busy, locked, cols = DAYPARTS, idPrefix = "avail",
   onToggle, onToggleRow, onToggleCol, onPaint, paintOn, readOnly, testid,
@@ -184,6 +205,13 @@ export function DayGrid({
   testid?: string;
 }) {
   const key = (day: string, dp: string) => `${day}:${dp}`;
+  // Paginate the daypart columns so a 6-column grid doesn't squeeze the row
+  // labels off-screen on a phone. The free/busy/locked sets span ALL columns
+  // and onToggleRow fills the full day, so only the viewport moves.
+  const colPages = Math.max(1, Math.ceil(cols.length / MAX_COLS_PER_PAGE));
+  const [colPage, setColPage] = useState(0);
+  const cp = Math.min(colPage, colPages - 1);
+  const pageCols = cols.slice(cp * MAX_COLS_PER_PAGE, cp * MAX_COLS_PER_PAGE + MAX_COLS_PER_PAGE);
   // One drag = one operation applied to each cell at most once.
   const drag = useRef<{ on: boolean; painted: Set<string> } | null>(null);
   const applyAt = (el: Element | null) => {
@@ -227,48 +255,61 @@ export function DayGrid({
     return "not set";
   };
   return (
-    <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
-      style={{ gridTemplateColumns: `auto repeat(${cols.length}, 1fr)` }} data-testid={testid} {...paintHandlers}>
-      <div />
-      {cols.map((dp) =>
-        readOnly ? (
-          <div key={dp.value} className="hd">{dp.short}</div>
-        ) : (
-          <button key={dp.value} type="button" className="hd gp-head"
-            aria-label={`Fill the whole ${dp.value.replaceAll("_", " ")} column`}
-            data-testid={`${idPrefix}-col-${dp.value}`} onClick={() => onToggleCol?.(dp.value)}>{dp.short}</button>
-        ),
+    <div className="stack" style={{ gap: 6 }}>
+      {colPages > 1 && (
+        <div className="row between" data-testid={`${idPrefix}-colpager`}>
+          <button type="button" className="btn ghost sm" data-testid={`${idPrefix}-col-earlier`}
+            disabled={cp === 0} onClick={() => setColPage(cp - 1)}>← Earlier</button>
+          <span className="muted small" data-testid={`${idPrefix}-col-range`}>
+            {pageCols[0]?.short} – {pageCols[pageCols.length - 1]?.short}
+          </span>
+          <button type="button" className="btn ghost sm" data-testid={`${idPrefix}-col-later`}
+            disabled={cp >= colPages - 1} onClick={() => setColPage(cp + 1)}>Later →</button>
+        </div>
       )}
-      {dates.map((d, i) => (
-        <Fragment key={d.value}>
-          {readOnly ? (
-            <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
+      <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
+        style={{ gridTemplateColumns: `minmax(3.4rem, auto) repeat(${pageCols.length}, 1fr)` }} data-testid={testid} {...paintHandlers}>
+        <div />
+        {pageCols.map((dp) =>
+          readOnly ? (
+            <div key={dp.value} className="hd">{dp.short}</div>
           ) : (
-            <button type="button" className="day gp-head" style={{ textAlign: "left" }}
-              aria-label={`Fill the whole ${d.label} row`}
-              data-testid={`${idPrefix}-row-${i}`} onClick={() => onToggleRow?.(d.value)}>{d.label}</button>
-          )}
-          {cols.map((dp) => {
-            const k = key(d.value, dp.value);
-            const isLocked = locked?.has(k);
-            const label = `${d.label}, ${dp.value.replaceAll("_", " ")}: ${cellTitle(k)}`;
-            return readOnly ? (
-              <div key={dp.value} className={cellClass(k)} title={cellTitle(k)} role="img" aria-label={label} />
+            <button key={dp.value} type="button" className="hd gp-head"
+              aria-label={`Fill the whole ${dp.value.replaceAll("_", " ")} column`}
+              data-testid={`${idPrefix}-col-${dp.value}`} onClick={() => onToggleCol?.(dp.value)}>{dp.short}</button>
+          ),
+        )}
+        {dates.map((d, i) => (
+          <Fragment key={d.value}>
+            {readOnly ? (
+              <div className="day" style={{ textAlign: "left" }}><LabelStack label={d.label} align="left" /></div>
             ) : (
-              <button key={dp.value} type="button" data-testid={`${idPrefix}-cell-${i}-${dp.value}`}
-                data-day={d.value} data-dp={dp.value}
-                className={cellClass(k)} disabled={isLocked} title={cellTitle(k)}
-                aria-label={label} aria-pressed={free.has(k)}
-                onClick={onPaint ? undefined : () => onToggle?.(d.value, dp.value)}
-                onKeyDown={onPaint ? (ev) => {
-                  if (ev.key !== "Enter" && ev.key !== " ") return;
-                  ev.preventDefault();
-                  onPaint(d.value, dp.value, !(paintOn ?? free).has(k));
-                } : undefined} />
-            );
-          })}
-        </Fragment>
-      ))}
+              <button type="button" className="day gp-head" style={{ textAlign: "left" }}
+                aria-label={`Fill the whole ${d.label} row`}
+                data-testid={`${idPrefix}-row-${i}`} onClick={() => onToggleRow?.(d.value)}><LabelStack label={d.label} align="left" /></button>
+            )}
+            {pageCols.map((dp) => {
+              const k = key(d.value, dp.value);
+              const isLocked = locked?.has(k);
+              const label = `${d.label}, ${dp.value.replaceAll("_", " ")}: ${cellTitle(k)}`;
+              return readOnly ? (
+                <div key={dp.value} className={cellClass(k)} title={cellTitle(k)} role="img" aria-label={label} />
+              ) : (
+                <button key={dp.value} type="button" data-testid={`${idPrefix}-cell-${i}-${dp.value}`}
+                  data-day={d.value} data-dp={dp.value}
+                  className={cellClass(k)} disabled={isLocked} title={cellTitle(k)}
+                  aria-label={label} aria-pressed={free.has(k)}
+                  onClick={onPaint ? undefined : () => onToggle?.(d.value, dp.value)}
+                  onKeyDown={onPaint ? (ev) => {
+                    if (ev.key !== "Enter" && ev.key !== " ") return;
+                    ev.preventDefault();
+                    onPaint(d.value, dp.value, !(paintOn ?? free).has(k));
+                  } : undefined} />
+              );
+            })}
+          </Fragment>
+        ))}
+      </div>
     </div>
   );
 }
@@ -353,15 +394,15 @@ export function TimeGrid({
         </div>
       )}
       <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
-        style={{ gridTemplateColumns: `auto repeat(${pageDays.length}, minmax(46px, 1fr))` }}
+        style={{ gridTemplateColumns: `minmax(3.6rem, auto) repeat(${pageDays.length}, minmax(0, 1fr))` }}
         data-testid={testid} {...paintHandlers}>
         <div />
         {pageDays.map((d) =>
           onToggleCol && !readOnly ? (
             <button key={d.value} type="button" className="hd gp-head" data-testid={`${idPrefix}-col-${d.value}`}
-              aria-label={`Fill the whole ${d.label} column`} onClick={() => onToggleCol(d.value)}>{d.label}</button>
+              aria-label={`Fill the whole ${d.label} column`} onClick={() => onToggleCol(d.value)}><LabelStack label={d.label} /></button>
           ) : (
-            <div key={d.value} className="hd">{d.label}</div>
+            <div key={d.value} className="hd"><LabelStack label={d.label} /></div>
           ),
         )}
         {slots.map((m) => (
@@ -387,7 +428,10 @@ export function TimeGrid({
                   data-day={d.value} data-min={m}
                   className={`cell ${!counts && free.has(k) ? "on" : ""}`} title={label}
                   aria-label={label} aria-pressed={free.has(k)}
-                  style={{ ...base, ...picked }}
+                  // min-width:0 lets 4 day columns pack into a narrow phone card
+                  // (the shared .cell floors at 44px, which would overflow); the
+                  // min-height tap target is preserved.
+                  style={{ minWidth: 0, ...base, ...picked }}
                   onClick={onCellClick ? () => onCellClick(d.value, m) : onPaint ? undefined : undefined}
                   onKeyDown={onPaint && !readOnly ? (ev) => {
                     if (ev.key !== "Enter" && ev.key !== " ") return;
@@ -438,8 +482,8 @@ export function MonthPicker({ selected, onToggle }: { selected: Set<string>; onT
           const on = selected.has(v);
           return (
             <button key={d} type="button" disabled={past} data-testid={`cal-day-${v}`}
-              className={`cell ${on ? "on" : ""}`} aria-pressed={on}
-              style={{ minHeight: 38, opacity: past ? 0.3 : 1, display: "grid", placeItems: "center" }}
+              className={`cal-day ${on ? "on" : ""}`} aria-pressed={on}
+              style={{ opacity: past ? 0.3 : 1, display: "grid", placeItems: "center" }}
               onClick={() => onToggle(v)}>{d}</button>
           );
         })}

@@ -408,6 +408,12 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .grid .hd { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .grid .day { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Two-line stacked grid labels ("Weekday" over "Mon D") so a long compound
+   date header fits a narrow phone column without truncating to 1-2 letters.
+   The ellipsis on .day/.hd stays as a defensive fallback only. */
+.label-stack { display: flex; flex-direction: column; line-height: 1.15; gap: 1px; max-width: 100%; }
+.label-stack > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.label-stack-sub { font-size: 0.68rem; font-weight: 600; color: var(--muted); }
 /* Availability cells are tri-state:
    neutral (unselected) · green .on (free) · red .busy-mark (busy). */
 .cell {
@@ -416,6 +422,17 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .cell.on { background: var(--go); border-color: var(--go); }
 .cell.busy-mark { background: var(--no); border-color: var(--no); }
+/* MonthPicker is a dense 7-column day-of-month grid, not a tap-target-
+   sensitive availability grid. It sits TWO cards deep (page > form > picker),
+   so its real interior is only ~220px on a 375px phone - a fixed 40px+ cell
+   width would force 7 columns (280px+) to overflow the card border. Let the
+   1fr tracks shrink to fit (min-width:0) and keep the tap target vertical
+   (min-height:40px); numbers 1-31 read fine in a ~28px-wide cell. */
+.cal-day {
+  min-width: 0; min-height: 40px; border: 1px solid var(--glass-line); border-radius: 6px;
+  background: var(--glass-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+}
+.cal-day.on { background: var(--go); border-color: var(--go); }
 /* Busy pulled from an imported calendar - locked, hatched red so it reads as
    "busy, and not yours to edit". */
 .cell.locked {

@@ -107,16 +107,21 @@ test.describe("scheduler", () => {
     // Voting is gated behind the RSVP and collapsed - expand it to reach the grid.
     await page.getByTestId("vote-summary").click();
     await page.getByTestId("gp-month-0").click();
-    await page.getByTestId("gp-cell-6-evening").click();
     // Slide-to-paint works on poll grids too: one drag marks a row of cells.
+    // The 6-daypart grid paginates on phones (>3 columns), so drag within a
+    // page - page 1 (early_morning/morning/noon) here.
     await page.getByTestId("gp-cell-5-morning").hover();
     await page.mouse.down();
     await page.getByTestId("gp-cell-5-noon").hover();
-    await page.getByTestId("gp-cell-5-afternoon").hover();
     await page.mouse.up();
-    for (const dp of ["morning", "noon", "afternoon"]) {
+    for (const dp of ["morning", "noon"]) {
       await expect(page.getByTestId(`gp-cell-5-${dp}`)).toHaveClass(/\bon\b/);
     }
+    // Page 2 (afternoon/evening/night) holds the remaining picks.
+    await page.getByTestId("gp-col-later").click();
+    await page.getByTestId("gp-cell-6-evening").click();
+    await page.getByTestId("gp-cell-5-afternoon").click();
+    await expect(page.getByTestId("gp-cell-5-afternoon")).toHaveClass(/\bon\b/);
     await page.getByTestId("save-general").click();
 
     // Back in the host view, the aggregate reflects the pick.
@@ -470,12 +475,21 @@ test.describe("scheduler", () => {
     await page.goto("/profile");
     await page.getByTestId("avail-edit").click();
     await expect(page.getByTestId("availability-grid")).toBeVisible();
+    // Page 1 (early_morning/morning/noon): one drag paints two cells.
     await page.getByTestId("avail-cell-0-morning").hover();
     await page.mouse.down();
+    await page.getByTestId("avail-cell-0-noon").hover();
+    await page.mouse.up();
+    for (const dp of ["morning", "noon"]) {
+      await expect(page.getByTestId(`avail-cell-0-${dp}`)).toHaveClass(/\bon\b/);
+    }
+    // Page 2 (afternoon/evening/night): the 6-column grid paginates on phones.
+    await page.getByTestId("avail-col-later").click();
     await page.getByTestId("avail-cell-0-afternoon").hover();
+    await page.mouse.down();
     await page.getByTestId("avail-cell-0-evening").hover();
     await page.mouse.up();
-    for (const dp of ["morning", "afternoon", "evening"]) {
+    for (const dp of ["afternoon", "evening"]) {
       await expect(page.getByTestId(`avail-cell-0-${dp}`)).toHaveClass(/\bon\b/);
     }
 
@@ -842,6 +856,7 @@ test.describe("scheduler", () => {
       await ensureUser(g, "fit2", "Fit Guest", "fit2");
       await g.goto("/profile");
       await g.getByTestId("avail-edit").click();
+      await g.getByTestId("avail-col-later").click(); // evening is on page 2 (afternoon/evening/night)
       const fitCell = g.getByTestId("avail-cell-1-evening");
       if (!((await fitCell.getAttribute("class")) ?? "").includes("on")) {
         await fitCell.click(); // idempotent across gate passes (shared DB)
@@ -945,6 +960,7 @@ test.describe("scheduler", () => {
       await g.goto(`/e/${id}`);
       await g.getByTestId("rsvp-maybe").click();
       await g.getByTestId("vote-summary").click();
+      await g.getByTestId("gpw-col-later").click(); // evening is on page 2
       await g.getByTestId("gpw-cell-1-evening").click();
       const saved = g.waitForResponse((r) => r.url().includes("general-votes") && r.ok());
       await g.getByTestId("save-general").click();
@@ -2020,6 +2036,7 @@ test.describe("scheduler", () => {
     // Voting is gated behind the RSVP and collapsed - RSVP then expand it.
     await page.getByTestId("rsvp-going").click();
     await page.getByTestId("vote-summary").click();
+    await page.getByTestId("gpw-col-later").click(); // evening is on page 2
     await expect(page.getByTestId("gpw-cell-0-evening")).toBeVisible();
   });
 
@@ -2036,14 +2053,16 @@ test.describe("scheduler", () => {
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("rsvp-going").click();
     await page.getByTestId("vote-summary").click();
+    await page.getByTestId("gpw-cell-2-noon").click(); // page 1
+    await page.getByTestId("gpw-col-later").click(); // evening is on page 2
     await page.getByTestId("gpw-cell-1-evening").click();
-    await page.getByTestId("gpw-cell-2-noon").click();
     await page.getByTestId("save-general").click();
     await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
     // Saved picks survive a reload (persisted, not just local state).
     await page.reload();
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("vote-summary").click();
+    await page.getByTestId("gpw-col-later").click();
     await expect(page.getByTestId("gpw-cell-1-evening")).toHaveClass(/on/);
     await page.getByTestId("preview-toggle").click();
     await expect(page.getByTestId("gr-week-heat")).toBeVisible();
@@ -2062,8 +2081,9 @@ test.describe("scheduler", () => {
     await page.getByTestId("rsvp-going").click();
     await page.getByTestId("vote-summary").click();
     // Month is a dates × dayparts grid now (28 days) - pick times, not just days.
+    await page.getByTestId("gpm-cell-12-noon").click(); // page 1
+    await page.getByTestId("gpm-col-later").click(); // evening is on page 2
     await page.getByTestId("gpm-cell-5-evening").click();
-    await page.getByTestId("gpm-cell-12-noon").click();
     await page.getByTestId("save-general").click();
     await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
     await page.getByTestId("preview-toggle").click();
@@ -2106,6 +2126,7 @@ test.describe("scheduler", () => {
     // Vote for NEXT month (gp-month-1) - the host's target-month chips list
     // voted months, and the test schedules into next month below.
     await page.getByTestId("gp-month-1").click();
+    await page.getByTestId("gp-col-later").click(); // evening is on page 2
     await page.getByTestId("gp-cell-1-evening").click();
     await page.getByTestId("save-general").click();
     await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
@@ -2473,8 +2494,9 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("profile-view")).toBeVisible(); // back to read-only
     // Explicit calendar: tomorrow evening, day-after noon.
     await page.getByTestId("avail-edit").click();
+    await page.getByTestId("avail-cell-2-noon").click(); // page 1
+    await page.getByTestId("avail-col-later").click(); // evening is on page 2
     await page.getByTestId("avail-cell-1-evening").click();
-    await page.getByTestId("avail-cell-2-noon").click();
     await page.getByTestId("save-availability").click();
     await expect(page.getByText("Availability saved ✓")).toBeVisible();
     // In-app support contact (where signed-in users look for help).
@@ -2502,6 +2524,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("avail-later").click();
     await expect(page.getByTestId("avail-earlier")).toBeEnabled();
     await expect(page.getByTestId("avail-range")).not.toHaveText(firstRange ?? "");
+    await page.getByTestId("avail-col-later").click(); // evening is on daypart page 2
     await page.getByTestId("avail-cell-0-evening").click(); // a date ~2 weeks out
     await page.getByTestId("save-availability").click();
     await expect(page.getByText("Availability saved ✓")).toBeVisible();
@@ -2602,6 +2625,7 @@ test.describe("scheduler", () => {
       // Ben marks some availability so Amy has something to see.
       await ben.goto("/profile");
       await ben.getByTestId("avail-edit").click();
+      await ben.getByTestId("avail-col-later").click(); // afternoon is on page 2
       await ben.getByTestId("avail-cell-2-afternoon").click();
       await ben.getByTestId("save-availability").click();
       await expect(ben.getByText("Availability saved ✓")).toBeVisible();
