@@ -160,21 +160,6 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, testid }: {
 // Cells are tri-state: `free` (green), `busy` (red, user-marked), or neither
 // (neutral gray = unselected). `locked` cells come from an imported calendar -
 // hatched red and non-interactive (you can't edit what your calendar says).
-// Tracks the <640px breakpoint so grid components can swap desktop pagination
-// for mobile horizontal scroll-snap (matches the CSS `@media (max-width:639px)`).
-export function useIsMobile(): boolean {
-  const q = "(max-width: 639px)";
-  const [m, setM] = useState(() => typeof matchMedia !== "undefined" && matchMedia(q).matches);
-  useEffect(() => {
-    const mq = matchMedia(q);
-    const on = () => setM(mq.matches);
-    on();
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return m;
-}
-
 export function DayGrid({
   dates, free, busy, locked, cols = DAYPARTS, idPrefix = "avail",
   onToggle, onToggleRow, onToggleCol, onPaint, paintOn, readOnly, testid,
@@ -242,9 +227,9 @@ export function DayGrid({
     return "not set";
   };
   return (
-    <div className={`grid snapgrid ${onPaint && !readOnly ? "paintable" : ""}`}
-      style={{ ["--cols" as string]: cols.length } as React.CSSProperties} data-testid={testid} {...paintHandlers}>
-      <div className="corner" />
+    <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
+      style={{ gridTemplateColumns: `auto repeat(${cols.length}, 1fr)` }} data-testid={testid} {...paintHandlers}>
+      <div />
       {cols.map((dp) =>
         readOnly ? (
           <div key={dp.value} className="hd">{dp.short}</div>
@@ -321,14 +306,10 @@ export function TimeGrid({
   // Paginate the day columns so long date lists don't hide behind a horizontal
   // scroll. The `free`/`counts`/`pick` sets span ALL days, so painting or
   // picking across pages accumulates normally - only the viewport moves.
-  // Below 640px the day columns scroll-snap (2 visible) instead of paginating,
-  // so a phone renders ALL days and hides the pager; desktop keeps the pager.
-  const mobile = useIsMobile();
-  const perPage = mobile ? Math.max(1, days.length) : daysPerPage;
-  const pages = Math.max(1, Math.ceil(days.length / perPage));
+  const pages = Math.max(1, Math.ceil(days.length / daysPerPage));
   const [page, setPage] = useState(0);
   const p = Math.min(page, pages - 1);
-  const pageDays = days.slice(p * perPage, p * perPage + perPage);
+  const pageDays = days.slice(p * daysPerPage, p * daysPerPage + daysPerPage);
   const drag = useRef<{ on: boolean; painted: Set<string> } | null>(null);
   const applyAt = (el: Element | null) => {
     if (!drag.current || !onPaint) return;
@@ -371,10 +352,10 @@ export function TimeGrid({
             disabled={p >= pages - 1} onClick={() => setPage(p + 1)}>Later →</button>
         </div>
       )}
-      <div className={`grid snapgrid tg ${onPaint && !readOnly ? "paintable" : ""}`}
-        style={{ ["--cols" as string]: pageDays.length } as React.CSSProperties}
+      <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
+        style={{ gridTemplateColumns: `auto repeat(${pageDays.length}, minmax(46px, 1fr))` }}
         data-testid={testid} {...paintHandlers}>
-        <div className="corner" />
+        <div />
         {pageDays.map((d) =>
           onToggleCol && !readOnly ? (
             <button key={d.value} type="button" className="hd gp-head" data-testid={`${idPrefix}-col-${d.value}`}

@@ -406,37 +406,6 @@ textarea.input { resize: vertical; min-height: 64px; }
 .grid {
   display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 0.35rem; align-items: center;
 }
-/* Availability/time grids (DayGrid + TimeGrid). Column count rides in `--cols`
-   (set inline per component) so the media query can retrack them without
-   inline-style specificity fighting it; `--col-w` lets TimeGrid opt into a
-   per-day min-width. `.snapgrid` is deliberately NOT on the MonthPicker calendar
-   or the host results heatmaps - only these two scroll-snap on mobile. */
-.snapgrid {
-  --vis: 3; --label-w: 3.8rem;
-  grid-template-columns: auto repeat(var(--cols, 3), var(--col-w, 1fr));
-}
-.snapgrid.tg { --vis: 2; --label-w: 4.4rem; --col-w: minmax(46px, 1fr); }
-/* Under 640px the daypart/day columns scroll horizontally with scroll-snap
-   (DayGrid shows 3 at a time, TimeGrid 2) while the date/time LABEL column stays
-   pinned left and the header row stays pinned top. Cells scrolling under the
-   sticky label/header are masked by an opaque surface fill + a box-shadow the
-   width of the grid gap. ≥640px keeps the original full-width grid. */
-@media (max-width: 639px) {
-  .snapgrid {
-    grid-template-columns:
-      var(--label-w) repeat(var(--cols, 3), calc((100% - var(--label-w)) / var(--vis)));
-    overflow: auto; max-height: 62vh;
-    scroll-snap-type: x mandatory; scroll-padding-left: var(--label-w);
-    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
-  }
-  .snapgrid > .hd { position: sticky; top: 0; z-index: 2; background: var(--surface);
-    box-shadow: 0 0.35rem 0 var(--surface); scroll-snap-align: start; }
-  .snapgrid > .day { position: sticky; left: 0; z-index: 2; background: var(--surface);
-    box-shadow: 0.35rem 0 0 var(--surface); }
-  .snapgrid > .corner { position: sticky; left: 0; top: 0; z-index: 3; background: var(--surface);
-    box-shadow: 0.35rem 0 0 var(--surface), 0 0.35rem 0 var(--surface); }
-  .snapgrid > .cell { scroll-snap-align: start; }
-}
 .grid .hd { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .grid .day { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Availability cells are tri-state:
