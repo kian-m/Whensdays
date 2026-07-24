@@ -5,7 +5,6 @@ import {
   CalendarProvider,
   Event,
   ImportedEvent,
-  TYPE_COLORS,
   getJSON,
   sendJSON,
   useApi,
@@ -24,10 +23,12 @@ type CalItem = {
   key: string;
   title: string;
   start: Date;
-  color: string; // type color for scheduler events, gray for imported
+  color: string; // brand accent for scheduler events, gray for imported
   eventId?: string; // navigable for scheduler events
   imported?: boolean;
 };
+
+const SCHED_COLOR = "#ee6c4d"; // brand coral accent for your own scheduler events
 
 const dayKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -56,7 +57,7 @@ export function Calendars() {
       if (!e.starts_at || e.status === "cancelled") continue;
       push({
         key: `s-${e.id}`, title: e.title, start: new Date(e.starts_at),
-        color: TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other, eventId: e.id,
+        color: SCHED_COLOR, eventId: e.id,
       });
     }
     for (const [i, e] of (imported?.events ?? []).entries()) {

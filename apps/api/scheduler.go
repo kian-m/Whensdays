@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -614,7 +613,6 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	var in struct {
 		Title           string   `json:"title"`
-		EventType       string   `json:"event_type"`
 		Description     string   `json:"description"`
 		LocationMode    string   `json:"location_mode"`
 		LocationAddress string   `json:"location_address"`
@@ -630,8 +628,6 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		Visibility      string   `json:"visibility"`    // optional: private (default) | public
 		Topic           string   `json:"topic"`         // optional slug, for public discovery
 		City            string   `json:"city"`          // optional, for public discovery
-		CustomEmoji     string   `json:"custom_emoji"`  // optional user-defined type (with label)
-		CustomLabel     string   `json:"custom_label"`  // ≤20 chars; forces event_type=other
 		GeneralScope    string   `json:"general_scope"` // general mode: week|month|general|dates (default general)
 		PollDays        []string `json:"poll_days"`     // dates scope: host-picked YYYY-MM-DD days
 		GridStart       int      `json:"grid_start"`    // dates scope: window start, minutes from midnight (default 540 = 9am)
@@ -649,26 +645,6 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	if in.Title == "" || len(in.Title) > 140 {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "title is required (max 140)"})
 		return
-	}
-	if !oneOf(in.EventType, "dinner", "drinks", "movie", "camping", "party", "trip", "show", "practice", "openmic", "other") {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid event_type"})
-		return
-	}
-	// User-defined type: an emoji + short name, displayed instead of the preset
-	// type; the event itself is stored as 'other' so downstream logic holds.
-	in.CustomLabel = strings.TrimSpace(in.CustomLabel)
-	if in.CustomLabel != "" {
-		if utf8.RuneCountInString(in.CustomLabel) > 20 {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "custom type name: max 20 characters"})
-			return
-		}
-		if !validEmoji(in.CustomEmoji) {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "custom type needs an emoji"})
-			return
-		}
-		in.EventType = "other"
-	} else {
-		in.CustomEmoji = ""
 	}
 	if !oneOf(in.LocationMode, "host_place", "find_venue", "virtual") {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid location_mode"})
@@ -759,11 +735,11 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	params := db.CreateEventParams{
-		HostID: uid, Title: in.Title, EventType: in.EventType, Description: in.Description,
+		HostID: uid, Title: in.Title, Description: in.Description,
 		LocationMode: in.LocationMode, LocationAddress: in.LocationAddress, SchedulingMode: in.SchedulingMode,
 		Visibility: in.Visibility, Topic: in.Topic, City: in.City,
-		CustomEmoji: in.CustomEmoji, CustomLabel: in.CustomLabel, GeneralScope: in.GeneralScope,
-		Timezone: tz,
+		GeneralScope: in.GeneralScope,
+		Timezone:     tz,
 	}
 	if in.Capacity < 0 || in.Capacity > 500 {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "capacity must be 0-500"})
@@ -897,9 +873,6 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "create event", err)
 		return
 	}
-	if in.CustomLabel != "" {
-		_ = s.queries.UpsertCustomType(r.Context(), db.UpsertCustomTypeParams{UserID: uid, Label: in.CustomLabel, Emoji: in.CustomEmoji})
-	}
 	// Remaining occurrences of a series (first one is ev above).
 	for i := 1; in.Repeat != "" && i < in.RepeatCount; i++ {
 		p := params
@@ -986,7 +959,6 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	s.analytics.Capture(uid, "event_created", map[string]any{
 		"event_id":        uuidStr(ev.ID),
-		"event_type":      ev.EventType,
 		"location_mode":   ev.LocationMode,
 		"scheduling_mode": ev.SchedulingMode,
 		"status":          ev.Status,

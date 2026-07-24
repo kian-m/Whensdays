@@ -66,9 +66,8 @@ func TestHandlerValidationRejectsBadInput(t *testing.T) {
 	}{
 		{"profile empty", s.handleUpsertProfile, withUser("PUT", "/api/profile", `{"display_name":"","handle":""}`), http.StatusUnprocessableEntity},
 		{"profile bad handle", s.handleUpsertProfile, withUser("PUT", "/api/profile", `{"display_name":"A","handle":"bad handle"}`), http.StatusUnprocessableEntity},
-		{"event bad type", s.handleCreateEvent, withUser("POST", "/api/events", `{"title":"x","event_type":"nope","location_mode":"host_place","scheduling_mode":"fixed"}`), http.StatusUnprocessableEntity},
-		{"event missing title", s.handleCreateEvent, withUser("POST", "/api/events", `{"title":"","event_type":"dinner","location_mode":"host_place","scheduling_mode":"fixed"}`), http.StatusUnprocessableEntity},
-		{"event fixed without time", s.handleCreateEvent, withUser("POST", "/api/events", `{"title":"x","event_type":"dinner","location_mode":"host_place","scheduling_mode":"fixed"}`), http.StatusUnprocessableEntity},
+		{"event missing title", s.handleCreateEvent, withUser("POST", "/api/events", `{"title":"","location_mode":"host_place","scheduling_mode":"fixed"}`), http.StatusUnprocessableEntity},
+		{"event fixed without time", s.handleCreateEvent, withUser("POST", "/api/events", `{"title":"x","location_mode":"host_place","scheduling_mode":"fixed"}`), http.StatusUnprocessableEntity},
 		{"availability bad slot", s.handlePutAvailability, withUser("PUT", "/api/availability", `{"slots":[{"weekday":9,"part_of_day":"morning"}]}`), http.StatusUnprocessableEntity},
 		{"bad json", s.handleCreateEvent, withUser("POST", "/api/events", `{`), http.StatusBadRequest},
 	}

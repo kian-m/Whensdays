@@ -2,13 +2,10 @@ import { createContext, useContext } from "react";
 
 // --- shared domain types (mirror the Go API JSON) ---
 
-export type EventType = "dinner" | "drinks" | "movie" | "camping" | "party" | "trip" | "show" | "practice" | "openmic" | "other";
-
 export type Event = {
   id: string;
   host_id: string;
   title: string;
-  event_type: EventType;
   description: string;
   location_mode: "host_place" | "find_venue" | "virtual";
   location_address: string;
@@ -22,8 +19,6 @@ export type Event = {
   visibility: "private" | "friends" | "public";
   topic: string;
   city: string;
-  custom_emoji: string;
-  custom_label: string;
   general_scope: "week" | "month" | "general" | "dates" | "unset";
   photo_url: string;
   theme: string;
@@ -91,7 +86,6 @@ export const EVENT_THEMES: { value: string; label: string }[] = [
 export type PublicEvent = {
   id: string;
   title: string;
-  event_type: EventType;
   starts_at: string;
   topic: string;
   city: string;
@@ -101,27 +95,10 @@ export type PublicEvent = {
   friends_going: number;
   viewer_rsvp: string;
   from_friend: boolean;
-  custom_emoji: string;
-  custom_label: string;
   photo_url: string;
   theme: string;
 };
 
-// Friendly per-type accent for event tiles (left edge + emoji tint).
-// One ramp around the wheel at matched chroma/lightness so tiles feel like a
-// set: warm types (food/social) advance, cool types (logistics) recede.
-export const TYPE_COLORS: Record<EventType, string> = {
-  dinner: "#e07a3f",
-  drinks: "#9d6bd4",
-  movie: "#d45f93",
-  camping: "#3f9d6f",
-  party: "#e0559b",
-  trip: "#3d9db1",
-  show: "#d05c5c",
-  practice: "#5b83d6",
-  openmic: "#c99a2e",
-  other: "#8b8794",
-};
 export type Follow = { kind: "host" | "topic"; value: string };
 
 // Discovery categories - the ONLY topics allowed (server-enforced, ranking.go).
@@ -313,7 +290,6 @@ export type Vote = { id: string; option_id: string; user_id: string; response: "
 // timeslot (dates scope) -> value "YYYY-MM-DD:<minutes-from-midnight>".
 export type GeneralVote = { user_id: string; dimension: "month" | "slot" | "day" | "dayslot" | "timeslot"; value: string };
 export type Attendee = { user_id: string; rsvp: "going" | "maybe" | "declined" | "waitlist"; anonymous?: boolean; display_name: string | null; avatar_url: string | null; handle: string | null };
-export type PrefAnswer = { user_id: string; question_key: string; answer: string; display_name: string | null };
 
 export type EventDetail = {
   event: Event;
@@ -335,7 +311,6 @@ export type EventDetail = {
   poll_days: string[] | null;
   time_grid: { start_min: number; end_min: number; slot_min: number } | null;
   attendees: Attendee[];
-  preference_answers: PrefAnswer[];
   comments: Comment[];
   cohosts: Cohost[];
   series: SeriesItem[] | null;

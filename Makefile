@@ -23,10 +23,10 @@ db-down: ## Stop the local Postgres container
 	docker compose stop db
 
 migrate: ## Apply DB migrations (goose up)
-	$(GOOSE) up
+	@$(GOOSE) up
 
 migrate-down: ## Roll back the last migration (goose down)
-	$(GOOSE) down
+	@$(GOOSE) down
 
 scan-secrets: ## Scan the repo + full git history for leaked secrets (gitleaks, Docker)
 	docker run --rm -v "$(PWD)":/repo -w /repo zricethezav/gitleaks:latest detect \

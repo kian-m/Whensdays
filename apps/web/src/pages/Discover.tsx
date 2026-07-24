@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CATEGORIES, CITY_OPTIONS, Follow, PublicEvent, TYPE_COLORS, fmtDateTime, sendJSON, useApi, useProfile } from "../lib";
+import { CATEGORIES, CITY_OPTIONS, Follow, PublicEvent, fmtDateTime, sendJSON, useApi, useProfile } from "../lib";
 import { Avatar, EventThumb } from "../ui";
-import { eventEmoji } from "../scheduler/questions";
 import { EVENTS, analytics } from "../analytics";
 
 // Discover: browse upcoming PUBLIC events by topic or city, and (signed in)
@@ -143,14 +142,13 @@ function PublicEventRow({ e, onOpen, canFollow, following, toggleFollow, viewerI
   const going = e.viewer_rsvp === "going" || e.host_id === viewerId;
   const friendly = e.from_friend || e.friends_going > 0;
   const tier = going ? "tile-going" : friendly ? "tile-friend" : "";
-  const typeColor = TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other;
 
   return (
     <div className={`card stack tile ${tier} ${e.theme ? `theme-tile theme-${e.theme}` : ""}`} data-testid={testid}
-      style={{ gap: 6, borderLeftColor: typeColor }}>
+      style={{ gap: 6 }}>
       <div className="row between">
         <span className="row" style={{ gap: 10, cursor: "pointer" }} onClick={onOpen}>
-          {e.photo_url && <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={typeColor} size={64} />}
+          {e.photo_url && <EventThumb photo={e.photo_url} size={64} />}
           <span className="stack" style={{ gap: 1 }}>
             <strong>{e.title}</strong>
             <span className="muted small">

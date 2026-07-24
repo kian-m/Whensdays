@@ -9,8 +9,8 @@ polls, recurring series, group streaks, calendar sync (Google + Apple), and
 one-tap RSVP straight from email.
 
 **Plans, minus the group-chat chaos.** Host an event at your place or find a
-venue, set a time or let everyone vote on availability, answer a couple of quick
-preference questions tuned to the event type, add friends, and see when they're free.
+venue, set a time or let everyone vote on availability, add friends, and see
+when they're free.
 
 Built on the **clSandbox** template — **React + Go + Postgres**, containerized
 end to end, where every feature ships with a visual end-to-end test. Secure,
@@ -27,9 +27,9 @@ Priorities, in order — growth loop over feature breadth:
 2. **Notifications** — transactional email (invite, votes, time locked, reminder, new comment). No nudges = no retention.
 3. **Calendar as moat** — imported busy times should auto-block availability and rank candidate times, not just display.
 4. **Recurring groups** — series events + a persistent group home (drives retention structurally).
-5. **Monetize via intent, not walls** — affiliate/commerce on event types (dinner→reservation, trip→lodging), organizer premium later. Never paywall basics.
+5. **Monetize via intent, not walls** — affiliate/commerce hooks (reservations, lodging) and organizer premium later. Never paywall basics.
 
-Measure in PostHog: activation (host invites ≥1), invite→participant conversion, participant→new-host (K-factor), events/group/month, W4 retention. **Feature breadth is not a moat — defer new event types/polish until the loop works.**
+Measure in PostHog: activation (host invites ≥1), invite→participant conversion, participant→new-host (K-factor), events/group/month, W4 retention. **Feature breadth is not a moat — defer polish until the loop works.**
 
 **Roadmap (updated 2026-07-08).** The foundational phases are **shipped** — including the real deploy (Cloud Run + Pages + Neon), live transactional email, guest→account merge, per-event mute, and host-timezone times. What remains is making one loop spin fast, then adding fuel.
 
@@ -48,7 +48,7 @@ Measure in PostHog: activation (host invites ≥1), invite→participant convers
   - **Group rituals & streaks** — "3rd Thursday · 4 months running" on the group page; breaking the streak should feel like a loss (structural retention for the wedge audience).
   - **Best-time ranking across everyone** — rank poll options against ALL attendees' availability + imported calendars, not just the viewer's. The "it just knows" moment.
   - Series editing (change one vs all occurrences).
-- **Later:** organizer premium (never paywall basics), deeper intent links, per-user live `.ics` feeds, localization, re-expanding Discover once group density exists.
+- **Later:** organizer premium (never paywall basics), per-user live `.ics` feeds, localization, re-expanding Discover once group density exists.
 
 ### Viral-readiness: add / update / remove
 
@@ -62,7 +62,7 @@ Measure in PostHog: activation (host invites ≥1), invite→participant convers
 | **Update** | Invite page as the flagship screen | The most-seen surface by new users: social proof above the fold, RSVP within thumb reach, zero chrome |
 | **Update** | Poll ranking → all-attendee availability | Upgrades calendars from display-only to decision-making moat |
 | **Remove (de-emphasize)** | Discover / For-you feed / follows / topic-city taxonomy | A public social graph before density = empty rooms + moderation surface. Keep the code; pull it from the nav until groups are dense |
-| **Remove** | Per-type preference questions in the guest flow | An extra step on the critical path whose answers are rarely load-bearing — fold into comments |
+| **Remove** ✅ | Event types + per-type preference questions | Done: event types are gone entirely (no picker, no "other", no type-colored tiles) and the per-type preference questions went with them — an extra step on the critical path whose answers were rarely load-bearing. Anything a guest needs to tell the host goes in comments |
 | **Remove (simplify)** | Dual availability systems (weekly grid + date grid) | Two grids confuse; date-based wins, weekly becomes a prefill |
 
 Shipped, mapped to the original phases:
@@ -128,8 +128,8 @@ The home page lists what you're hosting and what you've been invited to, with a
 ### An event — host view
 
 Each event has a shareable invite link, an availability poll (when the time
-isn't fixed), the guest list, and a summary of everyone's preferences. Tap
-**👀 Preview as guest** to see exactly what invitees see.
+isn't fixed), and the guest list. Tap **👀 Preview as guest** to see exactly
+what invitees see.
 
 ![Scheduler event page](docs/screenshots/02-scheduler-event.png)
 
@@ -151,7 +151,7 @@ matching heatmap or day ranking.
 | **See friends' availability** | **Friends** | Open an accepted friend to see their real upcoming free dates/times (+ what they're booked for) | `GET /api/friends/{id}/availability` |
 | **Who's coming + add friends** | Event page | A clear **RSVP-grouped guest list** (Going / Maybe / Can't go); any real (non-guest) attendee who isn't already your friend gets a **+ Add friend** button right there | `GET /api/events/{id}` (attendees carry `handle`), `POST /api/friends` |
 | **Address autocomplete + directions** | New/Edit event | The location field has **free type-ahead** (OpenStreetMap via Photon — no key, no billing); on the event page the address shows **both a Google Maps and an Apple Maps link** (no universal "default map app" URL exists across platforms, so both are offered) | `GET /api/geo/search` (server-proxied); `google.com/maps` + `maps.apple.com` links |
-| **Create an event** | **+ New event** | **Two screens, not a 4-step wizard.** Screen 1 ("Start") fits a phone without scrolling: title, a **5-chip type row** (Practice / Show / Party / Meal / Drinks) with a **"More"** sheet for the other presets + your **custom types** (name it — the system assigns the icon, **no emoji picker**; saved types are deletable via their ✕), and a **segmented scheduling control** — *Pick a time* / *Poll a few times* (default) / *Not sure yet* — with the rare options (repeat/extra dates, poll deadline) tucked behind text links. Screen 2 ("Add details", optional — reached by a link or skipped) is just location + capacity. Cover/theme/description and friend-invites are set later on the event page (edit-in-place + the invite card) | `POST /api/events` (+ time options for specific-time polls); `DELETE /api/event-types/{label}` |
+| **Create an event** | **+ New event** | **One create flow, the only way to make an event** (the old multi-step wizard was removed — there is no location screen, capacity field or specific-times-poll mode at creation, and **events have no type at all**). Name it, then either **I'll set the time** (a datetime) or **Ask when people are free** (an availability poll with the **scope chosen right here** — this week / this month / generally / pick days). That's it — you land on the event page ready to share. Cover/theme, description, location, capacity and end time are all set afterward via **edit-in-place** on the event; friend-invites via the invite card. Reached three ways (all the same flow): the Home/group **+ New event** buttons (`/new`), the landing "Start a plan" guest entry (`/start`), and the legacy `/quick` alias | `POST /api/events` (`scheduling_mode: fixed \| general` with `general_scope`) |
 | **Your plans** | Home | A filter row (**All / Upcoming / Hosting / Attending**, with counts) narrows the event list; **NEW** badges on events you haven't opened; each tile shows a **who's-going avatar stack** (friends first — accent ring — then people with photos, then initials) with a **+N more** tail | `GET /api/events` (returns `unseen` ids + per-event `faces`) |
 | **Dark / light theme** | Profile → Appearance | Dark by default; toggle to light (persisted, no-flash). Both themes are **glass panels over a slowly drifting CSS sky** — dusk (dark) or open day sky (light); no image assets, respects reduced-motion | client-only, `data-theme` on `<html>`, design tokens in `styles.css` |
 | **Guest keeps their plans** | Sign up after using it as a guest | Everything a guest did — hosted events, RSVPs, comments — follows them into the new account; their name is prefilled | `POST /api/guest/merge` (transactional reassign) |
@@ -159,20 +159,18 @@ matching heatmap or day ranking.
 | **See who picked what** | General-availability event (host) | A row of responder avatars; tap one to highlight exactly the times/days that person chose | `GeneralResults` overlays each user's `general_votes` |
 | **Rich link previews** | Any shared invite | Texting an invite link unfurls a **per-event card**: the event's cover photo/GIF as the big tile, the **host's name top-left** ("… invites you") and the **logo top-right**; cover-less events get a branded gradient card with the title. Composited server-side in Go (`/api/events/{id}/og.png`) | `handleOGPage` (`ogpage.go`) + `apps/web/public/og-card.png` |
 | **RSVP** | Event page | Going / Maybe / Can't — with an optional **🕶️ Hide my name**: an anonymous RSVP counts in every total (who's-in, capacity, unfurl) but shows as "Anonymous" to everyone else, host included (masked server-side; the host email says "Someone") | `POST /api/events/{id}/rsvp` (`anonymous` flag, `0041`) |
-| **Scheduling — fixed time** | New event → "Pick a time" | Host sets the date/time up front (repeat pattern / extra dates behind a "+ Repeat or add more dates" link) | `scheduling_mode: "fixed"` |
-| **Scheduling — specific-times poll** | Event page (poll events) | Guests vote 👍/🤷/👎 on each proposed time; host **Picks** one to lock it in | `POST /api/events/{id}/votes`, `POST /api/events/{id}/finalize` |
-| **Scheduling — general availability poll** | New event → "Not sure yet", then a **one-time setup step on the event page** | Creating a "Not sure yet" poll asks nothing else at creation; the host lands on the event page and finishes setup there — **scopes the ask**: **this week** (concrete dates × times grid), **this month** (tap the days that work), **generally** (ideal months + weekday grid), or **pick days** (host hand-picks specific calendar days + a time window; guests paint the **actual clock times**, When2meet-style). Attendees then answer in that shape and the host reads a matching heatmap/ranking, then finalizes a time. Date windows anchor at the event's creation so everyone answers about the same days | `POST /api/events` (general poll ships `general_scope: unset`), `POST /api/events/{id}/poll-setup` (`general_scope`, `poll_days`, `grid_start`/`grid_end`), `POST /api/events/{id}/general-votes`, `POST /api/events/{id}/finalize` |
-| **Preference questions** | Event page, after RSVP | One question at a time, tuned to the event type (e.g. dietary + cuisine for dinner) | `POST /api/events/{id}/preferences` |
-| **Host view + guest preview** | Event page (host only) | Invite link, poll results, guests, preference summary; toggle to preview the guest flow | role-aware `GET /api/events/{id}` |
+| **Scheduling — fixed time** | New event → "I'll set the time" | Host sets the date/time up front. Turning it into a **recurring series** (repeat pattern or extra dates) happens afterward via **edit-in-place** ("+ Add another date" grows a lone event into a series) — creation itself takes just the one time | `scheduling_mode: "fixed"` |
+| **Scheduling — specific-times poll** | Event page (existing poll events) | Guests vote 👍/🤷/👎 on each proposed time; host **Picks** one to lock it in. **This mode is no longer creatable from the UI** (the create flow removed it), but the mode still exists server-side — existing poll events still vote/finalize, and the API accepts `scheduling_mode: "poll"` + `time_options` | `POST /api/events` (`scheduling_mode: "poll"`), `POST /api/events/{id}/votes`, `POST /api/events/{id}/finalize` |
+| **Scheduling — general availability poll** | New event → "Ask when people are free" | The **scope is chosen right in the create flow** — **this week** (concrete dates × times grid), **this month** (tap the days that work), **generally** (ideal months + weekday grid), or **pick days** (host hand-picks specific calendar days + a time window; guests paint the **actual clock times**, When2meet-style). Attendees then answer in that shape and the host reads a matching heatmap/ranking, then finalizes a time. Date windows anchor at the event's creation so everyone answers about the same days | `POST /api/events` (`scheduling_mode: "general"` with `general_scope`, and `poll_days`/`grid_start`/`grid_end` for the pick-days scope), `POST /api/events/{id}/general-votes`, `POST /api/events/{id}/finalize` |
+| **Host view + guest preview** | Event page (host only) | Invite link, poll results, guests; toggle to preview the guest flow | role-aware `GET /api/events/{id}` |
 | **Comments** | Event page | A chat-style thread on each event (avatar bubbles, your own tinted, relative timestamps); anyone with the invite can post — **text, a GIF (Klipy picker), or both**. Authors delete their own; the host (or a cohost) moderates any — deletes are two-tap confirmed like every destructive action. The host can turn the thread on/off | `POST/DELETE /api/events/{id}/comments`, `PUT /api/events/{id}/comments-enabled` |
 | **Cohosts** | Event page (host only) | The host delegates by handle: a **cohost** can edit the event, share the invite (sees the host view), and moderate comments — but can't manage cohosts or toggle the thread | `POST /api/events/{id}/cohosts`, `DELETE /api/events/{id}/cohosts/{userId}`, `PUT /api/events/{id}` (edit, host+cohost) |
 | **People you may know** | **Friends** | Suggestions ranked by shared-event overlap — co-attending a public event is the weakest signal, both being *going* to a friends-only/invite-only event is the strongest. One-tap Add | `ListPeopleYouMayKnow` in `discover.sql`, surfaced in `GET /api/friends` |
 | **Friends** | **Friends** | Add by handle (request + accept), then view an accepted friend's weekly availability | `POST /api/friends`, `POST /api/friends/{id}/accept`, `GET /api/friends/{id}/availability` |
 | **Cancel / delete / remove** | Event page, group page, Friends | Hosts **cancel** events (or a whole series) — guests see "Cancelled", attendees get an email; group owners **delete** groups (events survive); friends: **decline** incoming, **cancel** outgoing, **remove** accepted | `DELETE /api/events/{id}[?series=all]`, `DELETE /api/groups/{id}`, `DELETE /api/friends/{id}` |
-| **Edit an event — in place** | Event page hero (host/cohost) | ✎ Edit flips the top card into inline editing: title, details, address, visibility (creation doesn't ask - events start invite-only and open up here), an **optional end time**, **more dates ("+ Add another date" grows a lone event into a series - everyone on it is carried over, RSVPs intact)**, **the start time (editable even after it's finalized — rescheduling re-sends the day-before reminder)** — plus a **square cover photo** (or a **GIF via Klipy search**) — shown as the **tile's main visual on every list** (dashboard, Discover, groups) — and a **backdrop theme** (party/beach/forest/night/neon/cozy) that tints the whole event page | `PUT /api/events/{id}` (manager-gated); `GET /api/gifs/search` (server-side `KLIPY_API_KEY`, never sent to the browser) |
+| **Edit an event — in place** | Event page hero (host/cohost) | ✎ Edit flips the top card into inline editing: title, details, **address (or an online meeting link)**, **capacity**, visibility (creation doesn't ask - events start invite-only and open up here), an **optional end time**, **more dates ("+ Add another date" grows a lone event into a series - everyone on it is carried over, RSVPs intact)**, **the start time (editable even after it's finalized — rescheduling re-sends the day-before reminder)** — plus a **square cover photo** (or a **GIF via Klipy search**) — shown as the **tile's main visual on every list** (dashboard, Discover, groups) — and a **backdrop theme** (party/beach/forest/night/neon/cozy) that tints the whole event page. Since creation asks only for title + time, **this is where type-less events get their location, capacity, cover and look** | `PUT /api/events/{id}` (manager-gated); `GET /api/gifs/search` (server-side `KLIPY_API_KEY`, never sent to the browser) |
 | **Export to your calendar** | Event page (confirmed events) | One tap: ** Apple Calendar** (plain link — iPhone/Mac open it natively), **Google Calendar**, or a **.ics download**; title, time and an **RSVP link back to the event** ride along | `GET /api/events/{id}/calendar.ics` — served `inline`, **unauthenticated by design** (the event id is the invite capability, same fields as the OG unfurl) |
-| **Start a plan (no account)** | Landing page → "Start a plan" | A name is all it takes: guest identity → ⚡ Quick plan (title + time) → share the link. Full two-screen create form at `/new` | `POST /api/guest/join` without an `event_id` |
-| **Quick plan** | Home → ⚡ Quick, or `/quick` | The 10-second path: title + time → private event → share link | plain `POST /api/events` |
+| **Start a plan (no account)** | Landing page → "Start a plan" | A name is all it takes: guest identity → the create flow (title + time, or an availability poll) → share the link. `/start` renders the same single create flow as `/new` | `POST /api/guest/join` without an `event_id` |
 | **Link unfurls** | Automatic | Invite links pasted into iMessage/WhatsApp/Discord show the event title + time ("Tap to RSVP, no account needed"); browsers bounce into the app at `/ev/{id}` | nginx proxies `/e/{id}` full-page loads to the API's OG shell (`ogpage.go`) |
 | **Join as a guest (no account)** | Any invite link, signed out | Invitees enter just a name to RSVP, vote, and comment; a signed guest token (90d) lives in their browser. Dev/E2E: append `?guest=1` | `POST /api/guest/join` (unauthenticated; event id = capability), `Authorization: Guest <token>` |
 | **WGIS venue sync** | Daily (cron) | The group's WGIS (World's Greatest Improv School) improv jams track the venue's real schedule from its **JSON feed** (crowdwork.com) — no scraper or browser needed, so the server fetches it directly: `POST /api/cron/wgis-sync` (X-Cron-Key, body `{group_id}`) filters the feed to jams and, since it's a curated single-venue list, **auto-creates** any jam the group doesn't have yet (title, description, dates, and the poster pulled in as the cover), then keeps every series current (add/retime/quiet-cancel) hosted by a hidden **WGIS Schedule bot** with the group owner kept on as cohost. Shares the reconciliation engine with the UCB sync | `apps/api/wgissync.go` + `venuesync.go`; secrets `CRON_KEY`, group id |
@@ -193,7 +191,7 @@ matching heatmap or day ranking.
 | **Group streaks** | Group page + email | "🔥 N-month streak" — consecutive months with at least one event; and when the streak extends into a new month **every member gets one congratulation email** (once per group per month) | web: computed from the group's events; email: daily cron, `group_streak_congrats` gate |
 | **Irregular recurring series** | New event (fixed time) | "+ Add another date" stacks several explicit dates (any days — no fixed pattern) into one series; everyone RSVPs per date | `more_starts` on `POST /api/events`; shares the existing `series_id` machinery |
 | **Series re-poll** | Series card + automatic email | When a series' last date is near (or has passed), the host gets one tap to open a prefilled **poll for the next dates** that **re-invites everyone** from the old event; also arrives automatically by email after the final occurrence | `/new?again=<id>&repoll=1` → `invite_from` on create; `notifySeriesEnded` rides the daily cron |
-| **Post-event recap → plan the next one** | Day-after email | "How was it? Drop a pic 📸" pulls everyone back to the thread (the group's memory); **Plan the next one** opens the create wizard prefilled from the event — the re-host loop | rides the daily cron; `event_recaps` (idempotent); `/new?again=<id>` prefill |
+| **Post-event recap → plan the next one** | Day-after email | "How was it? Drop a pic 📸" pulls everyone back to the thread (the group's memory); **Plan the next one** opens the create flow prefilled from the event (title + a full clone of its look/content — description, location, cover, theme) — the re-host loop | rides the daily cron; `event_recaps` (idempotent); `/new?again=<id>` prefill |
 | **Mute an event** | Event page + any email | 🔔/🔕 toggle on any event (host or attendee) stops its notification emails. Also one-click from the footer of every email — no login needed (identity rides in a signed token) — with an instant undo | `POST /api/events/{id}/mute` (signed-in) + `GET /api/events/{id}/unsubscribe?token=` (HMAC, unauthenticated); `event_mutes` table |
 | **One-tap RSVP from email** | Invite / nudge / reminder emails | "✅ I'm going" / "Can't make it" buttons answer straight from the inbox — no login, no app load (signed per-recipient links; confirmation page with one-tap undo). The reminder carries a "can't make it anymore?" escape hatch | `GET /api/events/{id}/rsvp-link?token=&r=` (HMAC, unauthenticated, rate-limited) |
 | **Nudge non-responders** | Event page (host/cohost) | One tap re-emails only the invited people who haven't answered, with one-tap RSVP buttons. Rate-limited to once a day per event | `POST /api/events/{id}/nudge`; `event_nudges` table |
@@ -223,10 +221,10 @@ curl -X PUT http://localhost:8080/api/profile \
 # list your events (hosting + attending)
 curl http://localhost:8080/api/events
 
-# create a fixed-time dinner at your place
+# create a fixed-time event at your place
 curl -X POST http://localhost:8080/api/events \
   -H 'Content-Type: application/json' \
-  -d '{"title":"Dinner","event_type":"dinner","location_mode":"host_place","scheduling_mode":"fixed","starts_at":"2026-08-01T19:00:00Z"}'
+  -d '{"title":"Dinner","location_mode":"host_place","scheduling_mode":"fixed","starts_at":"2026-08-01T19:00:00Z"}'
 ```
 
 In dev mode the API trusts a stub user (`demo-user`). Override it with a header to act as another user and see per-user scoping:
@@ -248,7 +246,7 @@ Browser ──► web (React, nginx)
               api (Go, stdlib router)  ──►  Postgres (Neon in prod)
 ```
 
-- **Frontend:** React 19 + TypeScript + Vite, client-side routing via `react-router-dom`. Source in `apps/web/src` (pages in `apps/web/src/pages`, preference questions in `apps/web/src/scheduler`).
+- **Frontend:** React 19 + TypeScript + Vite, client-side routing via `react-router-dom`. Source in `apps/web/src` (pages in `apps/web/src/pages`).
 - **Backend:** Go, minimal dependencies, served from a `scratch` container. Routes wired in `apps/api/main.go`; scheduler handlers in `apps/api/scheduler.go`.
 - **Database:** Postgres via `pgx`; queries are type-safe Go generated by `sqlc`; migrations via `goose` (`apps/api/db`). Scheduler schema: `db/migrations/0002_scheduler.sql`.
 - **Auth:** Clerk in production; an opt-in dev stub for local/CI. Default is always Clerk. Invite links are a capability — any signed-in user with the link can view an event and RSVP; host-only actions are gated to the host.

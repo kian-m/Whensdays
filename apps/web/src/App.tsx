@@ -46,7 +46,6 @@ const ProfilePage = lazy(() => importChunk(() => import("./pages/Profile").then(
 const Groups = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.Groups }))));
 const GroupPage = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.GroupPage }))));
 const Discover = lazy(() => importChunk(() => import("./pages/Discover").then((m) => ({ default: m.Discover }))));
-const Quick = lazy(() => importChunk(() => import("./pages/Quick").then((m) => ({ default: m.Quick }))));
 
 // Warm the lazy chunks once the first paint has settled: navigation then swaps
 // routes instantly instead of flashing "Loading…". Chunks are tiny and cached,
@@ -60,7 +59,6 @@ function warmRouteChunks() {
   const warm = () => {
     import("./pages/EventPage").catch(swallow);
     import("./pages/NewEvent").catch(swallow);
-    import("./pages/Quick").catch(swallow);
     import("./pages/Friends").catch(swallow);
     import("./pages/Groups").catch(swallow);
     import("./pages/Profile").catch(swallow);
@@ -495,9 +493,12 @@ function ProfileGate({ canMerge }: { canMerge?: boolean }) {
         <Suspense fallback={<ListSkeleton rows={3} header />}>
         <Routes>
           <Route path="/" element={<Home />} />
+          {/* One creation flow, reached three ways: the Home/group buttons
+              (/new), the landing "Start a plan" guest entry (/start), and the
+              legacy /quick alias. All render the same merged component. */}
           <Route path="/new" element={<NewEvent />} />
-          <Route path="/start" element={<Quick />} />
-          <Route path="/quick" element={<Quick />} />
+          <Route path="/start" element={<NewEvent />} />
+          <Route path="/quick" element={<NewEvent />} />
           <Route path="/e/:id" element={<EventPage />} />
           <Route path="/ev/:id" element={<EventPage />} />
           <Route path="/friends" element={<Friends />} />

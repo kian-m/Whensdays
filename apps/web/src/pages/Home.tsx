@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, TYPE_COLORS, collapseSeries, eventIsPast, fetchDashboard, seriesCounts, fmtDateTime, useProfile } from "../lib";
-import { eventEmoji, eventLabel } from "../scheduler/questions";
+import { Event, collapseSeries, eventIsPast, fetchDashboard, seriesCounts, fmtDateTime, useProfile } from "../lib";
 import { Avatar, EventThumb, ListSkeleton, Pill, useAsync } from "../ui";
 
 // Avatar-stack preview: the API sends ≤6 prioritized faces (friends → people
@@ -117,10 +116,7 @@ export function Home() {
     <div className="stack">
       <div className="row between">
         <h1>Your plans</h1>
-        <span className="row">
-          <Link to="/quick" className="btn soft" data-testid="quick-plan">⚡ Quick</Link>
-          <Link to="/new" className="btn" data-testid="new-event">+ New event</Link>
-        </span>
+        <Link to="/new" className="btn" data-testid="new-event">+ New event</Link>
       </div>
 
       {/* Filter row - tap to narrow the list (Kalshi/Partiful-style). */}
@@ -174,16 +170,13 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe,
   e: Event; pile?: Pile; onClick: () => void; isNew?: boolean; soon?: string;
   past?: boolean; attended?: boolean; declinedByMe?: boolean; seriesN?: number;
 }) {
-  const color = TYPE_COLORS[e.event_type] ?? TYPE_COLORS.other;
   // Fit the row: show up to 5 faces, fold the rest into "+N more".
   const faces = (pile?.faces ?? []).slice(0, 5);
   const extra = (pile?.going ?? 0) - faces.length;
   return (
-    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : "type-tile"}`} data-testid="event-row" onClick={onClick}
-      style={{ borderLeftColor: color, "--tile-accent": color } as React.CSSProperties}>
-      {/* Photo/GIF only - a photo-less tile leads with its title (the event
-          page hero still shows the type-emoji cover). */}
-      {e.photo_url && <EventThumb photo={e.photo_url} emoji={eventEmoji(e)} color={color} size={72} />}
+    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : "type-tile"}`} data-testid="event-row" onClick={onClick}>
+      {/* Photo/GIF only - a photo-less tile leads with its title. */}
+      {e.photo_url && <EventThumb photo={e.photo_url} size={72} />}
       <div style={{ flex: 1 }}>
         <div className="row between">
           {/* Long titles wrap onto new lines instead of pushing the status pill
@@ -203,7 +196,7 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe,
           </span>
         </div>
         <div className="muted small">
-          {eventLabel(e)} · {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
+          {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
           {seriesN && seriesN > 1 ? <span data-testid="series-badge"> · 🔁 {seriesN} dates</span> : null}
         </div>
         <div className="muted small">

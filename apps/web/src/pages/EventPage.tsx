@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, PrefAnswer, ImportedEvent, TimeOption, Vote, WEEKDAYS, EVENT_THEMES, busyConflict, daysFromDate, dayLabel as dayCol, fmtDate, fmtDateTime, fmtMinutes, gridSlots, toDatetimeLocal, getJSON, guessCity, importedBusy, mapsUrl, appleMapsUrl, openGoogleMaps, isStandalone, nextMonths, sendJSON, timeAgo, useApi } from "../lib";
-import { QUESTIONS, eventLabel, questionLabel } from "../scheduler/questions";
+import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, ImportedEvent, TimeOption, Vote, WEEKDAYS, EVENT_THEMES, busyConflict, daysFromDate, dayLabel as dayCol, fmtDate, fmtDateTime, fmtMinutes, gridSlots, toDatetimeLocal, getJSON, guessCity, importedBusy, mapsUrl, appleMapsUrl, openGoogleMaps, isStandalone, nextMonths, sendJSON, timeAgo, useApi } from "../lib";
 import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, GifPicker, HomescreenPrompt, Linkify, MonthPicker, Pill, TimeGrid, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH, GuestSignupButton } from "../App";
@@ -95,7 +94,6 @@ export function EventPage() {
       {data.series && data.series.length > 1 && <SeriesCard data={data} />}
 
       {e.status === "scheduled" && e.starts_at && <AddToCalendar event={e} />}
-      {e.status === "scheduled" && e.starts_at && <IntentLinks event={e} attendees={data.attendees} />}
 
       {e.status !== "cancelled" && (showManage ? <HostView data={data} reload={reload} editing={heroEditing} /> : <GuestView data={data} reload={reload} />)}
 
@@ -311,65 +309,12 @@ function AddToCalendar({ event }: { event: EventDetail["event"] }) {
   );
 }
 
-// ---------------- intent links (book a table, find a place) ----------------
-
-function IntentLinks({ event, attendees }: { event: EventDetail["event"]; attendees: Attendee[] }) {
-  const going = Math.max(2, attendees.filter((a) => a.rsvp === "going").length);
-  const type = event.event_type;
-
-  if (type === "dinner" || type === "drinks") {
-    const href = `https://www.opentable.com/s?dateTime=${encodeURIComponent(event.starts_at!)}&covers=${going}`;
-    return (
-      <div className="card stack">
-        <h3 style={{ margin: 0 }}>Make it happen</h3>
-        <div>
-          <a
-            className="btn ghost sm"
-            data-testid="intent-dinner"
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => analytics.capture(EVENTS.intentLinkClicked, { target: "opentable", event_type: type })}
-          >
-            🍽️ Book a table
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  if (type === "trip" || type === "camping") {
-    const date = event.starts_at!.slice(0, 10);
-    const href = `https://www.booking.com/searchresults.html?checkin=${date}`;
-    return (
-      <div className="card stack">
-        <h3 style={{ margin: 0 }}>Make it happen</h3>
-        <div>
-          <a
-            className="btn ghost sm"
-            data-testid="intent-stay"
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => analytics.capture(EVENTS.intentLinkClicked, { target: "booking", event_type: type })}
-          >
-            🏡 Find a place to stay
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
-}
-
 // ---------------- guest / invitee experience ----------------
 
 function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) {
   const e = data.event;
   const me = data.attendees.find((a) => a.user_id === data.viewer_id);
   const myRsvp = me?.rsvp;
-  const myAnswers = data.preference_answers.filter((a) => a.user_id === data.viewer_id);
   // RSVP is the ONE first action. We mirror the optimistic pick up here (not only
   // inside <Rsvp>) so the voting grid gates on the guest's commitment the instant
   // they tap, before the background refetch of `data` lands.
@@ -416,16 +361,6 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
           <summary style={{ cursor: "pointer", fontWeight: 600 }} data-testid="vote-summary">{voteSummary(genVoters)}</summary>
           <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id}
             days={data.poll_days} grid={data.time_grid} reload={reload} />
-        </details>
-      )}
-      {/* Preferences sit OFF the critical path (roadmap): collapsed unless the
-          guest already answered. Skipped entirely for types with no questions. */}
-      {(QUESTIONS[e.event_type] ?? []).length > 0 && (
-        <details data-testid="pref-details" open={myAnswers.length > 0}>
-          <summary className="muted small" style={{ cursor: "pointer" }} data-testid="pref-summary">
-            ✍️ Anything the host should know? (optional)
-          </summary>
-          <PrefFlow eventId={e.id} type={e.event_type} answers={myAnswers} reload={reload} />
         </details>
       )}
       <Guests attendees={data.attendees} viewerId={data.viewer_id} />
@@ -864,70 +799,6 @@ function GeneralSetup({ data, reload }: { data: EventDetail; reload: () => void 
   );
 }
 
-// Airtable-style: ask preference questions one at a time, keyed to event type.
-function PrefFlow({ eventId, type, answers, reload }: {
-  eventId: string; type: EventDetail["event"]["event_type"]; answers: PrefAnswer[]; reload: () => void;
-}) {
-  const api = useApi();
-  const questions = QUESTIONS[type] ?? [];
-  const existing: Record<string, string> = {};
-  answers.forEach((a) => (existing[a.question_key] = a.answer));
-
-  const [draft, setDraft] = useState<Record<string, string>>(existing);
-  const [step, setStep] = useState(0);
-  const done = answers.length >= questions.length && questions.length > 0;
-  const [editing, setEditing] = useState(!done);
-
-  if (questions.length === 0) return null;
-
-  async function saveAll() {
-    const payload = Object.entries(draft)
-      .filter(([, v]) => v.trim() !== "")
-      .map(([question_key, answer]) => ({ question_key, answer }));
-    await sendJSON(api, "POST", `/api/events/${eventId}/preferences`, { answers: payload });
-    setEditing(false);
-    reload();
-  }
-
-  if (!editing) {
-    return (
-      <div className="card stack">
-        <div className="row between"><h3>Your preferences</h3>
-          <button className="btn ghost sm" data-testid="pref-edit" onClick={() => { setEditing(true); setStep(0); }}>Edit</button>
-        </div>
-        {questions.map((q) => (
-          <div key={q.key} className="small">
-            <span className="muted">{q.prompt}</span><br />
-            <strong>{existing[q.key] || "-"}</strong>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  const q = questions[step];
-  const last = step === questions.length - 1;
-  return (
-    <div className="card stack">
-      <div className="row between">
-        <h3>A couple quick questions</h3>
-        <span className="muted small">{step + 1}/{questions.length}</span>
-      </div>
-      <div>
-        <label className="field" htmlFor="pf">{q.prompt}</label>
-        <input id="pf" className="input" maxLength={400} data-testid="pref-input" placeholder={q.placeholder}
-          value={draft[q.key] ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [q.key]: e.target.value }))} />
-      </div>
-      <div className="row">
-        {step > 0 && <button className="btn ghost sm" data-testid="pref-back" onClick={() => setStep((s) => s - 1)}>Back</button>}
-        {last
-          ? <button className="btn sm" data-testid="pref-save" onClick={saveAll}>Save</button>
-          : <button className="btn sm" data-testid="pref-next" onClick={() => setStep((s) => s + 1)}>Next</button>}
-      </div>
-    </div>
-  );
-}
-
 // ---------------- host management view ----------------
 
 function HostView({ data, reload, editing }: { data: EventDetail; reload: () => void; editing?: boolean }) {
@@ -948,7 +819,6 @@ function HostView({ data, reload, editing }: { data: EventDetail; reload: () => 
         <GeneralResults data={data} reload={reload} />
       )}
       <Guests attendees={data.attendees} viewerId={data.viewer_id} />
-      <AnswerSummary data={data} />
       {editing && data.role === "host" && <HostControls data={data} reload={reload} />}
     </div>
   );
@@ -1080,18 +950,13 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
   if (!editing) {
     return (
       <div className="card stack">
-        {/* The cover is the hero visual: the photo/GIF when set, otherwise a
-            type-coloured emoji tile (no picture ⇒ fall back to the type emoji)
-            so the title row below stays clean - no emoji crammed beside it. */}
-        {/* Cover slot: a real photo/GIF only. Photo-less events lead with the
-            title - a small type emoji rides inline with it, never a big tile. */}
+        {/* Cover slot: a real photo/GIF only. Photo-less events lead with the title. */}
         {e.photo_url && <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />}
         {/* Title left, status + Edit right on desktop; stacked on a phone (the
             title gets the full width instead of being squeezed to a sliver). */}
         <div className="card-header">
           <div style={{ minWidth: 0 }}>
             <h1><span data-testid="event-title">{e.title}</span></h1>
-            <p className="muted" style={{ margin: 0 }}>{eventLabel(e)}</p>
             {data.host_name && (
               <span className="row" style={{ gap: 6, marginTop: 4 }} data-testid="hosted-by">
                 <Avatar url={data.host_avatar || null} name={data.host_name} size={20} />
@@ -2066,25 +1931,3 @@ function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: stri
   );
 }
 
-function AnswerSummary({ data }: { data: EventDetail }) {
-  if (data.preference_answers.length === 0) return null;
-  const byUser = new Map<string, { name: string; answers: PrefAnswer[] }>();
-  for (const a of data.preference_answers) {
-    const entry = byUser.get(a.user_id) ?? { name: a.display_name || "Someone", answers: [] };
-    entry.answers.push(a);
-    byUser.set(a.user_id, entry);
-  }
-  return (
-    <div className="card stack">
-      <h3>Preferences</h3>
-      {[...byUser.values()].map((u, i) => (
-        <div key={i} className="small stack" style={{ gap: 2 }}>
-          <strong>{u.name}</strong>
-          {u.answers.map((a) => (
-            <span key={a.question_key} className="muted">{questionLabel(data.event.event_type, a.question_key)}: {a.answer}</span>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}

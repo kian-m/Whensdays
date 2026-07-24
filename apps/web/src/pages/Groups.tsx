@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Event, Group, GroupDetail, TYPE_COLORS, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
+import { Event, Group, GroupDetail, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
 
 // Consecutive months (ending now, with a one-month grace) in which the group
 // had at least one scheduled event - the ritual streak. Loss aversion is the
@@ -18,7 +18,6 @@ function groupStreak(events: Event[]): number {
   return n;
 }
 import { Avatar, BackLink, ConfirmButton, GifPicker, ListSkeleton, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
-import { eventEmoji, eventLabel } from "../scheduler/questions";
 
 // Group icon: uploaded photo wins over emoji.
 function GroupIcon({ group, size = 44 }: { group: Group; size?: number }) {
@@ -360,14 +359,14 @@ function GroupEventRow({ event, onClick, seriesN }: { event: Event; onClick: () 
     <div
       className={`card ev tile ${event.theme ? `theme-tile theme-${event.theme}` : "type-tile"}`}
       data-testid="group-event"
-      style={{ cursor: "pointer", borderLeftColor: TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other, "--tile-accent": TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other } as React.CSSProperties}
+      style={{ cursor: "pointer" }}
       onClick={onClick}
     >
-      {event.photo_url && <EventThumb photo={event.photo_url} emoji={eventEmoji(event)} color={TYPE_COLORS[event.event_type] ?? TYPE_COLORS.other} size={64} />}
+      {event.photo_url && <EventThumb photo={event.photo_url} size={64} />}
       <div style={{ flex: 1 }}>
         <div className="title">{event.title}</div>
         <div className="muted small">
-          {eventLabel(event)} · {event.status === "polling" ? "Finding a time" : fmtDateTime(event.starts_at)}
+          {event.status === "polling" ? "Finding a time" : fmtDateTime(event.starts_at)}
           {seriesN && seriesN > 1 ? <span data-testid="series-badge"> · 🔁 {seriesN} dates</span> : null}
         </div>
       </div>

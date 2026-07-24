@@ -24,7 +24,6 @@ export const EVENTS = {
   friendAvailabilityViewed: "friend_availability_viewed",
   addToCalendarClicked: "add_to_calendar_clicked",
   calendarConnectStarted: "calendar_connect_started",
-  intentLinkClicked: "intent_link_clicked",
   followed: "followed",
   gifPicked: "gif_picked",
   guestSignupClicked: "guest_signup_clicked",

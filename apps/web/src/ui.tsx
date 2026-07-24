@@ -834,8 +834,8 @@ export function Avatar({ url, name, size = 36 }: { url?: string | null; name?: s
 
 // Event tile thumbnail: the cover photo/GIF is the main visual when set;
 // otherwise the type-colored emoji square. Shared by Home, Discover and Groups.
-export function EventThumb({ photo, emoji, color, size = 46 }: {
-  photo?: string; emoji: string; color: string; size?: number;
+export function EventThumb({ photo, emoji = "📅", color = "#8b8794", size = 46 }: {
+  photo?: string; emoji?: string; color?: string; size?: number;
 }) {
   if (photo) {
     return <img className="thumb" data-testid="event-thumb" src={photo} alt=""
