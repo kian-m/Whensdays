@@ -1629,7 +1629,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
         <div>
           <div className="section-h" style={{ margin: "0 0 4px" }}>Best times this week</div>
           {dayslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
-            <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-week-heat">
+            <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-week-heat">
               <div />
               {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
               {weekDates.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
@@ -1680,7 +1680,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
               ))}
             </div>
           ) : dayslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
-            <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-month-heat">
+            <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-month-heat">
               <div />
               {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
               {monthDates28.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
@@ -1733,7 +1733,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                 ))}
               </div>
             )}
-            <div className="grid" style={{ gridTemplateColumns: `auto repeat(${DAYPARTS.length}, 1fr)` }}>
+            <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }}>
               <div />
               {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
               {WEEKDAYS.map((d, wd) => ({ d, wd })).filter(({ wd }) => slotCounts.size === 0 || DAYPARTS.some((dp) => (slotCounts.get(slotKey(wd, dp.value)) ?? 0) > 0)).map(({ d, wd }) => (
