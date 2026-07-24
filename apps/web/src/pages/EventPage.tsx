@@ -35,7 +35,12 @@ export function EventPage() {
   // comments/cohosts/nudge/friend-invites) appear ONLY then - the default host
   // page stays as calm as the guest view.
   const [heroEditing, setHeroEditing] = useState(false);
-  useEffect(() => { setThemePreview(null); setPreview(false); setHeroEditing(false); }, [id]);
+  // Cancelling is OPTIMISTIC like RSVP: the confirm tap flips the page into
+  // "cancelled" immediately (DELETE + reload happen in the background) rather
+  // than sitting there looking like nothing happened for a network round trip.
+  // A failed DELETE reverts it.
+  const [optimisticCancelled, setOptimisticCancelled] = useState(false);
+  useEffect(() => { setThemePreview(null); setPreview(false); setHeroEditing(false); setOptimisticCancelled(false); }, [id]);
   // One-time add-to-homescreen prompt: fires on the event page right after
   // this device's FIRST event creation (see the create flows), phones only.
   const [showA2HS, setShowA2HS] = useState(false);
@@ -65,25 +70,30 @@ export function EventPage() {
   if (loading && !data) return <EventSkeleton />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Event not found.</p></div>;
 
-  const showManage = data.can_manage && !preview;
-  const e = data.event;
+  // Overlay the optimistic cancel onto the fetched event so every child below
+  // (which all just read data.event.status) flips together on one state change,
+  // with no per-component wiring - reload() overwrites this with the real
+  // server data once it lands, or a failed DELETE reverts the flag above.
+  const data2 = optimisticCancelled ? { ...data, event: { ...data.event, status: "cancelled" as const } } : data;
+  const showManage = data2.can_manage && !preview;
+  const e = data2.event;
   const effTheme = themePreview ?? e.theme;
 
   return (
     <div key={e.id} className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
       {celebrate && <div className="fx-locked" data-testid="locked-banner">It&rsquo;s locked in 🎉</div>}
-      {data.event.status === "draft" && data.can_manage && (
+      {data2.event.status === "draft" && data2.can_manage && (
         <div className="card row between" data-testid="draft-banner">
-          <span className="small">📝 <strong>Draft</strong> - only you{data.cohosts.length > 0 ? " and cohosts" : ""} can see this. Guests, emails, and reminders are paused.</span>
+          <span className="small">📝 <strong>Draft</strong> - only you{data2.cohosts.length > 0 ? " and cohosts" : ""} can see this. Guests, emails, and reminders are paused.</span>
           <button className="btn sm" style={{ flex: "none" }} data-testid="draft-publish"
-            onClick={async () => { await sendJSON(api, "POST", `/api/events/${data.event.id}/draft`, { draft: false }); reload(); }}>
+            onClick={async () => { await sendJSON(api, "POST", `/api/events/${data2.event.id}/draft`, { draft: false }); reload(); }}>
             Publish
           </button>
         </div>
       )}
       {showA2HS && <HomescreenPrompt onClose={() => { setShowA2HS(false); try { localStorage.setItem("whensdays.a2hs", "1"); sessionStorage.removeItem("whensdays.a2hs-pending"); } catch { /* private mode */ } }} />}
       <BackLink />
-      <HeroCard data={data} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} onEditing={setHeroEditing} />
+      <HeroCard data={data2} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} onEditing={setHeroEditing} />
 
       {e.status === "cancelled" && (
         <div className="card empty" data-testid="cancelled-note">
@@ -91,21 +101,21 @@ export function EventPage() {
         </div>
       )}
 
-      {data.series && data.series.length > 1 && <SeriesCard data={data} />}
+      {data2.series && data2.series.length > 1 && <SeriesCard data={data2} />}
 
       {e.status === "scheduled" && e.starts_at && <AddToCalendar event={e} />}
 
-      {e.status !== "cancelled" && (showManage ? <HostView data={data} reload={reload} editing={heroEditing} /> : <GuestView data={data} reload={reload} />)}
+      {e.status !== "cancelled" && (showManage ? <HostView data={data2} reload={reload} editing={heroEditing} onCancelled={() => setOptimisticCancelled(true)} onCancelFailed={() => setOptimisticCancelled(false)} /> : <GuestView data={data2} reload={reload} />)}
 
       {/* Friend-by-friend invites are management, not the default view - hosts
           see them while editing; guests (no edit mode) keep them. */}
-      {e.status !== "cancelled" && (!showManage || heroEditing) && <InviteFriends data={data} reload={reload} />}
+      {e.status !== "cancelled" && (!showManage || heroEditing) && <InviteFriends data={data2} reload={reload} />}
 
-      <EventComments data={data} reload={reload} />
+      <EventComments data={data2} reload={reload} />
 
-      {!preview && e.status !== "cancelled" && <MuteToggle data={data} />}
+      {!preview && e.status !== "cancelled" && <MuteToggle data={data2} />}
 
-      {data.can_manage && (
+      {data2.can_manage && (
         <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="preview-toggle"
           onClick={() => setPreview((p) => { analytics.capture(EVENTS.previewToggled, { to: !p ? "guest" : "host" }); return !p; })}>
           {preview ? "← Back to host view" : "👀 Preview as guest"}
@@ -801,7 +811,7 @@ function GeneralSetup({ data, reload }: { data: EventDetail; reload: () => void 
 
 // ---------------- host management view ----------------
 
-function HostView({ data, reload, editing }: { data: EventDetail; reload: () => void; editing?: boolean }) {
+function HostView({ data, reload, editing, onCancelled, onCancelFailed }: { data: EventDetail; reload: () => void; editing?: boolean; onCancelled?: () => void; onCancelFailed?: () => void }) {
   const e = data.event;
   // A general poll created through the slimmed wizard has no scope yet - the
   // host finishes that one setup step here before the poll is useful.
@@ -819,7 +829,7 @@ function HostView({ data, reload, editing }: { data: EventDetail; reload: () => 
         <GeneralResults data={data} reload={reload} />
       )}
       <Guests attendees={data.attendees} viewerId={data.viewer_id} />
-      {editing && data.role === "host" && <HostControls data={data} reload={reload} />}
+      {editing && data.role === "host" && <HostControls data={data} reload={reload} onCancelled={onCancelled} onCancelFailed={onCancelFailed} />}
     </div>
   );
 }
@@ -1172,7 +1182,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
 }
 
 // Host-only controls: toggle the comment thread + manage cohosts.
-function HostControls({ data, reload }: { data: EventDetail; reload: () => void }) {
+function HostControls({ data, reload, onCancelled, onCancelFailed }: { data: EventDetail; reload: () => void; onCancelled?: () => void; onCancelFailed?: () => void }) {
   const api = useApi();
   const e = data.event;
   const [handle, setHandle] = useState("");
@@ -1238,10 +1248,20 @@ function HostControls({ data, reload }: { data: EventDetail; reload: () => void 
       <div className="section-h">Danger zone</div>
       <div className="row wrap">
         <ConfirmButton label="Cancel event" confirmLabel="Tap again - guests will see it as cancelled" testid="cancel-event"
-          onConfirm={async () => { await api(`/api/events/${e.id}`, { method: "DELETE" }); reload(); }} />
+          onConfirm={async () => {
+            onCancelled?.(); // optimistic: the page reads as cancelled instantly
+            const res = await api(`/api/events/${e.id}`, { method: "DELETE" });
+            if (!res.ok) onCancelFailed?.();
+            reload();
+          }} />
         {e.series_id && (
           <ConfirmButton label="Cancel whole series" confirmLabel="Tap again - cancels EVERY date" testid="cancel-series"
-            onConfirm={async () => { await api(`/api/events/${e.id}?series=all`, { method: "DELETE" }); reload(); }} />
+            onConfirm={async () => {
+              onCancelled?.();
+              const res = await api(`/api/events/${e.id}?series=all`, { method: "DELETE" });
+              if (!res.ok) onCancelFailed?.();
+              reload();
+            }} />
         )}
       </div>
     </div>
