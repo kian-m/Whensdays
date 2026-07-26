@@ -103,9 +103,9 @@ test.describe("scheduler", () => {
 
     // Preview as a guest: pick a month and a per-day time cell (Sat evening), save.
     await page.getByTestId("preview-toggle").click();
-    await page.getByTestId("rsvp-going").click();
-    // Voting is gated behind the RSVP and collapsed - expand it to reach the grid.
-    await page.getByTestId("vote-summary").click();
+    // Guests on an open poll land straight on the vote grid (no RSVP gate); the
+    // preview now reflects that too.
+    await expect(page.getByTestId("vote-first")).toBeVisible();
     await page.getByTestId("gp-month-0").click();
     // Slide-to-paint works on poll grids too: one drag marks a row of cells.
     // The 6-daypart grid paginates on phones (>3 columns), so drag within a
@@ -166,8 +166,7 @@ test.describe("scheduler", () => {
 
     // Preview as a guest and paint real clock times (7:00 & 7:30 PM = 1140/1170).
     await page.getByTestId("preview-toggle").click();
-    await page.getByTestId("rsvp-going").click();
-    await page.getByTestId("vote-summary").click();
+    await expect(page.getByTestId("vote-first")).toBeVisible();
     await page.getByTestId(`gpt-cell-${ymd}-1140`).click();
     await page.getByTestId(`gpt-cell-${ymd}-1170`).click();
     await expect(page.getByTestId(`gpt-cell-${ymd}-1140`)).toHaveClass(/\bon\b/);
@@ -201,8 +200,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(`Paginate ${test.info().testId}`);
     await page.getByTestId("preview-toggle").click();
-    await page.getByTestId("rsvp-going").click();
-    await page.getByTestId("vote-summary").click();
+    await expect(page.getByTestId("vote-first")).toBeVisible();
 
     // 5 days > 4/page ⇒ a pager appears; the last day is off the first page and
     // only shows after Later → (proving you don't have to hunt for a scrollbar).
@@ -2033,9 +2031,8 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await expect(page.getByText("Time being decided")).toBeVisible();
     await page.getByTestId("preview-toggle").click();
-    // Voting is gated behind the RSVP and collapsed - RSVP then expand it.
-    await page.getByTestId("rsvp-going").click();
-    await page.getByTestId("vote-summary").click();
+    // Guests on an open poll land straight on the vote grid (no RSVP gate).
+    await expect(page.getByTestId("vote-first")).toBeVisible();
     await page.getByTestId("gpw-col-later").click(); // evening is on page 2
     await expect(page.getByTestId("gpw-cell-0-evening")).toBeVisible();
   });
@@ -2051,8 +2048,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("quick-scope-week").click();
     await page.getByTestId("quick-create").click();
     await page.getByTestId("preview-toggle").click();
-    await page.getByTestId("rsvp-going").click();
-    await page.getByTestId("vote-summary").click();
+    await expect(page.getByTestId("vote-first")).toBeVisible();
     await page.getByTestId("gpw-cell-2-noon").click(); // page 1
     await page.getByTestId("gpw-col-later").click(); // evening is on page 2
     await page.getByTestId("gpw-cell-1-evening").click();
@@ -2061,7 +2057,7 @@ test.describe("scheduler", () => {
     // Saved picks survive a reload (persisted, not just local state).
     await page.reload();
     await page.getByTestId("preview-toggle").click();
-    await page.getByTestId("vote-summary").click();
+    await expect(page.getByTestId("vote-first")).toBeVisible();
     await page.getByTestId("gpw-col-later").click();
     await expect(page.getByTestId("gpw-cell-1-evening")).toHaveClass(/on/);
     await page.getByTestId("preview-toggle").click();
@@ -2078,8 +2074,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(`Month scope ${test.info().testId}`);
     await page.getByTestId("preview-toggle").click();
-    await page.getByTestId("rsvp-going").click();
-    await page.getByTestId("vote-summary").click();
+    await expect(page.getByTestId("vote-first")).toBeVisible();
     // Month is a dates × dayparts grid now (28 days) - pick times, not just days.
     await page.getByTestId("gpm-cell-12-noon").click(); // page 1
     await page.getByTestId("gpm-col-later").click(); // evening is on page 2
@@ -2117,12 +2112,21 @@ test.describe("scheduler", () => {
     await page.getByTestId("quick-scope-general").click();
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
-    // RSVP as a participant so someone is carried onto the extra dates - and
-    // cast a vote, since the host's results/finalize card only renders once
+    const id = page.url().split("/e/")[1];
+    // RSVP a "going" participant so someone is carried onto the extra dates. The
+    // guest-poll-first preview shows the vote grid (no RSVP button while the poll
+    // is open), so the RSVP goes through the API instead of the preview UI.
+    await page.evaluate(async (eid) => {
+      await fetch(`/api/events/${eid}/rsvp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Dev-User": "mfin1" },
+        body: JSON.stringify({ rsvp: "going" }),
+      });
+    }, id);
+    // Cast a vote too, since the host's results/finalize card only renders once
     // someone has voted (calm-by-default host view).
     await page.getByTestId("preview-toggle").click();
-    await page.getByTestId("rsvp-going").click();
-    await page.getByTestId("vote-summary").click();
+    await expect(page.getByTestId("vote-first")).toBeVisible();
     // Vote for NEXT month (gp-month-1) - the host's target-month chips list
     // voted months, and the test schedules into next month below.
     await page.getByTestId("gp-month-1").click();
@@ -2441,10 +2445,9 @@ test.describe("scheduler", () => {
     await page.goto(`/e/${busyId}`);
 
     // Voting view (host previews as guest) shows the conflict badge on option 0 only.
-    // Voting is gated behind the RSVP and collapsed - RSVP then expand it.
+    // Guests on an open poll land straight on the vote grid (no RSVP gate).
     await page.getByTestId("preview-toggle").click();
-    await page.getByTestId("rsvp-going").click();
-    await page.getByTestId("vote-summary").click();
+    await expect(page.getByTestId("vote-first")).toBeVisible();
     await expect(page.getByTestId("busy-0")).toBeVisible();
     await expect(page.getByTestId("busy-1")).toHaveCount(0);
   });
@@ -2471,10 +2474,10 @@ test.describe("scheduler", () => {
     await page.goto(`/e/${pollId}`);
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
-    // Vote as a guest on both options.
+    // Vote as a guest on both options (the open-poll preview shows the vote grid
+    // directly, no RSVP gate).
     await page.getByTestId("preview-toggle").click();
-    await page.getByTestId("rsvp-going").click();
-    await page.getByTestId("vote-summary").click();
+    await expect(page.getByTestId("vote-first")).toBeVisible();
     await page.getByTestId("vote-0-yes").click();
     await page.getByTestId("vote-1-yes").click();
     await page.getByTestId("save-votes").click();
@@ -2483,6 +2486,49 @@ test.describe("scheduler", () => {
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("finalize-0").click();
     await expect(page.getByText("Confirmed")).toBeVisible();
+  });
+
+  test("guest on an open poll lands on the vote grid, not the RSVP prompt", async ({ page, browser }) => {
+    test.skip(!DEV_AUTH, "guest flow via the dev ?guest=1 hook");
+    await ensureProfile(page);
+
+    // Seed a specific-times poll (fixed options → a deterministic screenshot):
+    // no time is locked yet, so a guest has nothing to RSVP to.
+    const title = `Guest poll ${test.info().testId}`;
+    const pollId = await page.evaluate(async (title) => {
+      const h = { "Content-Type": "application/json", "X-Dev-User": "demo-user" };
+      const res = await fetch("/api/events", {
+        method: "POST", headers: h,
+        body: JSON.stringify({
+          title, location_mode: "host_place", location_address: "",
+          scheduling_mode: "poll", timezone: "UTC",
+          time_options: [new Date("2026-08-01T19:00").toISOString(), new Date("2026-08-02T19:00").toISOString()],
+        }),
+      });
+      return (await res.json()).id as string;
+    }, title);
+
+    // A brand-new guest (fresh context, no prior session) opens the invite link.
+    const guestCtx = await browser.newContext();
+    try {
+      const guest = await guestCtx.newPage();
+      await guest.goto(`/e/${pollId}?guest=1`);
+      await guest.getByTestId("guest-name").fill("Poll Guest");
+      await guest.getByTestId("guest-join").click();
+      await expect(guest.getByTestId("event-title")).toHaveText(title);
+
+      // Availability-first: the ungated vote card is shown, and BOTH the RSVP
+      // prompt and the old RSVP-gated collapsed vote section are absent.
+      const voteCard = guest.getByTestId("vote-first");
+      await expect(voteCard).toBeVisible();
+      await expect(guest.getByTestId("rsvp-going")).toHaveCount(0);
+      await expect(guest.getByTestId("vote-details")).toHaveCount(0);
+
+      // Snapshot the stable vote card (fixed poll options), not the whole page.
+      await expect(voteCard).toHaveScreenshot("guest-poll-first.png");
+    } finally {
+      await guestCtx.close();
+    }
   });
 
   test("edit profile and date-based availability", async ({ page }) => {

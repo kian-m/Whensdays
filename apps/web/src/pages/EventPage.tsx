@@ -105,7 +105,7 @@ export function EventPage() {
 
       {e.status === "scheduled" && e.starts_at && <AddToCalendar event={e} />}
 
-      {e.status !== "cancelled" && (showManage ? <HostView data={data2} reload={reload} editing={heroEditing} onCancelled={() => setOptimisticCancelled(true)} onCancelFailed={() => setOptimisticCancelled(false)} /> : <GuestView data={data2} reload={reload} />)}
+      {e.status !== "cancelled" && (showManage ? <HostView data={data2} reload={reload} editing={heroEditing} onCancelled={() => setOptimisticCancelled(true)} onCancelFailed={() => setOptimisticCancelled(false)} /> : <GuestView data={data2} reload={reload} previewingAsGuest={preview} />)}
 
       {/* Friend-by-friend invites are management, not the default view - hosts
           see them while editing; guests (no edit mode) keep them. */}
@@ -321,7 +321,7 @@ function AddToCalendar({ event }: { event: EventDetail["event"] }) {
 
 // ---------------- guest / invitee experience ----------------
 
-function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) {
+function GuestView({ data, reload, previewingAsGuest }: { data: EventDetail; reload: () => void; previewingAsGuest?: boolean }) {
   const e = data.event;
   const me = data.attendees.find((a) => a.user_id === data.viewer_id);
   const myRsvp = me?.rsvp;
@@ -355,8 +355,12 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
   // (not only the literal first render) keeps it consistent AND avoids a bug
   // where a guest who voted but never RSVP'd could no longer see their vote
   // (the RSVP-gated <details> below would collapse it away). The authed
-  // (non-guest) RSVP-first flow is left untouched.
-  const guestPollFirst = isGuest && (isPoll || isGeneral);
+  // (non-guest) RSVP-first flow is left untouched. `previewingAsGuest` ONLY
+  // feeds this branch decision so a host's "Preview as guest" accurately shows
+  // the poll-first card (their real viewer_id is non-guest); it must NOT flow
+  // into `isGuest` elsewhere (sign-up nudge, guest copy) — a previewing host
+  // still sees host-appropriate chrome there.
+  const guestPollFirst = (isGuest || !!previewingAsGuest) && (isPoll || isGeneral);
 
   return (
     <div className="stack">
