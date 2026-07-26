@@ -796,7 +796,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* slide-to-paint grids: touches on cells paint (never scroll); the page still
    scrolls from headers, labels, and everything outside the grid */
 .grid.paintable { user-select: none; -webkit-user-select: none; }
-.grid.paintable .cell { touch-action: none; }
+/* No touch-action:none here: drag-paint is mouse/pen only, so a one-finger
+   touch drag scrolls the page natively; a touch tap toggles a single cell. */
 
 /* add-to-homescreen steps: numbered chips + the real iOS glyphs */
 .a2hs-step {

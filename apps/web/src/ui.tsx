@@ -213,7 +213,7 @@ export function DayGrid({
   const cp = Math.min(colPage, colPages - 1);
   const pageCols = cols.slice(cp * MAX_COLS_PER_PAGE, cp * MAX_COLS_PER_PAGE + MAX_COLS_PER_PAGE);
   // One drag = one operation applied to each cell at most once.
-  const drag = useRef<{ on: boolean; painted: Set<string> } | null>(null);
+  const drag = useRef<{ on: boolean; painted: Set<string>; tap?: HTMLElement; touch?: boolean } | null>(null);
   const applyAt = (el: Element | null) => {
     if (!drag.current || !onPaint) return;
     const cell = (el as HTMLElement | null)?.closest?.("[data-day]") as HTMLElement | null;
@@ -229,17 +229,30 @@ export function DayGrid({
     onPointerDown: (e: React.PointerEvent) => {
       const cell = (e.target as HTMLElement).closest?.("[data-day]") as HTMLElement | null;
       if (!cell || cell.hasAttribute("disabled")) return;
+      const k = key(cell.dataset.day!, cell.dataset.dp!);
+      // Touch: no drag-paint. Don't preventDefault/capture so the browser can
+      // scroll the page; record a possible single-tap toggled on pointerup.
+      if (e.pointerType === "touch") {
+        drag.current = { on: !(paintOn ?? free).has(k), painted: new Set(), tap: cell, touch: true };
+        return;
+      }
       e.preventDefault();
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
-      const k = key(cell.dataset.day!, cell.dataset.dp!);
       drag.current = { on: !(paintOn ?? free).has(k), painted: new Set() };
       applyAt(cell);
     },
     onPointerMove: (e: React.PointerEvent) => {
-      if (!drag.current) return;
+      if (!drag.current || drag.current.touch) return;
       applyAt(document.elementFromPoint(e.clientX, e.clientY));
     },
-    onPointerUp: () => { drag.current = null; },
+    onPointerUp: (e: React.PointerEvent) => {
+      const d = drag.current;
+      drag.current = null;
+      if (d?.touch && d.tap && onPaint) {
+        const cell = (e.target as HTMLElement)?.closest?.("[data-day]") as HTMLElement | null;
+        if (cell === d.tap) onPaint(d.tap.dataset.day!, d.tap.dataset.dp!, d.on);
+      }
+    },
     onPointerCancel: () => { drag.current = null; },
   } : {};
   const cellClass = (k: string) => {
@@ -351,7 +364,7 @@ export function TimeGrid({
   const [page, setPage] = useState(0);
   const p = Math.min(page, pages - 1);
   const pageDays = days.slice(p * daysPerPage, p * daysPerPage + daysPerPage);
-  const drag = useRef<{ on: boolean; painted: Set<string> } | null>(null);
+  const drag = useRef<{ on: boolean; painted: Set<string>; tap?: HTMLElement; touch?: boolean } | null>(null);
   const applyAt = (el: Element | null) => {
     if (!drag.current || !onPaint) return;
     const cell = (el as HTMLElement | null)?.closest?.("[data-day]") as HTMLElement | null;
@@ -365,17 +378,30 @@ export function TimeGrid({
     onPointerDown: (e: React.PointerEvent) => {
       const cell = (e.target as HTMLElement).closest?.("[data-day]") as HTMLElement | null;
       if (!cell || !cell.dataset.min) return;
+      const k = key(cell.dataset.day!, Number(cell.dataset.min));
+      // Touch: no drag-paint. Don't preventDefault/capture so the browser can
+      // scroll the page; record a possible single-tap toggled on pointerup.
+      if (e.pointerType === "touch") {
+        drag.current = { on: !(paintOn ?? free).has(k), painted: new Set(), tap: cell, touch: true };
+        return;
+      }
       e.preventDefault();
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
-      const k = key(cell.dataset.day!, Number(cell.dataset.min));
       drag.current = { on: !(paintOn ?? free).has(k), painted: new Set() };
       applyAt(cell);
     },
     onPointerMove: (e: React.PointerEvent) => {
-      if (!drag.current) return;
+      if (!drag.current || drag.current.touch) return;
       applyAt(document.elementFromPoint(e.clientX, e.clientY));
     },
-    onPointerUp: () => { drag.current = null; },
+    onPointerUp: (e: React.PointerEvent) => {
+      const d = drag.current;
+      drag.current = null;
+      if (d?.touch && d.tap && onPaint) {
+        const cell = (e.target as HTMLElement)?.closest?.("[data-day]") as HTMLElement | null;
+        if (cell === d.tap) onPaint(d.tap.dataset.day!, Number(d.tap.dataset.min), d.on);
+      }
+    },
     onPointerCancel: () => { drag.current = null; },
   } : {};
   const heat = (n: number): React.CSSProperties =>
