@@ -176,10 +176,11 @@ function LabelStack({ label, align = "center" }: { label: string; align?: "left"
   );
 }
 
-// DayGrid paginates its columns past this many, so 6 dayparts don't crush the
-// row-label column to zero on a narrow phone (WEEK_PARTS's 3 columns stay on
-// one page - the trigger is strictly more than this).
-const MAX_COLS_PER_PAGE = 3;
+// DayGrid shrinks its cells (instead of paginating) past this many daypart
+// columns, so all 6 dayparts fit one narrow-phone screen at once without
+// crushing the row-label column. WEEK_PARTS's 3 columns render at the full
+// 44px tap-target size (the trigger is strictly more than this).
+const COMPACT_COLS = 3;
 
 export function DayGrid({
   dates, free, busy, locked, cols = DAYPARTS, idPrefix = "avail",
@@ -205,13 +206,19 @@ export function DayGrid({
   testid?: string;
 }) {
   const key = (day: string, dp: string) => `${day}:${dp}`;
-  // Paginate the daypart columns so a 6-column grid doesn't squeeze the row
-  // labels off-screen on a phone. The free/busy/locked sets span ALL columns
-  // and onToggleRow fills the full day, so only the viewport moves.
-  const colPages = Math.max(1, Math.ceil(cols.length / MAX_COLS_PER_PAGE));
-  const [colPage, setColPage] = useState(0);
-  const cp = Math.min(colPage, colPages - 1);
-  const pageCols = cols.slice(cp * MAX_COLS_PER_PAGE, cp * MAX_COLS_PER_PAGE + MAX_COLS_PER_PAGE);
+  // When there are more than COMPACT_COLS daypart columns (the 6-daypart grids)
+  // shrink the cells so all columns fit one narrow-phone screen at once - no
+  // pagination. Mirrors TimeGrid's minWidth:0 trick (the shared .cell floors at
+  // 44px, which would overflow); here we also drop the min-height and gap a bit
+  // and shrink the header font since these are just tap-to-fill squares, not
+  // full 44px targets. WEEK_PARTS's 3 columns stay at the default full size.
+  const compact = cols.length > COMPACT_COLS;
+  const cellStyle: React.CSSProperties | undefined = compact ? { minWidth: 0, minHeight: 34 } : undefined;
+  const hdStyle: React.CSSProperties | undefined = compact ? { fontSize: "0.66rem" } : undefined;
+  const gridStyle: React.CSSProperties = {
+    gridTemplateColumns: `minmax(3.4rem, auto) repeat(${cols.length}, 1fr)`,
+    ...(compact ? { gap: "0.25rem" } : {}),
+  };
   // One drag = one operation applied to each cell at most once.
   const drag = useRef<{ on: boolean; painted: Set<string>; tap?: HTMLElement; touch?: boolean } | null>(null);
   const applyAt = (el: Element | null) => {
@@ -269,25 +276,14 @@ export function DayGrid({
   };
   return (
     <div className="stack" style={{ gap: 6 }}>
-      {colPages > 1 && (
-        <div className="row between" data-testid={`${idPrefix}-colpager`}>
-          <button type="button" className="btn ghost sm" data-testid={`${idPrefix}-col-earlier`}
-            disabled={cp === 0} onClick={() => setColPage(cp - 1)}>← Earlier</button>
-          <span className="muted small" data-testid={`${idPrefix}-col-range`}>
-            {pageCols[0]?.short} – {pageCols[pageCols.length - 1]?.short}
-          </span>
-          <button type="button" className="btn ghost sm" data-testid={`${idPrefix}-col-later`}
-            disabled={cp >= colPages - 1} onClick={() => setColPage(cp + 1)}>Later →</button>
-        </div>
-      )}
       <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
-        style={{ gridTemplateColumns: `minmax(3.4rem, auto) repeat(${pageCols.length}, 1fr)` }} data-testid={testid} {...paintHandlers}>
+        style={gridStyle} data-testid={testid} {...paintHandlers}>
         <div />
-        {pageCols.map((dp) =>
+        {cols.map((dp) =>
           readOnly ? (
-            <div key={dp.value} className="hd">{dp.short}</div>
+            <div key={dp.value} className="hd" style={hdStyle}>{dp.short}</div>
           ) : (
-            <button key={dp.value} type="button" className="hd gp-head"
+            <button key={dp.value} type="button" className="hd gp-head" style={hdStyle}
               aria-label={`Fill the whole ${dp.value.replaceAll("_", " ")} column`}
               data-testid={`${idPrefix}-col-${dp.value}`} onClick={() => onToggleCol?.(dp.value)}>{dp.short}</button>
           ),
@@ -301,15 +297,15 @@ export function DayGrid({
                 aria-label={`Fill the whole ${d.label} row`}
                 data-testid={`${idPrefix}-row-${i}`} onClick={() => onToggleRow?.(d.value)}><LabelStack label={d.label} align="left" /></button>
             )}
-            {pageCols.map((dp) => {
+            {cols.map((dp) => {
               const k = key(d.value, dp.value);
               const isLocked = locked?.has(k);
               const label = `${d.label}, ${dp.value.replaceAll("_", " ")}: ${cellTitle(k)}`;
               return readOnly ? (
-                <div key={dp.value} className={cellClass(k)} title={cellTitle(k)} role="img" aria-label={label} />
+                <div key={dp.value} className={cellClass(k)} style={cellStyle} title={cellTitle(k)} role="img" aria-label={label} />
               ) : (
                 <button key={dp.value} type="button" data-testid={`${idPrefix}-cell-${i}-${dp.value}`}
-                  data-day={d.value} data-dp={dp.value}
+                  data-day={d.value} data-dp={dp.value} style={cellStyle}
                   className={cellClass(k)} disabled={isLocked} title={cellTitle(k)}
                   aria-label={label} aria-pressed={free.has(k)}
                   onClick={onPaint ? undefined : () => onToggle?.(d.value, dp.value)}

@@ -45,10 +45,8 @@ test.describe("docs screenshots", () => {
     await page.getByTestId("quick-create").click();
     await page.getByTestId("event-title").waitFor();
     await page.getByTestId("preview-toggle").click(); // host → guest view
-    await page.getByTestId("rsvp-going").click();      // voting is gated behind the RSVP
-    await page.getByTestId("vote-summary").click();    // …and collapsed by default
-    await page.getByTestId("gp-cell-0-noon").click(); // page 1 (early_morning/morning/noon)
-    await page.getByTestId("gp-col-later").click(); // page 2 (afternoon/evening/night)
+    await page.getByTestId("vote-first").waitFor();   // open poll: straight to voting, no RSVP gate
+    await page.getByTestId("gp-cell-0-noon").click();
     for (const cell of ["gp-cell-5-evening", "gp-cell-6-afternoon", "gp-cell-6-evening"]) {
       await page.getByTestId(cell).click();
     }
@@ -59,10 +57,9 @@ test.describe("docs screenshots", () => {
     await page.goto("/profile");
     await page.getByTestId("avail-edit").click();
     await page.getByTestId("availability-grid").waitFor();
-    for (const c of ["avail-cell-2-noon", "avail-cell-5-morning"]) { // page 1
+    for (const c of ["avail-cell-2-noon", "avail-cell-5-morning"]) {
       await page.getByTestId(c).click();
     }
-    await page.getByTestId("avail-col-later").click(); // page 2 (afternoon/evening/night)
     for (const c of ["avail-cell-1-evening", "avail-cell-2-afternoon", "avail-cell-6-evening"]) {
       await page.getByTestId(c).click();
     }
