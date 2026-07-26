@@ -346,32 +346,55 @@ function GuestView({ data, reload }: { data: EventDetail; reload: () => void }) 
   const pollVoters = new Set(data.votes.map((v) => v.user_id)).size;
   const genVoters = new Set(data.general_votes.map((v) => v.user_id)).size;
   const voteSummary = (n: number) => `🗓 Help pick the time — ${n} of ${totalPeople} voted · Vote now`;
+  const isGuest = data.viewer_id.startsWith("guest_");
+  // AVAILABILITY-FIRST for guests on an OPEN poll: no time is locked yet, so
+  // there is nothing to RSVP to — the poll IS the participation. A guest who
+  // just typed their name is asked to paint their availability / vote as the ONE
+  // clear first action (prominent, expanded, ungated), and the RSVP card is
+  // hidden until a time is scheduled. Applying it to every guest+polling visit
+  // (not only the literal first render) keeps it consistent AND avoids a bug
+  // where a guest who voted but never RSVP'd could no longer see their vote
+  // (the RSVP-gated <details> below would collapse it away). The authed
+  // (non-guest) RSVP-first flow is left untouched.
+  const guestPollFirst = isGuest && (isPoll || isGeneral);
 
   return (
     <div className="stack">
       <WhosIn data={data} />
-      <Rsvp eventId={e.id} current={myRsvp} currentAnon={!!me?.anonymous} reload={reload}
-        isGuest={data.viewer_id.startsWith("guest_")} onSelect={setRsvpSel} />
-      {pollClosed(e) && (
-        <div className="card" data-testid="poll-closed">
-          <span className="muted small">🗳️ This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
+      {guestPollFirst ? (
+        <div className="card stack" data-testid="vote-first">
+          <h3>🗓 Help pick the time</h3>
+          <p className="muted small" style={{ margin: 0 }}>Tap the times that work for you — you'll RSVP once the host locks one in.</p>
+          {isPoll
+            ? <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} tz={e.timezone} reload={reload} />
+            : <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id} days={data.poll_days} grid={data.time_grid} reload={reload} />}
         </div>
-      )}
-      {/* Voting sits BEHIND the RSVP: gated to committed guests, then collapsed
-          so RSVP stays the one clear first action. Opens by default if you've
-          already voted (mirrors the preferences pattern). */}
-      {canVote && isPoll && (
-        <details className="card stack" data-testid="vote-details">
-          <summary style={{ cursor: "pointer", fontWeight: 600 }} data-testid="vote-summary">{voteSummary(pollVoters)}</summary>
-          <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} tz={e.timezone} reload={reload} />
-        </details>
-      )}
-      {canVote && isGeneral && (
-        <details className="card stack" data-testid="vote-details">
-          <summary style={{ cursor: "pointer", fontWeight: 600 }} data-testid="vote-summary">{voteSummary(genVoters)}</summary>
-          <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id}
-            days={data.poll_days} grid={data.time_grid} reload={reload} />
-        </details>
+      ) : (
+        <>
+          <Rsvp eventId={e.id} current={myRsvp} currentAnon={!!me?.anonymous} reload={reload}
+            isGuest={isGuest} onSelect={setRsvpSel} />
+          {pollClosed(e) && (
+            <div className="card" data-testid="poll-closed">
+              <span className="muted small">🗳️ This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
+            </div>
+          )}
+          {/* Voting sits BEHIND the RSVP: gated to committed guests, then collapsed
+              so RSVP stays the one clear first action. Opens by default if you've
+              already voted (mirrors the preferences pattern). */}
+          {canVote && isPoll && (
+            <details className="card stack" data-testid="vote-details">
+              <summary style={{ cursor: "pointer", fontWeight: 600 }} data-testid="vote-summary">{voteSummary(pollVoters)}</summary>
+              <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} tz={e.timezone} reload={reload} />
+            </details>
+          )}
+          {canVote && isGeneral && (
+            <details className="card stack" data-testid="vote-details">
+              <summary style={{ cursor: "pointer", fontWeight: 600 }} data-testid="vote-summary">{voteSummary(genVoters)}</summary>
+              <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id}
+                days={data.poll_days} grid={data.time_grid} reload={reload} />
+            </details>
+          )}
+        </>
       )}
       <Guests attendees={data.attendees} viewerId={data.viewer_id} />
     </div>

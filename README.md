@@ -141,7 +141,11 @@ the next 4 weeks), **generally** (ideal months + a weekday × time-of-day grid,
 fill a row/column from its header), or **pick days** (the host hand-picks specific
 calendar days from a forward calendar + a time window; guests then paint the
 **actual clock times** that work on each — a When2meet-style grid). The host sees a
-matching heatmap or day ranking.
+matching heatmap or day ranking. **Guests on an open poll are asked for their
+availability first, not to RSVP:** while no time is locked there is nothing to say
+yes to, so a guest who just typed their name lands straight on the vote grid
+(prominent, expanded) and the RSVP card is hidden until the host schedules a time.
+The authed RSVP-first flow is unchanged.
 
 ![General availability grid](docs/screenshots/03-scheduler-general-poll.png)
 
