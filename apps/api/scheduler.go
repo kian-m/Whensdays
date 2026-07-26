@@ -1119,6 +1119,19 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		func() (e error) {
 			if !isHost {
 				isCo, _ = s.queries.IsCohost(ctx, db.IsCohostParams{EventID: id, UserID: uid})
+				// Opening a shared event link IS the invite (link = capability):
+				// record an invite row for any non-host/non-cohost viewer so the
+				// event surfaces on their dashboard even if they never RSVP. Host
+				// and cohosts already see it via ListEventsHosting/Cohosting, so a
+				// row for them would be meaningless noise. Idempotent (ON CONFLICT
+				// DO NOTHING). We clear "seen" HERE, sequentially after the insert,
+				// rather than rely on the concurrent MarkOneInviteSeen closure -
+				// that one may run before this INSERT and no-op, leaving a fresh
+				// row wrongly unseen while the person is looking at the event.
+				if !isCo {
+					_ = s.queries.AddEventInvite(ctx, db.AddEventInviteParams{EventID: id, UserID: uid, InviterID: ev.HostID})
+					_ = s.queries.MarkOneInviteSeen(ctx, db.MarkOneInviteSeenParams{EventID: id, UserID: uid})
+				}
 			}
 			return nil
 		},
