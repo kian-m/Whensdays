@@ -27,7 +27,6 @@ services:
       GEO_MODE: stub # deterministic address type-ahead, no network
       WGIS_MODE: stub # fixed WGIS feed, no network (venue sync test)
       WEIMPROV_MODE: stub # fixed We Improv feed, no network (venue sync test)
-      BUZZMILL_MODE: stub # fixed Buzz Mill feed, no network (venue sync test)
       ROZCOS_MODE: stub # fixed Rozco's open-mic feed, no network (venue sync test)
       CRON_KEY: e2e-cron-key # lets the spec exercise key-gated cron routes (no-key posts still 401)
       RUN_MIGRATIONS: "true" # apply schema on boot
