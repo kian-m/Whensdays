@@ -52,6 +52,7 @@ type server struct {
 	wgisStub     bool
 	weimprovStub bool
 	buzzmillStub bool
+	rozcosStub   bool
 	alerts       *alerter
 }
 
@@ -119,6 +120,7 @@ func main() {
 		wgisStub:     os.Getenv("WGIS_MODE") == "stub",
 		weimprovStub: os.Getenv("WEIMPROV_MODE") == "stub",
 		buzzmillStub: os.Getenv("BUZZMILL_MODE") == "stub",
+		rozcosStub:   os.Getenv("ROZCOS_MODE") == "stub",
 	}
 	// Email volume telemetry: every send becomes a PostHog event so the daily
 	// digest can show usage against the provider's free tier.
@@ -168,6 +170,7 @@ func main() {
 	mux.HandleFunc("POST /api/cron/wgis-sync", s.handleCronWGISSync)         // CRON_KEY-gated WGIS feed sync (see wgissync.go)
 	mux.HandleFunc("POST /api/cron/weimprov-sync", s.handleCronWeimprovSync) // CRON_KEY-gated We Improv feed sync (see weimprovsync.go)
 	mux.HandleFunc("POST /api/cron/buzzmill-sync", s.handleCronBuzzmillSync) // CRON_KEY-gated Buzz Mill feed sync (see buzzmillsync.go)
+	mux.HandleFunc("POST /api/cron/rozcos-sync", s.handleCronRozcosSync)     // CRON_KEY-gated Rozco's open-mic scrape (see rozcossync.go)
 	// Follows + personal feed.
 	mux.Handle("GET /api/feed", auth(http.HandlerFunc(s.handleFeed)))
 	mux.Handle("GET /api/event-types", auth(http.HandlerFunc(s.handleListCustomTypes)))

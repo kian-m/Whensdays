@@ -1657,6 +1657,70 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("edit-event-open")).toBeVisible();
   });
 
+  test("rozcos sync: key-gated cron adopts a seeded open mic and adds venue dates", async ({ page, request }) => {
+    await ensureProfile(page);
+    const stamp = `${test.info().testId}-${Date.now()}`;
+    await page.goto("/groups");
+    const groupName = `Rozcos ${stamp}`;
+    await page.getByTestId("group-name").fill(groupName);
+    await page.getByTestId("group-create").click();
+    await page.getByText(groupName).first().click();
+    await expect(page.getByTestId("group-title")).toBeVisible();
+    const gid = page.url().split("/g/")[1];
+
+    // Rozco's scrape has autoCreate OFF (HTML/JSON-LD scrape, like UCB), so we
+    // seed ONE "Eastside Open Mic" occurrence first - the sync only maintains
+    // titles the group already has. The stub feed's first date is +2d Central
+    // (America/Chicago) at 20:00, so seed exactly that so the sync ADOPTS it and
+    // ADDS the two later siblings. 20:00 -05:00 matches the stub's own instant so
+    // no spurious retime happens.
+    const title = "Eastside Open Mic";
+    const chicagoDay = (days: number) =>
+      new Date(Date.now() + days * 864e5).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+    await page.evaluate(async ({ gid, title, day }) => {
+      await fetch("/api/events", {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Dev-User": "demo-user" },
+        body: JSON.stringify({
+          title, location_mode: "host_place",
+          location_address: "1805 E 7th St, Austin, TX 78702",
+          scheduling_mode: "fixed", starts_at: `${day}T20:00:00-05:00`,
+          timezone: "America/Chicago", group_id: gid,
+        }),
+      });
+    }, { gid, title, day: chicagoDay(2) });
+
+    // No key -> 401 (same gate as every cron route).
+    expect((await request.post("/api/cron/rozcos-sync")).status()).toBe(401);
+
+    // ROZCOS_MODE=stub serves 3 Eastside Open Mic dates (+2, +9, +16). The sync
+    // adopts the seeded one to the bot host and creates the two missing siblings.
+    const res = await request.post("/api/cron/rozcos-sync", {
+      headers: { "X-Cron-Key": "e2e-cron-key" }, data: { group_id: gid },
+    });
+    expect(res.ok()).toBeTruthy();
+    const out = await res.json();
+    expect(out.adopted).toBe(1);
+    expect(out.created).toBe(2);
+
+    // Idempotent: the same feed again changes nothing.
+    const again = await (await request.post("/api/cron/rozcos-sync", {
+      headers: { "X-Cron-Key": "e2e-cron-key" }, data: { group_id: gid },
+    })).json();
+    expect(again.created).toBe(0);
+    expect(again.adopted).toBe(0);
+
+    // Group page: one tile for the series, 3 upcoming dates; the event page shows
+    // the bot as host while the original host keeps manage (cohost -> Edit shows).
+    await page.reload();
+    const tile = page.getByTestId("group-event").filter({ hasText: title });
+    await expect(tile).toHaveCount(1);
+    await expect(tile.getByTestId("series-badge")).toContainText("3 dates");
+    await tile.click();
+    await expect(page.getByTestId("hosted-by")).toContainText("Rozco's Schedule");
+    await expect(page.getByTestId("series")).toContainText("of 3");
+    await expect(page.getByTestId("edit-event-open")).toBeVisible();
+  });
+
   test("anonymous RSVP: counted in totals, name hidden from the host", async ({ browser }) => {
     const hostCtx = await browser.newContext();
     const guestCtx = await browser.newContext();
