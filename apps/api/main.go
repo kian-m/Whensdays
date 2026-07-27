@@ -38,19 +38,20 @@ type ctxKey string
 const userIDKey ctxKey = "userID"
 
 type server struct {
-	queries   *db.Queries
-	pool      *pgxpool.Pool
-	logger    *slog.Logger
-	analytics *analytics.Client
-	calendar  calendarConfig
-	guests    guestSigner
-	notify    *notify.Client
-	appOrigin string
-	klipyKey  string
-	klipyStub bool
-	geoStub   bool
-	wgisStub  bool
-	alerts    *alerter
+	queries      *db.Queries
+	pool         *pgxpool.Pool
+	logger       *slog.Logger
+	analytics    *analytics.Client
+	calendar     calendarConfig
+	guests       guestSigner
+	notify       *notify.Client
+	appOrigin    string
+	klipyKey     string
+	klipyStub    bool
+	geoStub      bool
+	wgisStub     bool
+	weimprovStub bool
+	alerts       *alerter
 }
 
 func main() {
@@ -106,15 +107,16 @@ func main() {
 
 	s := &server{
 		queries: db.New(pool), pool: pool, logger: logger, analytics: an,
-		calendar:  loadCalendarConfig(logger),
-		guests:    newGuestSigner(logger),
-		notify:    notify.New(os.Getenv("EMAIL_API_KEY"), os.Getenv("EMAIL_FROM"), logger),
-		alerts:    newAlerter(),
-		appOrigin: strings.TrimRight(os.Getenv("APP_ORIGIN"), "/"),
-		klipyKey:  os.Getenv("KLIPY_API_KEY"),
-		klipyStub: os.Getenv("KLIPY_MODE") == "stub",
-		geoStub:   os.Getenv("GEO_MODE") == "stub",
-		wgisStub:  os.Getenv("WGIS_MODE") == "stub",
+		calendar:     loadCalendarConfig(logger),
+		guests:       newGuestSigner(logger),
+		notify:       notify.New(os.Getenv("EMAIL_API_KEY"), os.Getenv("EMAIL_FROM"), logger),
+		alerts:       newAlerter(),
+		appOrigin:    strings.TrimRight(os.Getenv("APP_ORIGIN"), "/"),
+		klipyKey:     os.Getenv("KLIPY_API_KEY"),
+		klipyStub:    os.Getenv("KLIPY_MODE") == "stub",
+		geoStub:      os.Getenv("GEO_MODE") == "stub",
+		wgisStub:     os.Getenv("WGIS_MODE") == "stub",
+		weimprovStub: os.Getenv("WEIMPROV_MODE") == "stub",
 	}
 	// Email volume telemetry: every send becomes a PostHog event so the daily
 	// digest can show usage against the provider's free tier.
@@ -158,10 +160,11 @@ func main() {
 	// Public browse (read-only, publishes only host-chosen fields) + cron.
 	mux.Handle("GET /api/discover", readLimit(http.HandlerFunc(s.handleDiscover)))
 	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
-	mux.HandleFunc("POST /api/cron/analytics", s.handleCronAnalytics) // CRON_KEY-gated daily digest
-	mux.HandleFunc("POST /api/cron/flush", s.handleCronFlush)         // CRON_KEY-gated digest flush (lets the service scale to zero)
-	mux.HandleFunc("POST /api/cron/ucb-sync", s.handleCronUCBSync)    // CRON_KEY-gated venue-schedule sync (see ucbsync.go)
-	mux.HandleFunc("POST /api/cron/wgis-sync", s.handleCronWGISSync)  // CRON_KEY-gated WGIS feed sync (see wgissync.go)
+	mux.HandleFunc("POST /api/cron/analytics", s.handleCronAnalytics)        // CRON_KEY-gated daily digest
+	mux.HandleFunc("POST /api/cron/flush", s.handleCronFlush)                // CRON_KEY-gated digest flush (lets the service scale to zero)
+	mux.HandleFunc("POST /api/cron/ucb-sync", s.handleCronUCBSync)           // CRON_KEY-gated venue-schedule sync (see ucbsync.go)
+	mux.HandleFunc("POST /api/cron/wgis-sync", s.handleCronWGISSync)         // CRON_KEY-gated WGIS feed sync (see wgissync.go)
+	mux.HandleFunc("POST /api/cron/weimprov-sync", s.handleCronWeimprovSync) // CRON_KEY-gated We Improv feed sync (see weimprovsync.go)
 	// Follows + personal feed.
 	mux.Handle("GET /api/feed", auth(http.HandlerFunc(s.handleFeed)))
 	mux.Handle("GET /api/event-types", auth(http.HandlerFunc(s.handleListCustomTypes)))

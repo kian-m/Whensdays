@@ -161,7 +161,7 @@ func (s *server) fetchWGISShows(ctx context.Context) ([]crowdworkShow, error) {
 // Any failure returns "" - the event stays title-led. SSRF-guarded like every
 // outbound fetch; the stub path is network-free.
 func (s *server) fetchPosterCover(ctx context.Context, url string) string {
-	if s.wgisStub {
+	if s.wgisStub || s.weimprovStub {
 		return encodeCover(image.NewRGBA(image.Rect(0, 0, 8, 8))) // deterministic tiny JPEG
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
