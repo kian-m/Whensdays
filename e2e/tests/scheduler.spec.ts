@@ -1610,6 +1610,53 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("edit-event-open")).toBeVisible();
   });
 
+  test("buzzmill sync: key-gated cron auto-creates comedy series, filters non-comedy", async ({ page, request }) => {
+    await ensureProfile(page);
+    const stamp = `${test.info().testId}-${Date.now()}`;
+    await page.goto("/groups");
+    const groupName = `BuzzMill ${stamp}`;
+    await page.getByTestId("group-name").fill(groupName);
+    await page.getByTestId("group-create").click();
+    await page.getByText(groupName).first().click();
+    await expect(page.getByTestId("group-title")).toBeVisible();
+    const gid = page.url().split("/g/")[1];
+
+    // No key -> 401, same gate as every cron route.
+    expect((await request.post("/api/cron/buzzmill-sync")).status()).toBe(401);
+
+    // BUZZMILL_MODE=stub serves a fixed feed (Buzz Kill Comedy x3 dates,
+    // Riverside Wranglers Comedy Show x2, plus a "Monday Music Open Mic" decoy).
+    // The "comedy" filter keeps the two stand-up series and drops the music mic,
+    // and autoCreate materializes them - no seeding.
+    const res = await request.post("/api/cron/buzzmill-sync", {
+      headers: { "X-Cron-Key": "e2e-cron-key" }, data: { group_id: gid },
+    });
+    expect(res.ok()).toBeTruthy();
+    const out = await res.json();
+    expect(out.created).toBe(5); // 3 + 2 comedy occurrences; the music mic is filtered out
+    expect(out.adopted).toBe(0); // nothing pre-existed
+
+    // Idempotent: a second run creates nothing new.
+    const again = await (await request.post("/api/cron/buzzmill-sync", {
+      headers: { "X-Cron-Key": "e2e-cron-key" }, data: { group_id: gid },
+    })).json();
+    expect(again.created).toBe(0);
+
+    // The group shows both comedy series as ONE tile each; the music mic never
+    // appears. Opening one shows the bot as host and a real cover from the (stub)
+    // poster.
+    await page.reload();
+    await expect(page.getByTestId("group-event").filter({ hasText: "Buzz Kill Comedy" })).toHaveCount(1);
+    await expect(page.getByTestId("group-event").filter({ hasText: "Music Open Mic" })).toHaveCount(0);
+    const wranglers = page.getByTestId("group-event").filter({ hasText: "Riverside Wranglers" });
+    await expect(wranglers).toHaveCount(1);
+    await wranglers.click();
+    await expect(page.getByTestId("hosted-by")).toContainText("Buzz Mill Schedule");
+    await expect(page.getByTestId("event-cover")).toHaveAttribute("src", /^data:image\//);
+    // The group owner is a cohost, so they keep manage powers (Edit shows).
+    await expect(page.getByTestId("edit-event-open")).toBeVisible();
+  });
+
   test("anonymous RSVP: counted in totals, name hidden from the host", async ({ browser }) => {
     const hostCtx = await browser.newContext();
     const guestCtx = await browser.newContext();
