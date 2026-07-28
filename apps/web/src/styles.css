@@ -408,6 +408,16 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .grid .hd { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .grid .day { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* DayGrid's 6-daypart (.compact-cols) grids only need smaller cells on phones,
+   where all 6 columns otherwise wouldn't fit one screen - on wider viewports
+   there's room for the normal 44px .cell/.hd sizing above, so this stays
+   scoped to a max-width query rather than a fixed JS decision (which used to
+   shrink the grid even on desktop, wasting most of the card's width). */
+@media (max-width: 640px) {
+  .grid.compact-cols { gap: 0.25rem; }
+  .grid.compact-cols .hd { font-size: 0.66rem; }
+  .grid.compact-cols .cell { min-width: 0; min-height: 34px; }
+}
 /* Two-line stacked grid labels ("Weekday" over "Mon D") so a long compound
    date header fits a narrow phone column without truncating to 1-2 letters.
    The ellipsis on .day/.hd stays as a defensive fallback only. */

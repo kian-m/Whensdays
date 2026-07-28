@@ -207,17 +207,16 @@ export function DayGrid({
 }) {
   const key = (day: string, dp: string) => `${day}:${dp}`;
   // When there are more than COMPACT_COLS daypart columns (the 6-daypart grids)
-  // shrink the cells so all columns fit one narrow-phone screen at once - no
-  // pagination. Mirrors TimeGrid's minWidth:0 trick (the shared .cell floors at
-  // 44px, which would overflow); here we also drop the min-height and gap a bit
-  // and shrink the header font since these are just tap-to-fill squares, not
-  // full 44px targets. WEEK_PARTS's 3 columns stay at the default full size.
+  // shrink the cells ONLY on narrow phones (a `.compact-cols` CSS class, sized
+  // via a max-width media query in styles.css) so all columns fit one screen at
+  // once with no pagination. On wider viewports there's room for the full 44px
+  // tap-target size, so `.compact-cols` has no effect there and the 1fr columns
+  // just use the available width - a fixed JS decision (not viewport-aware) had
+  // been shrinking the grid even on desktop, wasting most of the card's width.
+  // WEEK_PARTS's 3 columns never get this class and stay at the default size.
   const compact = cols.length > COMPACT_COLS;
-  const cellStyle: React.CSSProperties | undefined = compact ? { minWidth: 0, minHeight: 34 } : undefined;
-  const hdStyle: React.CSSProperties | undefined = compact ? { fontSize: "0.66rem" } : undefined;
   const gridStyle: React.CSSProperties = {
     gridTemplateColumns: `minmax(3.4rem, auto) repeat(${cols.length}, 1fr)`,
-    ...(compact ? { gap: "0.25rem" } : {}),
   };
   // One drag = one operation applied to each cell at most once.
   const drag = useRef<{ on: boolean; painted: Set<string>; tap?: HTMLElement; touch?: boolean } | null>(null);
@@ -276,14 +275,14 @@ export function DayGrid({
   };
   return (
     <div className="stack" style={{ gap: 6 }}>
-      <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
+      <div className={`grid ${onPaint && !readOnly ? "paintable" : ""} ${compact ? "compact-cols" : ""}`}
         style={gridStyle} data-testid={testid} {...paintHandlers}>
         <div />
         {cols.map((dp) =>
           readOnly ? (
-            <div key={dp.value} className="hd" style={hdStyle}>{dp.short}</div>
+            <div key={dp.value} className="hd">{dp.short}</div>
           ) : (
-            <button key={dp.value} type="button" className="hd gp-head" style={hdStyle}
+            <button key={dp.value} type="button" className="hd gp-head"
               aria-label={`Fill the whole ${dp.value.replaceAll("_", " ")} column`}
               data-testid={`${idPrefix}-col-${dp.value}`} onClick={() => onToggleCol?.(dp.value)}>{dp.short}</button>
           ),
@@ -302,10 +301,10 @@ export function DayGrid({
               const isLocked = locked?.has(k);
               const label = `${d.label}, ${dp.value.replaceAll("_", " ")}: ${cellTitle(k)}`;
               return readOnly ? (
-                <div key={dp.value} className={cellClass(k)} style={cellStyle} title={cellTitle(k)} role="img" aria-label={label} />
+                <div key={dp.value} className={cellClass(k)} title={cellTitle(k)} role="img" aria-label={label} />
               ) : (
                 <button key={dp.value} type="button" data-testid={`${idPrefix}-cell-${i}-${dp.value}`}
-                  data-day={d.value} data-dp={dp.value} style={cellStyle}
+                  data-day={d.value} data-dp={dp.value}
                   className={cellClass(k)} disabled={isLocked} title={cellTitle(k)}
                   aria-label={label} aria-pressed={free.has(k)}
                   onClick={onPaint ? undefined : () => onToggle?.(d.value, dp.value)}
