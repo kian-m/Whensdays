@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Event, Group, GroupDetail, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
 
 // Consecutive months (ending now, with a one-month grace) in which the group
@@ -137,7 +137,6 @@ export function GroupPage() {
   const api = useApi();
   const nav = useNavigate();
   const { data, loading, reload } = useAsync<GroupDetail>((a) => getJSON(a, `/api/groups/${id}`), [id]);
-  const [handle, setHandle] = useState("");
   const [addMsg, setAddMsg] = useState<string | null>(null);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -155,18 +154,6 @@ export function GroupPage() {
     }
   }
 
-  async function addMember(e: React.FormEvent) {
-    e.preventDefault();
-    setAddMsg(null);
-    const res = await sendJSON(api, "POST", `/api/groups/${id}/members`, { handle });
-    if (!res.ok) {
-      const b = await res.json().catch(() => ({}));
-      return setAddMsg(b.error || "could not add");
-    }
-    setHandle("");
-    reload();
-  }
-
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -175,14 +162,6 @@ export function GroupPage() {
     const res = await sendJSON(api, "PUT", `/api/groups/${id}`, { name: editName, description: editDesc });
     if (!res.ok) { const b = await res.json().catch(() => ({})); return setAddMsg(b.error || "could not save"); }
     setEditing(false);
-    reload();
-  }
-  async function setRole(userId: string, role: "member" | "admin") {
-    await sendJSON(api, "PUT", `/api/groups/${id}/members/${userId}/role`, { role });
-    reload();
-  }
-  async function removeMember(userId: string) {
-    await api(`/api/groups/${id}/members/${userId}`, { method: "DELETE" });
     reload();
   }
 
@@ -266,6 +245,7 @@ export function GroupPage() {
                   onConfirm={async () => { await api(`/api/groups/${id}`, { method: "DELETE" }); nav("/groups"); }} />
               )}
             </div>
+            {addMsg && <p className="muted small" style={{ margin: 0 }}>{addMsg}</p>}
           </form>
         )}
       </div>
@@ -284,6 +264,91 @@ export function GroupPage() {
         </div>
         {copyMsg && <p className="muted small" style={{ margin: 0 }}>{copyMsg}</p>}
       </div>
+
+      {/* Compact members summary (Instagram-style): a few faces + a count that
+          opens the dedicated members page - the full list no longer floods the
+          main group scroll. */}
+      <Link to={`/g/${group.id}/members`} className="card row between" data-testid="group-members-link"
+        style={{ cursor: "pointer", textDecoration: "none", color: "inherit" }}>
+        <span className="row" style={{ gap: 8, minWidth: 0 }}>
+          {members.length > 0 && (
+            <span className="facepile" style={{ marginTop: 0 }}>
+              {members.slice(0, 5).map((m) => (
+                <span key={m.user_id} className="face" title={m.display_name || m.handle || ""}>
+                  <Avatar url={m.avatar_url} name={m.display_name} size={28} />
+                </span>
+              ))}
+            </span>
+          )}
+          <span className="muted small">
+            {members.length} {members.length === 1 ? "member" : "members"}
+          </span>
+        </span>
+        <span className="muted" aria-hidden="true">›</span>
+      </Link>
+
+      {upcomingEvents.length > 0 && (
+        <>
+          <div className="section-h">Events</div>
+          {/* A recurring series shows once (its next occurrence + a badge
+              counting its REMAINING dates), not one tile per date. Past
+              occurrences and cancelled events don't show here at all (the
+              streak above still reads the full history). */}
+          {collapseSeries([...upcomingEvents], "next")
+            .sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime())
+            .map((e) => (
+              <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
+                seriesN={e.series_id ? (seriesCounts(upcomingEvents)[e.series_id] ?? 1) : 0} />
+            ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Dedicated members page (reached from the compact summary on the group page).
+// Full member list + admin controls live here so the main group page stays a
+// calm summary that scales to hundreds of members.
+export function GroupMembersPage() {
+  const { id } = useParams();
+  const api = useApi();
+  // Same fetcher as GroupPage - useAsync caches by fetcher+deps, so arriving
+  // here from the group page is instant (stale-while-revalidate).
+  const { data, loading, reload } = useAsync<GroupDetail>((a) => getJSON(a, `/api/groups/${id}`), [id]);
+  const [handle, setHandle] = useState("");
+  const [addMsg, setAddMsg] = useState<string | null>(null);
+
+  async function addMember(e: React.FormEvent) {
+    e.preventDefault();
+    setAddMsg(null);
+    const res = await sendJSON(api, "POST", `/api/groups/${id}/members`, { handle });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setAddMsg(b.error || "could not add");
+    }
+    setHandle("");
+    reload();
+  }
+  async function setRole(userId: string, role: "member" | "admin") {
+    await sendJSON(api, "PUT", `/api/groups/${id}/members/${userId}/role`, { role });
+    reload();
+  }
+  async function removeMember(userId: string) {
+    await api(`/api/groups/${id}/members/${userId}`, { method: "DELETE" });
+    reload();
+  }
+
+  if (loading && !data) return <ListSkeleton rows={4} header />;
+  if (!data) return <div className="stack"><BackLink /><p className="muted">Group not found.</p></div>;
+
+  const { group, members, is_owner, is_admin } = data;
+  const canManage = is_owner || is_admin;
+
+  return (
+    <div className="stack">
+      <Link to={`/g/${group.id}`} className="muted small" style={{ display: "inline-block", marginBottom: "0.6rem" }}>
+        ← {group.name}
+      </Link>
 
       <div className="section-h">Members</div>
       {members.length === 0 && <p className="muted small">No members yet - add someone below.</p>}
@@ -333,22 +398,6 @@ export function GroupPage() {
           </div>
           {addMsg && <p className="muted small">{addMsg}</p>}
         </form>
-      )}
-
-      {upcomingEvents.length > 0 && (
-        <>
-          <div className="section-h">Events</div>
-          {/* A recurring series shows once (its next occurrence + a badge
-              counting its REMAINING dates), not one tile per date. Past
-              occurrences and cancelled events don't show here at all (the
-              streak above still reads the full history). */}
-          {collapseSeries([...upcomingEvents], "next")
-            .sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime())
-            .map((e) => (
-              <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
-                seriesN={e.series_id ? (seriesCounts(upcomingEvents)[e.series_id] ?? 1) : 0} />
-            ))}
-        </>
       )}
     </div>
   );

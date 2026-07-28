@@ -45,6 +45,7 @@ const Calendars = lazy(() => importChunk(() => import("./pages/Calendars").then(
 const ProfilePage = lazy(() => importChunk(() => import("./pages/Profile").then((m) => ({ default: m.ProfilePage }))));
 const Groups = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.Groups }))));
 const GroupPage = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.GroupPage }))));
+const GroupMembersPage = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.GroupMembersPage }))));
 const Discover = lazy(() => importChunk(() => import("./pages/Discover").then((m) => ({ default: m.Discover }))));
 
 // Warm the lazy chunks once the first paint has settled: navigation then swaps
@@ -505,6 +506,8 @@ function ProfileGate({ canMerge }: { canMerge?: boolean }) {
           <Route path="/groups" element={<Groups />} />
           <Route path="/g/:id" element={<GroupPage />} />
           <Route path="/gv/:id" element={<GroupPage />} />
+          <Route path="/g/:id/members" element={<GroupMembersPage />} />
+          <Route path="/gv/:id/members" element={<GroupMembersPage />} />
           <Route path="/calendars" element={<Calendars />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/profile" element={<ProfilePage onUpdated={setProfile} />} />

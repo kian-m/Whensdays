@@ -545,7 +545,9 @@ test.describe("scheduler", () => {
     expect(denied).toBe(403);
 
     // Owner promotes them from the member list; the pill + rights follow.
+    // The full member list lives on the dedicated members page now.
     await page.reload();
+    await page.getByTestId("group-members-link").click();
     await page.getByTestId("member-role-plainpeer").click();
     await expect(page.getByTestId("member-admin-plainpeer")).toBeVisible();
     const allowed = await page.evaluate(async (g) => {
@@ -1349,14 +1351,17 @@ test.describe("scheduler", () => {
       await ownerPage.getByTestId("group-edit-save").click();
       await expect(ownerPage.getByTestId("group-description")).toHaveText("Now Thursdays, bring snacks");
 
-      // Add the member by handle.
+      // Add the member by handle - the full list + add form live on the
+      // dedicated members page now.
+      await ownerPage.getByTestId("group-members-link").click();
       await ownerPage.getByTestId("member-handle").fill("gmem");
       await ownerPage.getByTestId("member-add").click();
 
       // Member shows up in the list.
       await expect(ownerPage.getByTestId("group-member").first()).toBeVisible();
 
-      // Create a group event via the group-new-event button.
+      // Back to the group page, then create a group event via group-new-event.
+      await ownerPage.goBack();
       await ownerPage.getByTestId("group-new-event").click();
       const eventTitle = `Group dinner ${testId}`;
       await ownerPage.getByTestId("quick-title").fill(eventTitle);
