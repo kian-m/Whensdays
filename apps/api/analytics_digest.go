@@ -159,10 +159,13 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 	monthStartT := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
 	monthStart := monthStartT.UTC().Format("2006-01-02 15:04:05")
 	nowUTC := now.UTC().Format("2006-01-02 15:04:05")
-	emailsDay, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
-		`select sum(coalesce(toInt64OrNull(toString(properties.recipients)), 1)) from events where event = 'email_sent' and timestamp >= '%s' and timestamp < '%s'`, from, until))
-	emailsMonth, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
-		`select sum(coalesce(toInt64OrNull(toString(properties.recipients)), 1)) from events where event = 'email_sent' and timestamp >= '%s' and timestamp < '%s'`, monthStart, nowUTC))
+	// toIntOrDefault, NOT toInt64OrNull: HogQL's function allowlist rejects the
+	// latter, and hogqlScalar's error is discarded here - so until this fix both
+	// email bars silently read 0, leaving the Resend cliff (100/day, 3k/month -
+	// the limit most likely to bite as invite/reminder volume grows) unwatched.
+	const emailSentSum = `select sum(toIntOrDefault(toString(properties.recipients), 1)) from events where event = 'email_sent' and timestamp >= '%s' and timestamp < '%s'`
+	emailsDay, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(emailSentSum, from, until))
+	emailsMonth, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(emailSentSum, monthStart, nowUTC))
 	phMonth, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
 		`select count() from events where timestamp >= '%s' and timestamp < '%s'`, monthStart, nowUTC))
 	apiDay, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
