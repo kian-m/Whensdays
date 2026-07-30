@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -148,12 +150,14 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 		resendDayLimit  = 100       // Resend free: emails/day
 		resendMonLimit  = 3000      // Resend free: emails/month
 		neonBytesLimit  = 512 << 20 // Neon free: 0.5 GB storage
+		neonCUHourLimit = 100       // Neon free: 100 CU-hours of compute/month per project
 		posthogMonLimit = 1_000_000 // PostHog free: events/month
 		cfDayLimit      = 100_000   // Cloudflare Workers free: proxy requests/day
 		klipyHourLimit  = 100       // Klipy TEST key: requests/hour
 		clerkMAULimit   = 10_000    // Clerk free: monthly active (signed-in) users
 	)
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc).UTC().Format("2006-01-02 15:04:05")
+	monthStartT := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	monthStart := monthStartT.UTC().Format("2006-01-02 15:04:05")
 	nowUTC := now.UTC().Format("2006-01-02 15:04:05")
 	emailsDay, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
 		`select sum(coalesce(toInt64OrNull(toString(properties.recipients)), 1)) from events where event = 'email_sent' and timestamp >= '%s' and timestamp < '%s'`, from, until))
@@ -166,6 +170,33 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 	klipyPeak, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
 		`select count() as c from events where event = 'api_request' and toString(properties.path) like '%%/api/gifs/%%' and timestamp >= '%s' and timestamp < '%s' group by toStartOfHour(timestamp) order by c desc limit 1`, from, until))
 	dbBytes, _ := s.queries.DatabaseSizeBytes(r.Context())
+
+	// NEON COMPUTE - the free tier's real binding limit (100 CU-hours per
+	// project per month; compute autosuspends after 5 min idle and that is
+	// fixed on Free). Two sources: Neon's consumption API when NEON_API_KEY +
+	// NEON_PROJECT_ID are configured (exact), else an estimate derived from our
+	// own api_request telemetry. The estimate is labeled "(est.)" so it can
+	// never be read as the billed figure.
+	neonCU, neonCUUnit := 0, fmt.Sprintf("%d CU-hr/mo", neonCUHourLimit)
+	exact := false
+	if nk, np := os.Getenv("NEON_API_KEY"), os.Getenv("NEON_PROJECT_ID"); nk != "" && np != "" {
+		if cu, nerr := s.neonComputeCUHours(r.Context(), nk, np, monthStartT, now); nerr == nil {
+			neonCU, exact = int(math.Round(cu)), true
+		}
+	}
+	if !exact {
+		// Estimate: Neon stays awake 5 minutes past the last query, so every
+		// 5-minute bucket holding >=1 DB-touching request is ~5 minutes of
+		// awake wall-clock time; x the Free plan's 0.25 CU compute size gives
+		// CU-hours. The three excluded paths are the only routes that never
+		// touch Postgres (handleCSPReport and the health checks do no DB work),
+		// so excluding them keeps idle-probe traffic from inflating the count.
+		buckets, _ := s.hogqlScalar(r.Context(), phKey, project, fmt.Sprintf(
+			`select count(distinct toStartOfInterval(timestamp, interval 5 minute)) from events where event = 'api_request' and timestamp >= '%s' and timestamp < '%s' and toString(properties.path) not in ('/api/health','/healthz','/api/csp-report')`,
+			monthStart, nowUTC))
+		neonCU = int(math.Round(cuHoursFromAwakeBuckets(buckets, neonAwakeBucketMins, neonFreeComputeSize)))
+		neonCUUnit += " (est.)"
+	}
 
 	tierStep := func(label string, used, limit int, unit string) emailFunnelStep {
 		pct := 0
@@ -182,6 +213,7 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 		tierStep("Emails · yesterday", emailsDay, resendDayLimit, "100/day"),
 		tierStep("Emails · this month", emailsMonth, resendMonLimit, "3k/mo"),
 		tierStep("Database", int(dbBytes>>20), int(neonBytesLimit>>20), "512 MB"),
+		tierStep("Neon compute · month", neonCU, neonCUHourLimit, neonCUUnit),
 		tierStep("PostHog events · month", phMonth, posthogMonLimit, "1M/mo"),
 		tierStep("API requests · yesterday", apiDay, cfDayLimit, "100k/day"),
 		tierStep("GIF searches · peak hour", klipyPeak, klipyHourLimit, "100/hr (test key)"),
@@ -230,6 +262,81 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 	}
 	s.notify.Send([]string{to}, fmt.Sprintf("Whensdays daily: %d registered (+%d), %d visitors", registered, newReg, stage(0)), body)
 	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "registered": registered, "new": newReg, "visitors": stage(0), "actions": total})
+}
+
+const (
+	// neonFreeComputeSize: the Free plan's fixed compute size in CUs. The
+	// telemetry estimate multiplies awake wall-clock time by it.
+	neonFreeComputeSize = 0.25
+	// neonAwakeBucketMins mirrors Neon's autosuspend delay: compute stays up
+	// 5 minutes past the last query, so one active bucket ~= 5 awake minutes.
+	neonAwakeBucketMins = 5
+)
+
+// cuHoursFromComputeSeconds converts Neon's compute_time_seconds (CU-SECONDS -
+// already weighted by compute size, e.g. 1s at 0.25 CU = 0.25) into the
+// CU-hours the 100/month free limit is metered in.
+func cuHoursFromComputeSeconds(sec float64) float64 { return sec / 3600 }
+
+// cuHoursFromAwakeBuckets estimates CU-hours from the number of distinct
+// activity buckets that each kept the compute awake for bucketMins minutes.
+func cuHoursFromAwakeBuckets(buckets, bucketMins int, computeSize float64) float64 {
+	if buckets <= 0 || bucketMins <= 0 {
+		return 0
+	}
+	return float64(buckets) * float64(bucketMins) / 60 * computeSize
+}
+
+// neonConsumption mirrors Neon's documented API v2 consumption-history shape
+// (projects → periods → consumption). UNVERIFIED against a live response - no
+// Neon API key exists in this environment - so it is decoded permissively: a
+// renamed or missing level simply yields zero, never a panic.
+type neonConsumption struct {
+	Projects []struct {
+		Periods []struct {
+			Consumption []struct {
+				ComputeTimeSeconds float64 `json:"compute_time_seconds"`
+			} `json:"consumption"`
+		} `json:"periods"`
+	} `json:"projects"`
+}
+
+// neonComputeCUHours reports the project's compute burn since `from` in
+// CU-hours. It sums compute_time_seconds across every entry returned for the
+// window (the Pacific month start can straddle two of Neon's UTC billing
+// periods). active_time_seconds is deliberately NOT used - that is wall-clock
+// active time, not CU-weighted, and would overstate usage below 1 CU.
+func (s *server) neonComputeCUHours(ctx context.Context, key, project string, from, to time.Time) (float64, error) {
+	u := fmt.Sprintf("https://console.neon.tech/api/v2/consumption_history/projects?project_ids=%s&from=%s&to=%s&granularity=monthly",
+		url.QueryEscape(project), url.QueryEscape(from.UTC().Format(time.RFC3339)), url.QueryEscape(to.UTC().Format(time.RFC3339)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	req.Header.Set("Accept", "application/json")
+	resp, err := safeHTTPClient(10 * time.Second).Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("neon consumption: %s: %s", resp.Status, truncate(string(raw), 200))
+	}
+	var out neonConsumption
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return 0, err
+	}
+	sec := 0.0
+	for _, p := range out.Projects {
+		for _, per := range p.Periods {
+			for _, c := range per.Consumption {
+				sec += c.ComputeTimeSeconds
+			}
+		}
+	}
+	return cuHoursFromComputeSeconds(sec), nil
 }
 
 func pluralWord(n int, one, many string) string {
