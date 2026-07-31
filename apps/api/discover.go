@@ -87,8 +87,18 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 	streaks := s.sendStreakCongrats(r.Context())
 	// Poll velocity: last-chance vote reminders + poll-ready host emails.
 	voteReminded, pollsReady := s.sendPollVelocity(r.Context())
-	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady})
-	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady})
+	// Queued activity (new RSVPs + comments) rides this same daily tick too.
+	// It used to have its OWN half-hourly Cloud Scheduler job, which woke Neon
+	// 48x/day to almost always find an empty queue - ~27 of the free tier's 100
+	// CU-hours/month, since each poke costs a full 5-minute autosuspend cycle.
+	// Draining here instead is free: this cron already wakes the database. The
+	// tradeoff is latency (activity now batches up to ~24h), which is only
+	// acceptable because everything time-critical - invite, finalize, cancel,
+	// reminder, recap, and quorum ("everyone voted") - sends immediately and
+	// never touches this queue.
+	activity := s.flushActivityDigests(r.Context())
+	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady, "activity": activity})
+	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady, "activity": activity})
 }
 
 // ---------------------- public discovery ----------------------

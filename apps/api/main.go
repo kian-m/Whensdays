@@ -163,7 +163,7 @@ func main() {
 	mux.Handle("GET /api/discover", readLimit(http.HandlerFunc(s.handleDiscover)))
 	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
 	mux.HandleFunc("POST /api/cron/analytics", s.handleCronAnalytics)        // CRON_KEY-gated daily digest
-	mux.HandleFunc("POST /api/cron/flush", s.handleCronFlush)                // CRON_KEY-gated digest flush (lets the service scale to zero)
+	mux.HandleFunc("POST /api/cron/flush", s.handleCronFlush)                // CRON_KEY-gated manual digest flush (unscheduled - see notifications.go)
 	mux.HandleFunc("POST /api/cron/ucb-sync", s.handleCronUCBSync)           // CRON_KEY-gated venue-schedule sync (see ucbsync.go)
 	mux.HandleFunc("POST /api/cron/wgis-sync", s.handleCronWGISSync)         // CRON_KEY-gated WGIS feed sync (see wgissync.go)
 	mux.HandleFunc("POST /api/cron/weimprov-sync", s.handleCronWeimprovSync) // CRON_KEY-gated We Improv feed sync (see weimprovsync.go)
@@ -261,11 +261,14 @@ func main() {
 	mux.Handle("GET /api/flags", auth(http.HandlerFunc(s.handleFlags)))
 
 	port := envOr("API_PORT", "8080")
-	// Activity emails (comments/RSVPs) are digested and drained by the
-	// CRON_KEY-gated POST /api/cron/flush (Cloud Scheduler). We deliberately do
-	// NOT run an in-process ticker: it queried Neon every 5 minutes and kept the
-	// DB from ever autosuspending (a big free-tier compute drain). The cron both
-	// wakes the instance and flushes; the drain is atomic (multi-instance safe).
+	// Activity emails (comments/RSVPs) are digested, and the drain rides the
+	// DAILY reminders cron (handleCronReminders) - not a schedule of its own.
+	// Every wakeup costs a full 5-minute Neon autosuspend cycle, so anything
+	// that pokes the DB on a short interval is expensive on the free tier: an
+	// in-process 5-minute ticker went first, then the half-hourly flush job
+	// (~27 of 100 CU-hours/month to usually find an empty queue). Both are gone.
+	// Time-critical mail (invite/finalize/cancel/reminder/quorum) never enters
+	// this queue, so batching activity to once a day costs nothing urgent.
 
 	srv := &http.Server{
 		Addr: ":" + port,

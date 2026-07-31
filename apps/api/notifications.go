@@ -657,25 +657,33 @@ func collapseActivity(rows []db.DrainDueNotificationsRow) map[string][]digestLin
 
 
 // handleCronFlush drains the activity-digest queue on demand - CRON_KEY-gated,
-// so it can run from Cloud Scheduler. This is what lets the service scale to
-// zero (min-instances=0): the in-process ticker only fires while an instance
-// happens to be warm, but a scheduler poke both WAKES the instance and flushes,
-// so digests still go out when the app is otherwise asleep. Idempotent +
-// multi-instance-safe (DrainDueNotifications claims rows atomically).
+// idempotent, multi-instance-safe (DrainDueNotifications claims rows atomically).
+//
+// NO LONGER ON A SCHEDULE. It had a half-hourly Cloud Scheduler job, but each
+// poke costs a full 5-minute Neon autosuspend cycle, so 48 pokes/day burned ~27
+// of the free tier's 100 CU-hours/month to almost always find an empty queue.
+// The daily reminders cron drains the queue now (see handleCronReminders) at no
+// extra compute, since it already wakes the database.
+//
+// The route stays as a manual escape hatch: POST it with X-Cron-Key to push
+// queued activity out immediately instead of waiting for the daily tick.
 func (s *server) handleCronFlush(w http.ResponseWriter, r *http.Request) {
 	key := os.Getenv("CRON_KEY")
 	if key == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Cron-Key")), []byte(key)) != 1 {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	s.flushActivityDigests(r.Context())
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]int{"sent": s.flushActivityDigests(r.Context())})
 }
 
-func (s *server) flushActivityDigests(ctx context.Context) {
+// flushActivityDigests drains the queue and returns how many digest emails went
+// out (the daily cron reports it). Since the drain claims rows atomically it is
+// safe to call from anywhere, any number of times.
+func (s *server) flushActivityDigests(ctx context.Context) int {
+	sent := 0
 	rows, err := s.queries.DrainDueNotifications(ctx, digestWindowMins)
 	if err != nil || len(rows) == 0 {
-		return
+		return sent
 	}
 	for recipient, lines := range collapseActivity(rows) {
 		// Mute + email checks happen at SEND time (state may have changed while
@@ -718,6 +726,7 @@ func (s *server) flushActivityDigests(ctx context.Context) {
 				theme:     ev.Theme,
 			})
 			s.notify.Send([]string{prof.Email}, subject, body)
+			sent++
 			continue
 		}
 		byEvent := map[string][]string{}
@@ -775,7 +784,9 @@ func (s *server) flushActivityDigests(ctx context.Context) {
 			logoURL:   s.logoURL(),
 		})
 		s.notify.Send([]string{prof.Email}, subject, body)
+		sent++
 	}
+	return sent
 }
 
 func plural(n int) string {
