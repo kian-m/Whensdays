@@ -9,7 +9,7 @@
     "update-snapshots": "playwright test --update-snapshots"
   },
   "devDependencies": {
-    "@clerk/testing": "^1.0.0",
+    "@clerk/testing": "^1.14.9",
     "@playwright/test": "1.55.1"
   }
 }
