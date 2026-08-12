@@ -198,14 +198,15 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// Three independent reads - fan out (the DB is a network hop away).
+	// Independent reads - fan out (the DB is a network hop away).
 	ctx := r.Context()
 	var (
-		members     []db.ListGroupMembersRow
-		events      []db.Event
-		isAdmin     bool
-		following   bool
-		inviteToken string
+		members       []db.ListGroupMembersRow
+		events        []db.Event
+		isAdmin       bool
+		following     bool
+		inviteToken   string
+		followerCount int32
 	)
 	err := parallel(
 		func() (e error) { members, e = s.queries.ListGroupMembers(ctx, g.ID); return },
@@ -220,6 +221,12 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 			following, _ = s.queries.IsFollowing(ctx, db.IsFollowingParams{UserID: uid, Kind: "group", Value: uuidStr(g.ID)})
 			return nil
 		},
+		// Surfaced on the member view too (V4) - a page owner watches their
+		// audience grow without leaving the group page.
+		func() (e error) {
+			followerCount, e = s.queries.CountFollowersOf(ctx, db.CountFollowersOfParams{Kind: "group", Value: uuidStr(g.ID)})
+			return
+		},
 	)
 	if err != nil {
 		s.internal(w, "group detail: load", err)
@@ -229,6 +236,7 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 		"group": g, "members": members, "events": events,
 		"is_owner": g.OwnerID == uid, "is_admin": isAdmin, "viewer_id": uid,
 		"is_following": following, "invite_token": inviteToken,
+		"follower_count": followerCount,
 	})
 }
 

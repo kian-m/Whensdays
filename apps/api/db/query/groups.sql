@@ -124,3 +124,17 @@ WHERE group_id = $1 AND listed = true
   AND status IN ('polling', 'scheduled')
   AND (starts_at IS NULL OR starts_at >= now() - interval '12 hours')
 ORDER BY starts_at NULLS LAST;
+
+-- name: ListGroupPastListedEvents :many
+-- The public page's bounded "Past" section (V4, social proof for venues):
+-- listed + live (never draft/cancelled/unlisted) events that already happened,
+-- most recent first, capped so the page never grows unbounded. The 12h grace
+-- mirrors ListGroupListedEvents's cutoff so the two lists never overlap.
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
+FROM events
+WHERE group_id = $1 AND listed = true
+  AND status <> 'cancelled' AND status <> 'draft'
+  AND starts_at IS NOT NULL AND starts_at < now() - interval '12 hours'
+ORDER BY starts_at DESC
+LIMIT 10;

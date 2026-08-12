@@ -142,7 +142,9 @@ export function GroupPublicView({ id, signedOut, onJoined }: { id: string; signe
       <div className="card stack" style={{ alignItems: "center", textAlign: "center" }} data-testid="group-public-card">
         {entity.icon_url ? <Avatar url={entity.icon_url} name={entity.name} size={72} /> : <TitlePoster title={entity.name} scale="thumb" size={72} />}
         <h1 data-testid="group-public-title">{entity.name}</h1>
-        <p className="muted small">{entity.member_count} {entity.member_count === 1 ? "member" : "members"}</p>
+        <span className="stamp" data-testid="group-public-counts">
+          {entity.follower_count} {entity.follower_count === 1 ? "FOLLOWER" : "FOLLOWERS"} · {entity.member_count} {entity.member_count === 1 ? "MEMBER" : "MEMBERS"}
+        </span>
         {entity.description && <p className="muted small" style={{ maxWidth: 420 }}>{entity.description}</p>}
         {/* Join shows ONLY on an invite link (the server decides). */}
         {viewer.can_join && (
@@ -179,6 +181,23 @@ export function GroupPublicView({ id, signedOut, onJoined }: { id: string; signe
                 seriesN={e.series_id ? (seriesCounts(data.events)[e.series_id] ?? 1) : 0} />
             ))}
         </>
+      )}
+
+      {/* Bounded recent-past list (server caps at 10, listed + non-cancelled
+          only) - social proof for a venue, collapsed by default so it never
+          crowds out what's actually coming up. */}
+      {data.past_events.length > 0 && (
+        <details className="card stack" data-testid="group-public-past">
+          <summary className="section-h" data-testid="group-public-past-toggle" style={{ margin: 0, cursor: "pointer" }}>
+            Past ({data.past_events.length})
+          </summary>
+          <div className="stack" style={{ gap: 8, opacity: 0.75 }}>
+            {data.past_events.map((e) => (
+              <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
+                testid="group-public-past-event" />
+            ))}
+          </div>
+        </details>
       )}
     </div>
   );
@@ -254,6 +273,11 @@ export function GroupPage() {
             <GroupIcon group={group} size={64} />
             <span className="stack" style={{ gap: 4, minWidth: 0 }}>
               <h1 data-testid="group-title">{group.name}</h1>
+              {/* The owner's audience, growing - separate from membership. */}
+              <span className="stamp" data-testid="group-follower-count"
+                style={{ alignSelf: "flex-start", color: "var(--muted)" }}>
+                {data.follower_count} {data.follower_count === 1 ? "FOLLOWER" : "FOLLOWERS"}
+              </span>
               {groupStreak(events) >= 2 && (
                 <span className="stamp time" data-testid="group-streak" style={{ alignSelf: "flex-start" }}>
                   {groupStreak(events)}-MONTH STREAK
@@ -326,69 +350,69 @@ export function GroupPage() {
         )}
       </div>
 
-      {/* Sharing lives in its own box, and it is TWO different things. Making
-          the distinction unmissable is the whole point: a host must never hand
-          out membership when they only meant to share the page. */}
-      <div className="card stack" style={{ gap: 14 }}>
-        <div className="section-h" style={{ margin: 0 }}>Share</div>
-
-        {/* Rollout reality #1: links shared before this change were join links
-            and are now view-only. Small, one-time, dismissible. */}
-        {canManage && !linkHintSeen && (
-          <div className="row between" data-testid="group-link-hint"
-            style={{ gap: 8, alignItems: "flex-start", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "0.55rem 0.7rem" }}>
-            <span className="muted small">
-              Heads up: links you shared before now open the <b>public page</b> only. To add someone as a member, send the <b>Invite to join</b> link below.
-            </span>
-            <button type="button" className="btn ghost sm" data-testid="group-link-hint-dismiss"
-              aria-label="Dismiss" onClick={() => { localStorage.setItem(LINK_HINT_KEY, "1"); setLinkHintSeen(true); }}>{Ic.x()}</button>
-          </div>
-        )}
-
-        <div className="stack" style={{ gap: 6 }}>
-          <div className="row between" style={{ gap: 6 }}>
-            <b>Share page</b>
-            <span className="pill">public</span>
-          </div>
-          <p className="muted small" style={{ margin: 0 }}>
-            Anyone can open it: what the group is and what's coming up. They can follow, <b>not</b> join.
-          </p>
-          <button type="button" className="share-copy" data-testid="group-share-copy" title="Tap to copy"
-            onClick={() => { navigator.clipboard?.writeText(shareURL); setCopyMsg("Public page link copied"); }}>
-            <span className="row" style={{ gap: 6, alignItems: "center" }}>{Ic.link(15)}{shareURL.replace(/^https?:\/\//, "")}</span>
-          </button>
+      {/* Rollout reality #1: links shared before this change were join links
+          and are now view-only. Small, one-time, dismissible - sits above both
+          share cards since it references both. */}
+      {canManage && !linkHintSeen && (
+        <div className="card row between" data-testid="group-link-hint"
+          style={{ gap: 8, alignItems: "flex-start" }}>
+          <span className="muted small">
+            Heads up: links you shared before now open the <b>public page</b> only. To add someone as a member, send the <b>Invite to join</b> link below.
+          </span>
+          <button type="button" className="btn ghost sm" data-testid="group-link-hint-dismiss"
+            aria-label="Dismiss" onClick={() => { localStorage.setItem(LINK_HINT_KEY, "1"); setLinkHintSeen(true); }}>{Ic.x()}</button>
         </div>
+      )}
 
-        <div className="stack" style={{ gap: 6 }}>
-          <div className="row between" style={{ gap: 6 }}>
-            <b>Invite to join</b>
-            <span className="pill scheduled">members</span>
-          </div>
-          <p className="muted small" style={{ margin: 0 }}>
-            Grants membership: they'll see every event and the member list. Send it to people you actually want in.
-          </p>
-          <button type="button" className="share-copy" data-testid="group-invite-copy" title="Tap to copy"
-            onClick={() => { navigator.clipboard?.writeText(inviteURL); setCopyMsg("Invite link copied"); }}>
-            <span className="row" style={{ gap: 6, alignItems: "center" }}>
-              {Ic.link(15)}{copyMsg === "Invite link copied" ? "Copied" : "Copy the invite link"}
-            </span>
-          </button>
-          <div className="row wrap" style={{ gap: 6 }}>
-            {/* QR belongs to the JOIN link - it's the in-person "scan this to
-                join the club" moment. */}
-            <QRButton url={inviteURL} testid="group-qr" label="QR to join" />
-            {canManage && (
-              <ConfirmButton label="Regenerate" confirmLabel="Tap again - old invite links stop working"
-                testid="group-invite-rotate"
-                onConfirm={async () => {
-                  await sendJSON(api, "POST", `/api/groups/${id}/invite/rotate`, {});
-                  setCopyMsg("New invite link - the old one no longer works");
-                  reload();
-                }} />
-            )}
-          </div>
+      {/* Two SEPARATE cards, not two sections of one card - a host must never
+          mistake "share the page" for "hand out membership". */}
+      <div className="card stack" style={{ gap: 8 }} data-testid="group-share-page-card">
+        <div className="row between" style={{ gap: 6 }}>
+          <div className="section-h" style={{ margin: 0 }}>Share your page</div>
+          <span className="pill">public</span>
         </div>
-        {copyMsg && <p className="muted small" style={{ margin: 0 }} data-testid="group-share-msg">{copyMsg}</p>}
+        <p className="muted small" style={{ margin: 0 }}>
+          Anyone with this link can see your events and follow you.
+        </p>
+        <button type="button" className="share-copy" data-testid="group-share-copy" title="Tap to copy"
+          onClick={() => { navigator.clipboard?.writeText(shareURL); setCopyMsg("Public page link copied"); }}>
+          <span className="row" style={{ gap: 6, alignItems: "center" }}>{Ic.link(15)}{shareURL.replace(/^https?:\/\//, "")}</span>
+        </button>
+        <div className="row wrap" style={{ gap: 6 }}>
+          <QRButton url={shareURL} testid="group-share-qr" label="QR to your page" />
+        </div>
+        {copyMsg === "Public page link copied" && <p className="muted small" style={{ margin: 0 }} data-testid="group-share-msg">{copyMsg}</p>}
+      </div>
+
+      <div className="card stack" style={{ gap: 8 }} data-testid="group-invite-card">
+        <div className="row between" style={{ gap: 6 }}>
+          <div className="section-h" style={{ margin: 0 }}>Invite to join</div>
+          <span className="pill scheduled">members</span>
+        </div>
+        <p className="muted small" style={{ margin: 0 }}>
+          This link lets someone JOIN as a member. They'll see every event and the member list.
+        </p>
+        <button type="button" className="share-copy" data-testid="group-invite-copy" title="Tap to copy"
+          onClick={() => { navigator.clipboard?.writeText(inviteURL); setCopyMsg("Invite link copied"); }}>
+          <span className="row" style={{ gap: 6, alignItems: "center" }}>
+            {Ic.link(15)}{copyMsg === "Invite link copied" ? "Copied" : "Copy the invite link"}
+          </span>
+        </button>
+        <div className="row wrap" style={{ gap: 6 }}>
+          {/* QR belongs to the JOIN link - it's the in-person "scan this to
+              join the club" moment. */}
+          <QRButton url={inviteURL} testid="group-qr" label="QR to join" />
+          {canManage && (
+            <ConfirmButton label="Regenerate" confirmLabel="Tap again - old invite links stop working"
+              testid="group-invite-rotate"
+              onConfirm={async () => {
+                await sendJSON(api, "POST", `/api/groups/${id}/invite/rotate`, {});
+                setCopyMsg("New invite link - the old one no longer works");
+                reload();
+              }} />
+          )}
+        </div>
+        {copyMsg && copyMsg !== "Public page link copied" && <p className="muted small" style={{ margin: 0 }} data-testid="group-share-msg">{copyMsg}</p>}
       </div>
 
       {/* Rollout reality #2: pre-0044 events are all listed=false, so the

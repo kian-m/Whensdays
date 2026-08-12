@@ -15,9 +15,11 @@ import (
 // visitor must be able to open a shared club link and see what it is without an
 // account, so this endpoint publishes ONLY what a host chose to make public:
 //
-//	name, icon, description, member COUNT, upcoming LISTED events
+//	name, icon, description, member COUNT, follower COUNT, upcoming LISTED
+//	events, and (V4) a BOUNDED (limit 10) recent-PAST list of the same LISTED,
+//	non-cancelled events - social proof for a venue, never a private history.
 //
-// Never the member list, never unlisted/draft/cancelled/past events, never an
+// Never the member list, never unlisted/draft/cancelled events, never an
 // email. Membership is NOT granted here (see handleJoinGroup) - the bare link
 // buys a view, not a seat.
 //
@@ -28,13 +30,14 @@ import (
 // route, not a new shape.
 
 type publicEntity struct {
-	Type        string `json:"type"` // "group" today; "host" when /u/{handle} lands
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Emoji       string `json:"emoji"`
-	IconURL     string `json:"icon_url"`
-	MemberCount int32  `json:"member_count"`
+	Type          string `json:"type"` // "group" today; "host" when /u/{handle} lands
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	Emoji         string `json:"emoji"`
+	IconURL       string `json:"icon_url"`
+	MemberCount   int32  `json:"member_count"`
+	FollowerCount int32  `json:"follower_count"`
 }
 
 // publicViewer is everything about the CALLER. All zero for a signed-out
@@ -50,9 +53,10 @@ type publicViewer struct {
 }
 
 type publicPage struct {
-	Entity publicEntity `json:"entity"`
-	Events []db.Event   `json:"events"`
-	Viewer publicViewer `json:"viewer"`
+	Entity     publicEntity `json:"entity"`
+	Events     []db.Event   `json:"events"`
+	PastEvents []db.Event   `json:"past_events"`
+	Viewer     publicViewer `json:"viewer"`
 }
 
 // handleGroupPublicPage: GET /api/public/groups/{id} (optional auth).
@@ -74,16 +78,23 @@ func (s *server) handleGroupPublicPage(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	var (
-		count     int32
-		events    []db.Event
-		member    bool
-		following bool
-		canJoin   bool
+		count         int32
+		events        []db.Event
+		pastEvents    []db.Event
+		followerCount int32
+		member        bool
+		following     bool
+		canJoin       bool
 	)
 	// Independent reads - fan out (the DB is a network hop away).
 	if perr := parallel(
 		func() (e error) { count, e = s.queries.CountGroupMembers(ctx, id); return },
 		func() (e error) { events, e = s.queries.ListGroupListedEvents(ctx, id); return },
+		func() (e error) { pastEvents, e = s.queries.ListGroupPastListedEvents(ctx, id); return },
+		func() (e error) {
+			followerCount, e = s.queries.CountFollowersOf(ctx, db.CountFollowersOfParams{Kind: "group", Value: uuidStr(id)})
+			return
+		},
 		func() error {
 			if uid == "" {
 				return nil
@@ -111,12 +122,16 @@ func (s *server) handleGroupPublicPage(w http.ResponseWriter, r *http.Request) {
 	if events == nil {
 		events = []db.Event{}
 	}
+	if pastEvents == nil {
+		pastEvents = []db.Event{}
+	}
 	writeJSON(w, http.StatusOK, publicPage{
 		Entity: publicEntity{
 			Type: "group", ID: uuidStr(g.ID), Name: g.Name, Description: g.Description,
-			Emoji: g.Emoji, IconURL: g.IconUrl, MemberCount: count,
+			Emoji: g.Emoji, IconURL: g.IconUrl, MemberCount: count, FollowerCount: followerCount,
 		},
-		Events: events,
-		Viewer: publicViewer{ID: uid, IsMember: member, IsFollowing: following, CanJoin: canJoin && !member},
+		Events:     events,
+		PastEvents: pastEvents,
+		Viewer:     publicViewer{ID: uid, IsMember: member, IsFollowing: following, CanJoin: canJoin && !member},
 	})
 }
