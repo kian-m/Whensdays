@@ -88,13 +88,20 @@ Make the public page worth being someone's ONLY web presence:
 - OG card for the bare link should say follow, not join (done in base; verify copy).
 
 ### V5 — Page onboarding + creation intent (Sonnet)
+- **Close the landing CTA loop (now urgent — the landing ships "Create your page" → /sign-up):** the CTA
+  should carry `?intent=page` (or equivalent) through the sign-up redirect so the first signed-in screen
+  routes into create-a-page (group create pre-tuned to page defaults below) instead of a generic Home.
+  Use the same mechanism the guest-login `?redirect_url=` flow already uses (same-origin only).
 - Group creation gains an optional purpose step: "Friends" vs "Venue / performer page" — SAME entity,
   the choice only tunes defaults and copy (a page defaults `listed` checked, shows the share-your-page
   card first, description placeholder "Tell people what you do and where"). Store nothing new server-side
   unless a single `groups.kind` text column ('friends'|'page', default 'friends') proves necessary for
   copy — prefer zero schema.
-- Landing/marketing: one section on the landing page addressed to performers ("Your shows, one link,
-  your fans' calendars") linking to create-a-page; sync crawler block + llms.txt per CLAUDE.md.
+- Landing/marketing: DONE EARLIER THAN PLANNED — the user re-scoped the landing (Aug 2026) to LEAD with
+  the pages/following pitch ("Build a following. Fill the room.", primary CTA "Create your page" →
+  /sign-up, friends-planning demoted to a secondary line into the guest /start flow). Shipped in House
+  Lights Phase 6. V5's landing work is therefore only: point the "Create your page" path at the real
+  onboarding below once it exists.
 - Seed list: the four venue-sync groups + the user's improv/standup contacts get their pages dressed
   (icon, description) — manual, not code.
 

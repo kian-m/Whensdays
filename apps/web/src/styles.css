@@ -716,7 +716,17 @@ textarea.input { resize: vertical; min-height: 64px; }
 .land > *:nth-child(n+6) { animation-delay: 0.36s; }
 @media (prefers-reduced-motion: reduce) { .land > * { animation: none; } }
 .land-go { font-size: 1.1rem; padding: 0.9rem 2.2rem; }
-.land-micro { color: var(--muted); font-size: 0.85rem; margin-top: 0.7rem; }
+/* Eyebrow above the display hero - mono stamp voice, amber, same language as
+   the comp's intro label. */
+.land-eyebrow {
+  display: block; font-family: var(--font-data); font-weight: 600; font-size: 0.75rem;
+  text-transform: uppercase; letter-spacing: 0.16em; color: var(--time);
+  margin: 3rem auto 0;
+}
+/* The secondary path (friend-group planning) - one quiet line under the
+   primary CTA, not its own section. */
+.land-micro { color: var(--muted); font-size: 0.9rem; margin-top: 1rem; }
+.land-micro a { font-weight: 700; }
 /* The product shots ARE the pitch: three phones, gently fanned - invite ->
    pick the one best time -> spread a recurring series. Side by side on
    desktop; on a phone the third would be too small, so the trio scrolls
@@ -748,11 +758,11 @@ textarea.input { resize: vertical; min-height: 64px; }
   font-family: var(--font-display);
   font-size: clamp(2.9rem, 9vw, 5rem);
   font-weight: 900; letter-spacing: -0.02em; line-height: 0.98;
-  margin: 3.2rem auto 0;
+  margin: 0.5rem auto 0;
 }
 .land-sub { color: var(--muted); max-width: 460px; margin: 1rem auto 1.6rem; font-size: 1.05rem; }
 .land-cta { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
-.land-showcase { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 2.2rem auto 0; max-width: 520px; }
+.land-showcase { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 2rem auto 0; max-width: 520px; }
 .land-showcase .chip { cursor: default; }
 .land-points { display: flex; gap: 0.6rem 1.4rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; color: var(--muted); font-size: 0.9rem; }
 .land-points b { color: var(--ink); }

@@ -1,6 +1,8 @@
-// Renders the branded Open Graph card (apps/web/public/og-card.png) — the image
-// phones show when a Whensdays invite link is shared. Run via `make og-card`
-// (uses the Playwright container). Regenerate when the brand look changes.
+// Renders the branded Open Graph card (apps/web/public/og-card.png) — the
+// static share image for whensdays.com itself (index.html og:image); a real
+// event invite unfurls its own dynamic per-event card instead (ogimage.go).
+// Run via `make og-card` (uses the Playwright container). Regenerate when the
+// brand look OR the landing hero's pitch changes - this mirrors it.
 //
 // House Lights palette (docs/design/HOUSE-LIGHTS.md §2): plum stage + grain,
 // cream ink, coral accent, the candy stripe as the one allowed gradient. No
@@ -37,12 +39,12 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   <div class="stripe"></div>
   <div class="brand"><span class="dot"></span> Whensdays</div>
   <div>
-    <h1>You're <b>invited.</b></h1>
-    <div class="sub">Poll the group, lock the best time - one link, no account needed.</div>
+    <h1>Build a <b>following.</b><br />Fill the room.</h1>
+    <div class="sub">Fans follow your page with one link - every show lands in their feed, inbox, and calendar.</div>
   </div>
   <div class="row">
-    <span class="chip">Dinner</span><span class="chip">Movie night</span>
-    <span class="chip">Camping</span><span class="chip">Party</span>
+    <span class="chip">Venues</span><span class="chip">Bands</span>
+    <span class="chip">Comedy nights</span><span class="chip">Friend groups</span>
   </div>
 </body></html>`;
 

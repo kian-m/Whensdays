@@ -412,16 +412,24 @@ function Landing() {
         {!DEV_AUTH && <a href="/sign-in" className="btn ghost sm" data-testid="sign-in">Sign in</a>}
       </nav>
       <div className="land">
-        <h1 className="land-title">Hangouts,<br />handled.</h1>
+        <span className="land-eyebrow">Whensdays</span>
+        {/* Pages/following leads (venues, comedians, bands building an
+            audience); friend-group planning is the secondary path right
+            below the CTA - it still gets the product shots and the chips,
+            just not top billing. */}
+        <h1 className="land-title">Build a following.<br />Fill the room.</h1>
         <p className="land-sub">
-          Book club, run club, game night, karaoke - one link finds when the
-          whole group is free, locks the winning dates as a series, and keeps
-          the streak alive.
+          Make a page for your venue, band, or comedy night. Fans follow it
+          with one link - and every show you post lands in their feed, their
+          inbox, and their calendar.
         </p>
         <div className="land-cta">
-          <a href="/start" className="btn primary land-go" data-testid="start-plan">Get your link</a>
+          <a href="/sign-up" className="btn primary land-go" data-testid="create-page">Create your page</a>
         </div>
-        <p className="land-micro">Free · no account needed</p>
+        <p className="land-micro">
+          Planning with friends instead?{" "}
+          <a href="/start" data-testid="start-plan">Start a plan</a> - one link, no accounts needed.
+        </p>
         <div className="land-showcase" aria-hidden>
           {showcase.map((s) => <span key={s} className="chip">{s}</span>)}
         </div>

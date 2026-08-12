@@ -2423,9 +2423,13 @@ test.describe("scheduler", () => {
     // /landing is the dev-only alias (no signed-out state exists in the
     // hermetic stack, so the landing is otherwise unreachable here).
     await page.goto("/landing");
-    await expect(page.locator(".land-title")).toContainText("weekly meet ups");
+    // Pages/following leads the hero; friend-group planning is the secondary
+    // path just under the primary CTA.
+    await expect(page.locator(".land-title")).toContainText("Fill the room");
+    await expect(page.getByTestId("create-page")).toHaveAttribute("href", "/sign-up");
     await expect(page.locator(".land-shot")).toHaveCount(3); // invite + week pick + month series
     await expect(page.getByTestId("start-plan")).toBeVisible();
+    await expect(page.getByTestId("start-plan")).toHaveAttribute("href", "/start");
     await expect(page.locator(".land-points")).toContainText("whole series");
     // Support contact in the footer.
     await expect(page.locator('a[href^="mailto:support@whensdays.com"]')).toBeVisible();
