@@ -5,6 +5,18 @@ import { test, expect } from "@playwright/test";
 // E2E. Add a capture here for every new feature/page so the docs stay current.
 const OUT = process.env.DOCS_OUT || "/out";
 
+// Dates here must be RELATIVE to today. A hardcoded calendar date rots the
+// moment it passes: past events drop out of every active view (eventIsPast), so
+// the seeded events would silently vanish from the dashboard screenshot.
+// Built from LOCAL components - toISOString() would give the UTC date, which can
+// be a day off from what a datetime-local input means.
+function future(daysAhead: number, hhmm: string) {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${hhmm}`;
+}
+
 test.describe("docs screenshots", () => {
   test.skip(!process.env.DOCS_SHOTS, "docs screenshot mode only");
   test.use({ viewport: { width: 960, height: 760 } });
@@ -21,9 +33,11 @@ test.describe("docs screenshots", () => {
     await expect(page.getByTestId("new-event")).toBeVisible();
 
     // Seed a few distinct events so the dashboard looks alive.
-    await createFixed(page, "Sunday matinee", "2026-08-09T14:00");
-    await createFixed(page, "Rooftop drinks", "2026-08-14T18:30");
-    await createFixed(page, "Friday dinner", "2026-08-07T19:30");
+    // Spacing preserved from the original fixed dates (dinner, +2d matinee,
+    // +7d drinks) so the dashboard keeps the same near/mid/far spread.
+    await createFixed(page, "Sunday matinee", future(23, "14:00"));
+    await createFixed(page, "Rooftop drinks", future(28, "18:30"));
+    await createFixed(page, "Friday dinner", future(21, "19:30"));
     await createAvailPoll(page, "Camping weekend");
 
     // Feature: home dashboard (this is the gallery home-page screenshot).

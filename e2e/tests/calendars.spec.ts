@@ -16,6 +16,23 @@ test.describe("calendars (import)", () => {
   test.describe.configure({ mode: "serial" });
   test.skip(!DEV_AUTH, "calendar import uses CALENDAR_MODE=stub, only in the hermetic dev stack");
 
+  // The stub calendar seed (stubImportedEvents in calendars_import.go) pins its
+  // events to ABSOLUTE dates in August 2026 so visual snapshots stay stable.
+  // The month view opens on TODAY, so reaching the seed needs a direction-aware
+  // walk: a forward-only `while (!title.includes(...)) cal-next` loop spins
+  // forever once real time passes the seed month. Step the exact month delta
+  // instead (either direction) and assert we landed.
+  const STUB_MONTH = { year: 2026, monthIndex: 7, label: "August 2026" };
+
+  async function gotoStubMonth(page: import("@playwright/test").Page) {
+    const now = new Date();
+    const delta =
+      (STUB_MONTH.year - now.getFullYear()) * 12 + (STUB_MONTH.monthIndex - now.getMonth());
+    const step = delta >= 0 ? "cal-next" : "cal-prev";
+    for (let i = 0; i < Math.abs(delta); i++) await page.getByTestId(step).click();
+    await expect(page.getByTestId("cal-title")).toContainText(STUB_MONTH.label);
+  }
+
   async function gotoCalendars(page: import("@playwright/test").Page, devUser: string) {
     await page.goto(`/?as=${devUser}`);
     await page.waitForSelector('[data-testid="setup-name"], [data-testid="new-event"]');
@@ -68,19 +85,27 @@ test.describe("calendars (import)", () => {
     // The stub events (Aug 2026) show on the Calendars month view.
     await page.goto("/calendars");
     await expect(page.getByTestId("cal-month")).toBeVisible();
-    while (!(await page.getByTestId("cal-title").textContent())?.includes("August 2026")) {
-      await page.getByTestId("cal-next").click();
-    }
+    await gotoStubMonth(page);
     await expect(page.getByText("Dentist appointment").first()).toBeVisible();
 
-    // View toggles + Today navigation work.
+    // View toggles + Today navigation work. Step deliberately AWAY from today
+    // before testing "Today": the stub month can BE the current month (it is
+    // whenever real time is in the seed month), and then the cursor is already
+    // on today, "Today" is a no-op, and this assertion fails on a working app.
+    // Moving away first makes the check independent of what today's date is.
     await page.getByTestId("cal-view-week").click();
     await expect(page.getByTestId("cal-week")).toBeVisible();
     await page.getByTestId("cal-view-day").click();
     await expect(page.getByTestId("cal-day")).toBeVisible();
-    const monthTitle = await page.getByTestId("cal-title").textContent();
+    await page.getByTestId("cal-next").click(); // day view: +1 day
+    const awayTitle = await page.getByTestId("cal-title").textContent();
     await page.getByTestId("cal-today").click();
-    await expect(page.getByTestId("cal-title")).not.toHaveText(monthTitle ?? "");
+    await expect(page.getByTestId("cal-title")).not.toHaveText(awayTitle ?? "");
+    // …and it lands back exactly on today, not just somewhere else. Build the
+    // label in the PAGE so the locale/format match the app's day-view title.
+    const todayLabel = await page.evaluate(() =>
+      new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }));
+    await expect(page.getByTestId("cal-title")).toHaveText(todayLabel);
   });
 
   test("connect Apple privately (CalDAV, stub)", async ({ page }) => {
@@ -98,9 +123,7 @@ test.describe("calendars (import)", () => {
     // The stub caldav event lands on the month view (Aug 2026).
     await page.goto("/calendars");
     await expect(page.getByTestId("cal-month")).toBeVisible();
-    while (!(await page.getByTestId("cal-title").textContent())?.includes("August 2026")) {
-      await page.getByTestId("cal-next").click();
-    }
+    await gotoStubMonth(page);
     await expect(page.getByText("Yoga class").first()).toBeVisible();
   });
 
@@ -116,9 +139,7 @@ test.describe("calendars (import)", () => {
     // The stub's Book club event (Aug 2026) shows on the calendar view.
     await page.goto("/calendars");
     await expect(page.getByTestId("cal-month")).toBeVisible();
-    while (!(await page.getByTestId("cal-title").textContent())?.includes("August 2026")) {
-      await page.getByTestId("cal-next").click();
-    }
+    await gotoStubMonth(page);
     await expect(page.getByText("Book club").first()).toBeVisible();
   });
 

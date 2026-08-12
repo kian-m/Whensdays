@@ -4,6 +4,37 @@ import { readFileSync } from "fs";
 
 const DEV_AUTH = process.env.E2E_AUTH_MODE === "dev";
 
+// Dates in specs must be RELATIVE to today. A hardcoded calendar date rots the
+// moment it passes: past events drop out of every active view (eventIsPast), and
+// because this describe is serial, one rotted date fails ~60 tests behind it.
+// Returns a "YYYY-MM-DDTHH:mm" value for a <input type="datetime-local"> built
+// from LOCAL components - toISOString().slice(0,10) would yield the UTC date,
+// which can be a day off from what a datetime-local input means.
+// Prefer offsets ~20-40 days out so a run near midnight or a month boundary
+// can't flip the result; use a small offset only when proximity is the point.
+function future(daysAhead: number, hhmm = "19:00") {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${hhmm}`;
+}
+
+// UTC calendar day ("YYYYMMDD") of the instant a datetime-local value denotes.
+// Node and the browser share the runner's zone, so `new Date(local)` is the same
+// instant the app sees - this stays correct in a non-UTC runner, where a 19:00
+// local start can land on the NEXT UTC day in an .ics/Google stamp.
+function utcDay(localDT: string, plusMs = 0) {
+  return new Date(new Date(localDT).getTime() + plusMs).toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+// "October 11" for a datetime-local value, as the event page renders it (the
+// event's timezone is the one the browser reported at creation, so the LOCAL
+// calendar day of the input is the day shown).
+function monthDay(localDT: string) {
+  return new Date(`${localDT.slice(0, 10)}T12:00:00Z`)
+    .toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" });
+}
+
 // Feature: the scheduler ("Whensdays"). Asserts behavior (create an event,
 // respond as a guest, host sees the answers) AND a visual baseline of the create
 // form. In prod-shaped runs it signs in via Clerk; in hermetic dev runs auth is
@@ -64,7 +95,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-08-01T19:00");
+    await page.getByTestId("quick-when").fill(future(21));
     await page.getByTestId("quick-create").click();
 
     // Lands on the event page in the host view (share link is host-only).
@@ -245,7 +276,7 @@ test.describe("scheduler", () => {
     const title = `Cover ${test.info().testId}`;
     await page.goto("/quick");
     await page.getByTestId("quick-title").fill(title);
-    await page.getByTestId("quick-when").fill("2026-10-09T19:00");
+    await page.getByTestId("quick-when").fill(future(28));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -308,11 +339,13 @@ test.describe("scheduler", () => {
     await page.getByTestId("theme-none").click();
     await page.getByTestId("edit-sec-when").click();
     await expect(page.getByTestId("edit-time")).toBeVisible();
-    await page.getByTestId("edit-time").fill("2026-10-11T20:30");
+    const retimed = future(30, "20:30");
+    await page.getByTestId("edit-time").fill(retimed);
     await page.getByTestId("edit-save").click();
     await expect(page.getByTestId("hero-edit")).toHaveCount(0);
-    // The new date shows in the event's timezone (E2E pins tz=UTC).
-    await expect(page.getByText(/October 11/)).toBeVisible();
+    // The new date shows in the event's timezone (the one the browser reported
+    // at creation), so the input's LOCAL calendar day is the day rendered.
+    await expect(page.getByText(new RegExp(monthDay(retimed)))).toBeVisible();
   });
 
   test("plan the next one: ?again= prefills the wizard from a past event", async ({ page }) => {
@@ -322,7 +355,7 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-12-01T19:00");
+    await page.getByTestId("quick-when").fill(future(35));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
@@ -340,7 +373,7 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-12-05T19:00");
+    await page.getByTestId("quick-when").fill(future(35));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
@@ -361,7 +394,7 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("quick-title")).toHaveValue(title);
     const nextTitle = `${title} #2`;
     await page.getByTestId("quick-title").fill(nextTitle);
-    await page.getByTestId("quick-when").fill("2026-12-19T19:00");
+    await page.getByTestId("quick-when").fill(future(49));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(nextTitle);
     await expect(page.locator(".event-theme.theme-party")).toBeVisible();
@@ -1038,7 +1071,7 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-11-20T18:00");
+    await page.getByTestId("quick-when").fill(future(31, "18:00"));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -1061,7 +1094,7 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-10-15T19:00");
+    await page.getByTestId("quick-when").fill(future(26));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)![0];
@@ -1131,9 +1164,17 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-08-01T19:00");
+    const when = future(23);
+    await page.getByTestId("quick-when").fill(when);
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
+
+    // DTSTART/dates are emitted in UTC, so derive the UTC day from the same
+    // instant the app sees rather than assuming it matches the local day - in a
+    // non-UTC runner a 19:00 local start can fall on the next UTC day. The
+    // export's end is start + 2h (googleCalendarUrl), which can roll the day too.
+    const startDay = utcDay(when);
+    const endDay = utcDay(when, 2 * 60 * 60 * 1000);
 
     // The export block shows on confirmed (scheduled) events.
     const block = page.getByTestId("add-to-calendar");
@@ -1144,7 +1185,7 @@ test.describe("scheduler", () => {
     expect(href).toContain("calendar.google.com/calendar/render");
     expect(href).toContain("action=TEMPLATE");
     expect(href).toContain("text=Calendar");
-    expect(href).toMatch(/dates=20260801T\d{6}Z%2F20260801T\d{6}Z/);
+    expect(href).toMatch(new RegExp(`dates=${startDay}T\\d{6}Z%2F${endDay}T\\d{6}Z`));
     expect(href).toContain("RSVP"); // details deep-link back to the event
 
     // Apple/native path: a plain (auth-free) .ics link phones can open directly.
@@ -1161,7 +1202,7 @@ test.describe("scheduler", () => {
     expect(ics).toContain("BEGIN:VCALENDAR");
     expect(ics).toContain("BEGIN:VEVENT");
     expect(ics).toContain(`SUMMARY:${title}`);
-    expect(ics).toContain("DTSTART:20260801T");
+    expect(ics).toContain(`DTSTART:${startDay}T`);
     // The invite link rides along (URL + DESCRIPTION) so there's a way back.
     expect(ics).toMatch(/URL:.*\/e\//);
     expect(ics).toContain("RSVP & details:");
@@ -1174,7 +1215,7 @@ test.describe("scheduler", () => {
     const title = `Gif chat ${test.info().testId}`;
     await page.goto("/quick");
     await page.getByTestId("quick-title").fill(title);
-    await page.getByTestId("quick-when").fill("2026-10-11T18:00");
+    await page.getByTestId("quick-when").fill(future(27, "18:00"));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     // Comments are collapsed by default now - expand the disclosure first.
@@ -1212,7 +1253,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-08-01T19:00");
+    await page.getByTestId("quick-when").fill(future(22));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await expect(page.getByTestId("comments")).toBeVisible();
@@ -1252,7 +1293,7 @@ test.describe("scheduler", () => {
       const title = `Cohosted ${test.info().testId}`;
       await host.getByTestId("quick-title").fill(title);
       await host.getByTestId("quick-mode-fixed").click();
-      await host.getByTestId("quick-when").fill("2026-08-02T19:00");
+      await host.getByTestId("quick-when").fill(future(24));
       await host.getByTestId("quick-create").click();
       await expect(host.getByTestId("event-title")).toHaveText(title);
       const url = host.url();
@@ -1366,7 +1407,7 @@ test.describe("scheduler", () => {
       const eventTitle = `Group dinner ${testId}`;
       await ownerPage.getByTestId("quick-title").fill(eventTitle);
       await ownerPage.getByTestId("quick-mode-fixed").click();
-      await ownerPage.getByTestId("quick-when").fill("2026-08-10T19:00");
+      await ownerPage.getByTestId("quick-when").fill(future(25));
       await ownerPage.getByTestId("quick-create").click();
       await expect(ownerPage.getByTestId("event-title")).toHaveText(eventTitle);
 
@@ -1386,18 +1427,19 @@ test.describe("scheduler", () => {
     const title = `Weekly run ${test.info().testId}-${Date.now()}`;
     // A weekly-pattern series - the single create flow no longer takes a repeat
     // pattern, so seed it via the API (repeat weekly x3), then open occurrence 1.
-    const firstId = await page.evaluate(async (title) => {
+    // The +7/+14 siblings stay future too, so all 3 occurrences list as upcoming.
+    const firstId = await page.evaluate(async ({ title, when }) => {
       const h = { "Content-Type": "application/json", "X-Dev-User": "demo-user" };
       const res = await fetch("/api/events", {
         method: "POST", headers: h,
         body: JSON.stringify({
           title, location_mode: "host_place", location_address: "",
-          scheduling_mode: "fixed", starts_at: new Date("2026-08-11T18:00").toISOString(),
+          scheduling_mode: "fixed", starts_at: new Date(when).toISOString(),
           repeat: "weekly", repeat_count: 3, timezone: "UTC",
         }),
       });
       return (await res.json()).id as string;
-    }, title);
+    }, { title, when: future(21, "18:00") });
     await page.goto(`/e/${firstId}`);
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const eventUrl = page.url();
@@ -1690,7 +1732,7 @@ test.describe("scheduler", () => {
       const title = `Masquerade ${test.info().testId}-${Date.now()}`;
       await host.getByTestId("quick-title").fill(title);
       await host.getByTestId("quick-mode-fixed").click();
-      await host.getByTestId("quick-when").fill("2026-09-20T20:00");
+      await host.getByTestId("quick-when").fill(future(29, "20:00"));
       await host.getByTestId("quick-create").click();
       await expect(host.getByTestId("event-title")).toHaveText(title);
       const url = host.url();
@@ -1786,7 +1828,7 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-09-01T20:00");
+    await page.getByTestId("quick-when").fill(future(26, "20:00"));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     // Visibility has no UI while Discover is denavved - publish via the API.
@@ -1833,7 +1875,7 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-09-10T19:00");
+    await page.getByTestId("quick-when").fill(future(27));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await page.getByTestId("edit-event-open").click(); // cancel lives behind Edit
@@ -1898,7 +1940,7 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-09-05T19:00");
+    await page.getByTestId("quick-when").fill(future(24));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await setVisibility(page, page.url().split("/e/")[1], "fv1", "friends");
@@ -1969,7 +2011,7 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-09-12T20:00");
+    await page.getByTestId("quick-when").fill(future(28, "20:00"));
     await page.getByTestId("quick-create").click(); // private by default
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -2005,7 +2047,7 @@ test.describe("scheduler", () => {
     await page.goto("/new");
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-09-15T18:00");
+    await page.getByTestId("quick-when").fill(future(30, "18:00"));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await setVisibility(page, page.url().split("/e/")[1], "regionist", "public", "tech", "Oakland");
@@ -2046,7 +2088,7 @@ test.describe("scheduler", () => {
       await page.goto("/new");
       await page.getByTestId("quick-title").fill(title);
       await page.getByTestId("quick-mode-fixed").click();
-      await page.getByTestId("quick-when").fill("2026-09-20T19:00");
+      await page.getByTestId("quick-when").fill(future(25));
       await page.getByTestId("quick-create").click();
       await expect(page.getByTestId("event-title")).toHaveText(title);
       // Invites happen from the event page now (the wizard's Who step is gone) -
@@ -2104,7 +2146,7 @@ test.describe("scheduler", () => {
       await p.getByTestId("guest-join").click();
       // Lands on Quick plan: title + time → event page with the invite link.
       await p.getByTestId("quick-title").fill(`Zero ${test.info().testId}`);
-      await p.getByTestId("quick-when").fill("2026-10-01T19:00");
+      await p.getByTestId("quick-when").fill(future(26));
       await p.getByTestId("quick-create").click();
       await expect(p.getByTestId("share-link")).toBeVisible();
       await expect(p.getByTestId("guest-banner")).toBeVisible(); // convert nudge
@@ -2121,7 +2163,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     const title = `Fast ${test.info().testId}`;
     await page.getByTestId("quick-title").fill(title);
-    await page.getByTestId("quick-when").fill("2026-10-02T18:00");
+    await page.getByTestId("quick-when").fill(future(27, "18:00"));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     await expect(page.getByTestId("share-link")).toBeVisible();
@@ -2291,7 +2333,7 @@ test.describe("scheduler", () => {
     const title = `Unfurl ${test.info().testId}`;
     await page.goto("/quick");
     await page.getByTestId("quick-title").fill(title);
-    await page.getByTestId("quick-when").fill("2026-10-03T18:00");
+    await page.getByTestId("quick-when").fill(future(24, "18:00"));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const id = page.url().split("/e/")[1];
@@ -2340,7 +2382,7 @@ test.describe("scheduler", () => {
       const title = `Shared ${test.info().testId}`;
       await host.getByTestId("quick-title").fill(title);
       await host.getByTestId("quick-mode-fixed").click();
-      await host.getByTestId("quick-when").fill("2026-10-10T19:00");
+      await host.getByTestId("quick-when").fill(future(28));
       await host.getByTestId("quick-create").click();
       await expect(host.getByTestId("event-title")).toHaveText(title);
       const url = host.url();
@@ -2372,7 +2414,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-11-01T19:00");
+    await page.getByTestId("quick-when").fill(future(32));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -2451,7 +2493,7 @@ test.describe("scheduler", () => {
       await g.getByTestId("new-event").click();
       await g.getByTestId("quick-title").fill(title);
       await g.getByTestId("quick-mode-fixed").click();
-      await g.getByTestId("quick-when").fill("2026-08-20T19:00");
+      await g.getByTestId("quick-when").fill(future(23));
       await g.getByTestId("quick-create").click();
       await expect(g.getByTestId("event-title")).toHaveText(title);
 
@@ -2486,7 +2528,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("new-event").click();
     await page.getByTestId("quick-title").fill(title);
     await page.getByTestId("quick-mode-fixed").click();
-    await page.getByTestId("quick-when").fill("2026-08-09T19:00");
+    await page.getByTestId("quick-when").fill(future(25));
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(title);
     const url = page.url();
@@ -2534,6 +2576,12 @@ test.describe("scheduler", () => {
 
     // A specific-times poll (no longer UI-creatable) with one option inside the
     // busy window and one outside - seed it via the API, then open it.
+    // DELIBERATELY ABSOLUTE (not future()): these must straddle the app's fixed
+    // stub calendar seed (stubImportedEvents in calendars_import.go pins the
+    // Dentist appointment to 2026-08-03T09:00Z, absolute so snapshots are
+    // stable). A relative option would stop overlapping and kill the assertion.
+    // Nothing here asserts upcoming-ness, and busyConflict/importedBusy have no
+    // past filter, so these do not rot.
     const busyId = await page.evaluate(async (title) => {
       const h = { "Content-Type": "application/json", "X-Dev-User": "busyvoter" };
       const res = await fetch("/api/events", {
@@ -2563,18 +2611,19 @@ test.describe("scheduler", () => {
     const title = `Movie ${test.info().testId}`;
     // The specific-times poll is no longer creatable from the UI (the mode +
     // voting/finalize still exist) - seed it via the API, then open it.
-    const pollId = await page.evaluate(async (title) => {
+    // Two consecutive days (the 1-day gap is what makes option 0 sort first).
+    const pollId = await page.evaluate(async ({ title, opts }) => {
       const h = { "Content-Type": "application/json", "X-Dev-User": "demo-user" };
       const res = await fetch("/api/events", {
         method: "POST", headers: h,
         body: JSON.stringify({
           title, location_mode: "host_place", location_address: "",
           scheduling_mode: "poll", timezone: "UTC",
-          time_options: [new Date("2026-08-01T19:00").toISOString(), new Date("2026-08-02T19:00").toISOString()],
+          time_options: opts.map((o) => new Date(o).toISOString()),
         }),
       });
       return (await res.json()).id as string;
-    }, title);
+    }, { title, opts: [future(22), future(23)] });
     await page.goto(`/e/${pollId}`);
     await expect(page.getByTestId("event-title")).toHaveText(title);
 
@@ -2598,6 +2647,10 @@ test.describe("scheduler", () => {
 
     // Seed a specific-times poll (fixed options → a deterministic screenshot):
     // no time is locked yet, so a guest has nothing to RSVP to.
+    // DELIBERATELY ABSOLUTE (not future()): the option dates are rendered INTO
+    // the committed guest-poll-first baseline, so relative dates would rot that
+    // PNG every single day. The test never asserts upcoming-ness and never
+    // finalizes, and the vote card applies no past filter - so it doesn't rot.
     const title = `Guest poll ${test.info().testId}`;
     const pollId = await page.evaluate(async (title) => {
       const h = { "Content-Type": "application/json", "X-Dev-User": "demo-user" };
