@@ -1131,6 +1131,8 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		answers       []db.ListPreferenceAnswersForEventRow
 		comments      []db.ListEventCommentsRow
 		cohosts       []db.ListCohostsRow
+		performers    []db.ListPerformersRow
+		viewerFollows []db.ListFollowsRow
 		invites       []db.ListEventInvitesRow
 		series        []db.ListSeriesEventsRow
 		muted         bool
@@ -1184,6 +1186,14 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		func() (e error) { answers, e = s.queries.ListPreferenceAnswersForEvent(ctx, id); return },
 		func() (e error) { comments, e = s.queries.ListEventComments(ctx, id); return },
 		func() (e error) { cohosts, e = s.queries.ListCohosts(ctx, id); return },
+		// Lineup (V7): visible to everyone, capability-gated like the rest of the
+		// event page - NOT the listed-only invariant (that's the follower-surfacing
+		// gate for feed/digest, orthogonal to who can see the event page itself).
+		func() (e error) { performers, e = s.queries.ListPerformers(ctx, id); return },
+		// Viewer's own follows, so each Lineup FollowButton renders its real state
+		// (kind='host' following a performer is the same primitive as following
+		// any other person - VENUE-PAGES.md V7).
+		func() error { viewerFollows, _ = s.queries.ListFollows(ctx, uid); return nil },
 		func() (e error) { invites, e = s.queries.ListEventInvites(ctx, id); return },
 		func() (e error) {
 			// Sibling occurrences when this event is part of a recurring series.
@@ -1287,6 +1297,20 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 			optionFit[uuidStr(o.ID)] = fit
 		}
 	}
+	// Lineup FollowButtons need the viewer's own follow state per performer -
+	// kind='host' following a performer is the same primitive as following any
+	// other person (V7). followedHosts is a cheap in-memory set from the
+	// concurrent ListFollows read above.
+	followedHosts := map[string]bool{}
+	for _, f := range viewerFollows {
+		if f.Kind == "host" {
+			followedHosts[f.Value] = true
+		}
+	}
+	performersOut := make([]performerOut, len(performers))
+	for i, p := range performers {
+		performersOut[i] = performerOut{ListPerformersRow: p, Following: followedHosts[p.UserID]}
+	}
 	s.analytics.Capture(uid, "event_viewed", map[string]any{
 		"event_id": uuidStr(ev.ID),
 		"role":     role,
@@ -1318,6 +1342,7 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		"preference_answers": answers,
 		"comments":           comments,
 		"cohosts":            cohosts,
+		"performers":         performersOut,
 		"invites":            invites,
 		"series":             series,
 	})

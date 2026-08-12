@@ -174,6 +174,44 @@ func TestFollowTokenRoundTrip(t *testing.T) {
 	}
 }
 
+// The performer confirm/remove one-tap email link (V7) - same envelope idiom
+// as rsvp|/mute|, so it round-trips, is key-bound, and namespace-isolated from
+// every other capability token.
+func TestPerformerTokenRoundTrip(t *testing.T) {
+	g := guestSigner{key: []byte("test-key")}
+	tok := g.signPerformer("user_2abc", "evt-123")
+	uid, evt, ok := g.verifyPerformer(tok)
+	if !ok || uid != "user_2abc" || evt != "evt-123" {
+		t.Fatalf("verifyPerformer = %q,%q,%v", uid, evt, ok)
+	}
+	if _, _, ok := g.verifyPerformer(tok + "x"); ok {
+		t.Fatal("tampered performer token verified")
+	}
+	if _, _, ok := (guestSigner{key: []byte("other")}).verifyPerformer(tok); ok {
+		t.Fatal("wrong-key performer token verified")
+	}
+	// Namespace isolation: no other capability's token should validate here,
+	// and a performer token should not validate as any other capability.
+	if _, _, ok := g.verifyPerformer(g.signMute("user_2abc", "evt-123")); ok {
+		t.Fatal("mute token accepted as performer token")
+	}
+	if _, _, ok := g.verifyPerformer(g.signRsvp("user_2abc", "evt-123")); ok {
+		t.Fatal("rsvp token accepted as performer token")
+	}
+	if _, _, ok := g.verifyPerformer(g.sign("guest_abc")); ok {
+		t.Fatal("guest token accepted as performer token")
+	}
+	if _, _, _, ok := g.verifyFollow(tok); ok {
+		t.Error("performer token accepted as a follow token")
+	}
+	if _, _, ok := g.verifyMute(tok); ok {
+		t.Error("performer token accepted as a mute token")
+	}
+	if _, _, ok := g.verifyRsvp(tok); ok {
+		t.Error("performer token accepted as an rsvp token")
+	}
+}
+
 func TestNotifyPayload(t *testing.T) {
 	p := notify.Payload("a@x.com", []string{"b@y.com"}, "Sub", "<b>hi</b>")
 	if p["from"] != "a@x.com" || p["subject"] != "Sub" {
@@ -359,6 +397,13 @@ func TestFollowKindValue(t *testing.T) {
 	host := db.ListNewFollowedEventsRow{ViaGroup: false, HostID: "user_host"}
 	if kind, value := followKindValue(host); kind != "host" || value != "user_host" {
 		t.Errorf("host-matched row = %q,%q, want host,user_host", kind, value)
+	}
+	// V7: a performer-matched row unfollows the PERFORMER (FollowedHostID), not
+	// the event's actual host - the whole point is following a person "regardless
+	// of who hosts."
+	performer := db.ListNewFollowedEventsRow{ViaPerformer: true, HostID: "user_host", FollowedHostID: "user_performer"}
+	if kind, value := followKindValue(performer); kind != "host" || value != "user_performer" {
+		t.Errorf("performer-matched row = %q,%q, want host,user_performer", kind, value)
 	}
 }
 

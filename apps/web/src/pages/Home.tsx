@@ -269,12 +269,17 @@ export function Home() {
   );
 }
 
-// A followed-page event: the standard tile plus a small attribution line
-// ("via {group/host name}") - links to the page when it belongs to a group,
-// plain text otherwise. Lighter than EventRow since the feed row carries no
-// location/RSVP/series data (see ListPublicEventsRow).
+// A followed-page event: the standard tile plus a small attribution line -
+// links to the page when it belongs to a group, plain text otherwise. Lighter
+// than EventRow since the feed row carries no location/RSVP/series data (see
+// ListPublicEventsRow). Precedence group > performer > host (VENUE-PAGES.md
+// V7): a group attributes "via {group}", a confirmed-followed performer
+// attributes "with {performer}" (a different preposition on purpose - you're
+// seeing this because of a PERSON, not a page), otherwise "via {host}".
 function FollowedTile({ e, onClick }: { e: PublicEvent; onClick: () => void }) {
-  const page = e.group_id && e.group_name ? e.group_name : e.host_name;
+  const viaGroup = e.group_id && e.group_name;
+  const page = viaGroup ? e.group_name : e.performer_name || e.host_name;
+  const prefix = !viaGroup && e.performer_name ? "with" : "via";
   return (
     <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : ""}`}
       data-testid="following-tile" onClick={onClick}>
@@ -282,12 +287,12 @@ function FollowedTile({ e, onClick }: { e: PublicEvent; onClick: () => void }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <span className="title">{e.title}</span>
         <div className="muted small"><span className="stamp time">{fmtDateTime(e.starts_at)}</span></div>
-        {/* "muted small line, standard link styling" - the "via" wrapper stays
-            muted, but the page name itself is a real link (default `a` color +
-            hover underline) when it's a group, not just gray text. */}
+        {/* "muted small line, standard link styling" - the "via"/"with" wrapper
+            stays muted, but the page name itself is a real link (default `a`
+            color + hover underline) when it's a group, not just gray text. */}
         {page && (
           <div className="muted small" data-testid="following-attribution">
-            via {e.group_id ? (
+            {prefix} {e.group_id && viaGroup ? (
               <Link to={`/g/${e.group_id}`} onClick={(ev) => ev.stopPropagation()}>{page}</Link>
             ) : page}
           </div>

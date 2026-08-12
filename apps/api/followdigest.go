@@ -12,10 +12,14 @@ import (
 )
 
 // followdigest.go - V3 of the venue-pages playbook (docs/product/VENUE-PAGES.md):
-// the daily "new events from pages you follow" email. Rides the existing daily
-// cron (handleCronReminders) - same idempotency religion as every other send in
-// this file's neighbors (notifications.go): claim BEFORE building anything, so
-// a scheduler retry (or a second Cloud Run instance) can never double-send.
+// the daily "new events from pages you follow" email. V7 extends the same
+// email with a third match arm: a confirmed performer on the event that the
+// recipient follows (kind='host') - see ListNewFollowedEvents in
+// followdigest.sql for the consent-gated (status='confirmed' only) query.
+// Rides the existing daily cron (handleCronReminders) - same idempotency
+// religion as every other send in this file's neighbors (notifications.go):
+// claim BEFORE building anything, so a scheduler retry (or a second Cloud Run
+// instance) can never double-send.
 //
 // Unlike the per-event reminder/recap claims (ClaimEventReminder/ClaimEventRecap,
 // one row per event), this is a single GLOBAL claim - ('follow_digest', run_day)
@@ -103,13 +107,19 @@ func followDigestSubject(items []db.ListNewFollowedEventsRow) string {
 	return "New from pages you follow"
 }
 
-// followKindValue resolves which entity a row's follow matched - the group if
-// it did (a page follow is the more specific/intentional one when both a host
-// and group follow could apply), else the host. This is what the row's
-// unfollow link targets.
+// followKindValue resolves which entity a row's follow matched - group beats
+// performer beats host (a page follow is the most specific/intentional; a
+// performer follow (V7) is more specific than a bare host follow since it
+// names WHO on the lineup earned the send). This is what the row's unfollow
+// link targets: for a performer match, that's the performer's own id
+// (FollowedHostID), NOT the event's host_id - unfollowing must stop hearing
+// about the PERFORMER, not silence the venue that happened to host them.
 func followKindValue(it db.ListNewFollowedEventsRow) (kind, value string) {
 	if it.ViaGroup {
 		return "group", uuidStr(it.GroupID)
+	}
+	if it.ViaPerformer {
+		return "host", it.FollowedHostID
 	}
 	return "host", it.HostID
 }
@@ -164,6 +174,7 @@ func (s *server) sendFollowDigest(ctx context.Context) int {
 				title:           it.Title,
 				when:            eventWhen(stub),
 				page:            it.PageName,
+				pageIsPerformer: it.ViaPerformer,
 				url:             campaignURL(s.eventURL(it.ID), "follow_digest"),
 				muteURL:         s.muteLink(uid, uuidStr(it.ID)),
 				cover:           eventCover(stub),

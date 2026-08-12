@@ -100,6 +100,12 @@ export function EventPage() {
         </div>
       )}
       {showA2HS && <HomescreenPrompt onClose={() => { setShowA2HS(false); try { localStorage.setItem("whensdays.a2hs", "1"); sessionStorage.removeItem("whensdays.a2hs-pending"); } catch { /* private mode */ } }} />}
+      {/* Pending-performer banner: shown to the viewer when THEY are a pending
+          performer on this event - their own confirmation is what lets it
+          reach their followers (VENUE-PAGES.md V7). */}
+      {e.status !== "cancelled" && data2.performers.some((p) => p.user_id === data2.viewer_id && p.status === "pending") && (
+        <PendingPerformerBanner data={data2} reload={reload} />
+      )}
       <BackLink />
       <HeroCard data={data2} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} onEditing={setHeroEditing} />
 
@@ -112,6 +118,10 @@ export function EventPage() {
       {data2.series && data2.series.length > 1 && <SeriesCard data={data2} />}
 
       {e.status === "scheduled" && e.starts_at && <AddToCalendar event={e} />}
+
+      {/* Lineup: visible to EVERYONE incl. guests - a page's performers are part
+          of what the event IS, not a management detail (VENUE-PAGES.md V7). */}
+      <Lineup data={data2} canManage={showManage} reload={reload} />
 
       {e.status !== "cancelled" && (showManage ? <HostView data={data2} reload={reload} editing={heroEditing} onCancelled={() => setOptimisticCancelled(true)} onCancelFailed={() => setOptimisticCancelled(false)} /> : <GuestView data={data2} reload={reload} previewingAsGuest={preview} />)}
 
@@ -156,6 +166,110 @@ function MuteToggle({ data }: { data: EventDetail }) {
       title={muted ? "You won't get emails about this event" : "Stop emails about this event"}>
       {muted ? "Notifications muted" : "Mute notifications"}
     </button>
+  );
+}
+
+// ---------------- lineup (performers, V7) ----------------
+//
+// Follow a person, see every event they're on - regardless of who hosts it.
+// Display here is immediate (the host's own claim about their lineup); a
+// pending row only reaches the PERFORMER's followers once they confirm (see
+// VENUE-PAGES.md V7 and performers.go). The card itself is visible to
+// everyone including guests - a page's lineup is part of what the event IS.
+
+// Shown to the viewer when they themselves are a pending performer - the
+// consent step that gates their followers ever seeing this event.
+function PendingPerformerBanner({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+  async function confirm() {
+    setBusy(true);
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/performers/confirm`, {});
+    setBusy(false);
+    reload();
+  }
+  async function remove() {
+    await api(`/api/events/${data.event.id}/performers/${data.viewer_id}`, { method: "DELETE" });
+    reload();
+  }
+  return (
+    <div className="card row between" data-testid="pending-performer-banner">
+      <span className="small">You're on the lineup for this event, pending. Confirm to let your followers see it.</span>
+      <span className="row" style={{ gap: 6, flex: "none" }}>
+        <ConfirmButton label="Remove" confirmLabel="Tap again to remove" testid="pending-performer-remove" onConfirm={remove} />
+        <button className="btn sm" data-testid="pending-performer-confirm" disabled={busy} onClick={confirm}>Confirm</button>
+      </span>
+    </div>
+  );
+}
+
+// The Lineup card: avatar/name for every performer (pending or confirmed),
+// a FollowButton per performer (source="lineup" - the same follow primitive
+// as following the host), a pending pill visible to managers and the
+// performer themselves (nobody else should read "pending" as a public label -
+// it's the host's claim, not yet the performer's), manager add-by-handle
+// (mirrors HostControls' cohost form), and remove (managers can remove
+// anyone, a performer can always remove themselves) via the two-tap
+// ConfirmButton destructive pattern.
+function Lineup({ data, canManage, reload }: { data: EventDetail; canManage: boolean; reload: () => void }) {
+  const api = useApi();
+  const [handle, setHandle] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const viewerId = data.viewer_id;
+
+  if (data.performers.length === 0 && !canManage) return null;
+
+  async function addPerformer(ev: React.FormEvent) {
+    ev.preventDefault();
+    setMsg(null);
+    const res = await sendJSON(api, "POST", `/api/events/${data.event.id}/performers`, { handle });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setMsg(b.error || "could not add");
+    }
+    setHandle("");
+    reload();
+  }
+  async function removePerformer(uid: string) {
+    await api(`/api/events/${data.event.id}/performers/${uid}`, { method: "DELETE" });
+    reload();
+  }
+
+  return (
+    <div className="card stack" data-testid="lineup">
+      <h3 style={{ margin: 0 }}>Lineup</h3>
+      {data.performers.map((p) => {
+        const self = p.user_id === viewerId;
+        return (
+          <div key={p.user_id} className="row between" data-testid="performer">
+            <span className="row" style={{ gap: 8, alignItems: "center" }}>
+              <Avatar url={p.avatar_url} name={p.display_name || p.handle || "?"} size={28} />
+              <span>{p.display_name || p.handle}</span>
+              {p.status === "pending" && (canManage || self) && <Pill kind="deciding">Pending</Pill>}
+            </span>
+            <span className="row" style={{ gap: 6, flex: "none" }}>
+              {!self && (
+                <FollowButton kind="host" value={p.user_id} following={p.following} source="lineup"
+                  testid={`follow-performer-${p.handle || p.user_id}`} />
+              )}
+              {(canManage || self) && (
+                <ConfirmButton label="Remove" confirmLabel="Tap again to remove"
+                  testid={`performer-remove-${p.handle || p.user_id}`}
+                  onConfirm={() => removePerformer(p.user_id)} />
+              )}
+            </span>
+          </div>
+        );
+      })}
+      {canManage && (
+        <form className="row" onSubmit={addPerformer}>
+          <input className="input" maxLength={40} data-testid="performer-handle" value={handle}
+            onChange={(ev) => setHandle(ev.target.value)} placeholder="performer's handle" />
+          <button className="btn sm" data-testid="performer-add">Add to lineup</button>
+        </form>
+      )}
+      {msg && <p className="muted small">{msg}</p>}
+    </div>
   );
 }
 
