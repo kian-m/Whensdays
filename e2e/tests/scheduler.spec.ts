@@ -1026,6 +1026,11 @@ test.describe("scheduler", () => {
       await ensureUser(fan, "perffan", "Perf Fan", "perffan");
       const artistHandle = "perfartist";
 
+      // Fixed dev users persist across local re-runs of this suite - start from
+      // a known-unfollowed state so the click-to-follow step below is
+      // deterministic regardless of what an earlier run left behind.
+      await fan.evaluate(() => fetch("/api/follows/host/perfartist", { method: "DELETE", headers: { "X-Dev-User": "perffan" } }));
+
       // The fan reads their OWN "following" scope feed via the API (per-user).
       const feedTitles = () => fan.evaluate(async () => {
         const res = await fetch("/api/feed?scope=following", { headers: { "X-Dev-User": "perffan" } });
@@ -1058,38 +1063,52 @@ test.describe("scheduler", () => {
       await fan.goto(url);
       const fanRow = fan.getByTestId("performer").filter({ hasText: "Perf Artist" });
       await expect(fanRow).toBeVisible();
-      await fanRow.getByTestId(`follow-performer-${artistHandle}`).click();
-      await expect(fanRow.getByTestId(`follow-performer-${artistHandle}`)).toContainText("Following");
+      await Promise.all([
+        fan.waitForResponse((r) => r.url().includes("/api/follows") && r.request().method() === "POST"),
+        fanRow.getByTestId(`follow-performer-${artistHandle}`).click(),
+      ]);
+      await expect(fanRow.getByTestId(`follow-performer-${artistHandle}`)).toContainText("Following", { timeout: 10000 });
 
       // Pending: the event does NOT reach the fan's feed yet - consent gates
       // distribution, not display.
-      await expect.poll(feedTitles).not.toContain(title);
+      await expect.poll(feedTitles, { timeout: 10000 }).not.toContain(title);
 
       // The artist sees the pending banner and confirms - their own consent.
       await artist.goto(url);
       await expect(artist.getByTestId("pending-performer-banner")).toBeVisible();
-      await artist.getByTestId("pending-performer-confirm").click();
+      await Promise.all([
+        artist.waitForResponse((r) => r.url().includes("/performers/confirm") && r.request().method() === "POST"),
+        artist.getByTestId("pending-performer-confirm").click(),
+      ]);
       await expect(artist.getByTestId("pending-performer-banner")).toHaveCount(0);
       await expect(artist.getByTestId("performer").filter({ hasText: "Pending" })).toHaveCount(0);
 
       // Confirmed: the fan's followed feed now carries it, attributed "with
       // {performer}" (no group on this event, so performer beats host).
-      await expect.poll(feedTitles).toContain(title);
+      await expect.poll(feedTitles, { timeout: 10000 }).toContain(title);
 
+      // The default view previews only the next 3 followed events - this fixed
+      // dev user accumulates more than that across local re-runs of this spec,
+      // so assert against the FULL "Following" chip list (unsliced) rather than
+      // the preview, same surface the "following on Home" test's "See all" uses.
       await fan.goto("/");
       await expect(fan.getByTestId("filter-following")).toBeVisible();
-      const previewTile = fan.getByTestId("following-tile").filter({ hasText: title });
-      await expect(previewTile).toBeVisible();
-      await expect(previewTile.getByTestId("following-attribution")).toHaveText("with Perf Artist");
+      await fan.getByTestId("filter-following").click();
+      const tile = fan.getByTestId("following-tile").filter({ hasText: title });
+      await expect(tile).toBeVisible({ timeout: 10000 });
+      await expect(tile.getByTestId("following-attribution")).toHaveText("with Perf Artist");
 
       // The artist removes themselves from the lineup (two-tap ConfirmButton) -
       // gone from the event page AND back out of the fan's feed.
       await artist.reload();
       const removeBtn = artist.getByTestId(`performer-remove-${artistHandle}`);
       await removeBtn.click();
-      await removeBtn.click();
+      await Promise.all([
+        artist.waitForResponse((r) => r.url().includes("/api/events/") && r.url().includes("/performers/") && r.request().method() === "DELETE"),
+        removeBtn.click(),
+      ]);
       await expect(artist.getByTestId("performer")).toHaveCount(0);
-      await expect.poll(feedTitles).not.toContain(title);
+      await expect.poll(feedTitles, { timeout: 10000 }).not.toContain(title);
     } finally {
       await hostCtx.close();
       await artistCtx.close();
