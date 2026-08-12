@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, PublicEvent, collapseSeries, eventIsPast, fetchDashboard, seriesCounts, fmtDateTime, useApi, useProfile } from "../lib";
+import { Event, Group, PublicEvent, collapseSeries, eventIsPast, fetchDashboard, getJSON, seriesCounts, fmtDateTime, useApi, useProfile } from "../lib";
 import { Avatar, EventThumb, ListSkeleton, Pill, useAsync } from "../ui";
 import { Ic } from "../Icons";
 
@@ -78,6 +78,26 @@ export function Home() {
   const byId = new Map<string, Event>();
   [...hosting, ...attending].forEach((e) => byId.set(e.id, e));
   const union = [...byId.values()];
+
+  // Brand-new page owner nudge (V5 onboarding): only worth a fetch once we
+  // already know the user has zero events at all - cheap enough not to bother
+  // otherwise. "Owns exactly one group" is the operational stand-in for "just
+  // made their page" (purpose isn't stored server-side - see VENUE-PAGES.md).
+  const [ownedGroups, setOwnedGroups] = useState<Group[] | null>(null);
+  useEffect(() => {
+    if (firstLoad || union.length !== 0) { return; }
+    let cancelled = false;
+    getJSON<{ groups: Group[] }>(api, "/api/groups")
+      .then((b) => { if (!cancelled) setOwnedGroups(b.groups); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, firstLoad, union.length === 0]);
+  const onlyOwnedGroup = (() => {
+    if (!ownedGroups || !profile) return null;
+    const owned = ownedGroups.filter((g) => g.owner_id === profile.user_id);
+    return owned.length === 1 ? owned[0] : null;
+  })();
   // Drafts live ONLY under their own filter - parked, not deleted. Same for
   // events you said Can't-go to: out of the active views, in their own bucket.
   const drafts = union.filter((e) => e.status === "draft");
@@ -191,6 +211,20 @@ export function Home() {
               <div className="row wrap" style={{ justifyContent: "center" }}>
                 <Link to="/new" className="btn soft">Create your first event</Link>
               </div>
+              {/* Only for someone who owns exactly one group and has zero
+                  events - a first-time page owner who hasn't posted yet. */}
+              {onlyOwnedGroup && (
+                <>
+                  <p className="muted small" style={{ margin: 0 }} data-testid="page-owner-hint">
+                    {onlyOwnedGroup.name} is ready for its first event.
+                  </p>
+                  <div className="row wrap" style={{ justifyContent: "center" }}>
+                    <Link to={`/new?group=${onlyOwnedGroup.id}`} className="btn ghost" data-testid="page-first-event">
+                      Post your first event
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           ) : shown.length === 0 ? (
             <p className="muted small" data-testid="filter-empty">

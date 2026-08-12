@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
-import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   ClerkLoading,
   SignedIn,
@@ -187,6 +187,16 @@ export function App() {
 
 type GuestAuth = { token: string; user_id: string; display_name: string };
 const GUEST_KEY = "clsandbox.guest";
+
+// Landing "Create your page" intent: the same round-trip-survival pattern as
+// the a2hs pending flag (sessionStorage.setItem before navigating away,
+// consumed once on the other side). The primary carrier is the ?redirect_url=
+// param AuthPage already reads (same mechanism as the guest-login "Log in"
+// link) - this flag is the belt-and-suspenders fallback for the case that
+// param doesn't survive (e.g. Clerk's own already-signed-in short-circuit),
+// so a first-time page creator still lands in the create-a-page flow instead
+// of a generic Home.
+const PAGE_INTENT_KEY = "whensdays.pageIntent";
 
 function storedGuest(): GuestAuth | null {
   try {
@@ -424,7 +434,28 @@ function Landing() {
           inbox, and their calendar.
         </p>
         <div className="land-cta">
-          <a href="/sign-up" className="btn primary land-go" data-testid="create-page">Create your page</a>
+          {/* Carries the page-creation intent through sign-up the same way the
+              guest-login "Log in" link carries a destination (?redirect_url=,
+              read by AuthPage) - the first signed-in screen lands in the
+              purpose-tuned create-a-page flow, not a generic Home. The
+              sessionStorage flag is the fallback carrier (see PAGE_INTENT_KEY);
+              dev mode has no real sign-up round trip at all, so it simulates
+              the conversion the same way GuestSignupButton's dev path does. */}
+          {DEV_AUTH ? (
+            <button type="button" className="btn primary land-go" data-testid="create-page"
+              onClick={() => {
+                try { sessionStorage.setItem(PAGE_INTENT_KEY, "1"); } catch { /* private mode */ }
+                location.href = "/";
+              }}>
+              Create your page
+            </button>
+          ) : (
+            <a href={`/sign-up?redirect_url=${encodeURIComponent("/groups?purpose=page")}`}
+              className="btn primary land-go" data-testid="create-page"
+              onClick={() => { try { sessionStorage.setItem(PAGE_INTENT_KEY, "1"); } catch { /* private mode */ } }}>
+              Create your page
+            </a>
+          )}
         </div>
         <p className="land-micro">
           Planning with friends instead?{" "}
@@ -472,6 +503,8 @@ function Landing() {
 // the app. A 404 from /api/profile means "not set up yet".
 function ProfileGate({ canMerge }: { canMerge?: boolean }) {
   const api = useApi();
+  const nav = useNavigate();
+  const { pathname } = useLocation();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [state, setState] = useState<"loading" | "needs-setup" | "ready">("loading");
   const [prefillName, setPrefillName] = useState<string>("");
@@ -513,6 +546,20 @@ function ProfileGate({ canMerge }: { canMerge?: boolean }) {
   useEffect(() => {
     if (profile) analytics.identify(profile.user_id, { handle: profile.handle });
   }, [profile]);
+
+  // Page-creation intent (see PAGE_INTENT_KEY): fallback for when the primary
+  // ?redirect_url= carrier didn't survive the round-trip. One-shot - consumed
+  // immediately so it never re-fires on a later visit to "/". Only redirects
+  // off the generic Home; if redirect_url already landed the user somewhere
+  // specific, that destination wins.
+  useEffect(() => {
+    if (state !== "ready") return;
+    let intent = false;
+    try { intent = sessionStorage.getItem(PAGE_INTENT_KEY) === "1"; } catch { /* private mode */ }
+    if (!intent) return;
+    try { sessionStorage.removeItem(PAGE_INTENT_KEY); } catch { /* ignore */ }
+    if (pathname === "/") nav("/groups?purpose=page", { replace: true });
+  }, [state, pathname, nav]);
 
   // The gate blocks on the profile fetch - show the real shell (brand + nav)
   // with skeleton tiles instead of a blank "Loading…" screen.

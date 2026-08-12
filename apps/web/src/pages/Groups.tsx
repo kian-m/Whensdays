@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Event, Group, GroupDetail, PublicPage, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
 
 // One-time "your old links are view-only now" note (see the Share card).
@@ -36,10 +36,19 @@ type GroupsResp = { groups: Group[] };
 export function Groups() {
   const api = useApi();
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data, loading, reload } = useAsync<GroupsResp>((a) => getJSON(a, "/api/groups"));
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  // "Venue or performer page" is the SAME entity as a friend group - server-
+  // side nothing changes. The choice only tunes copy/defaults client-side:
+  // the description placeholder and where you land after creating. Arriving
+  // via the landing "Create your page" intent (?purpose=page, see AuthPage's
+  // redirect_url + PAGE_INTENT_KEY in App.tsx) pre-selects it.
+  const [purpose, setPurpose] = useState<"friends" | "page">(
+    () => (searchParams.get("purpose") === "page" ? "page" : "friends"),
+  );
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -51,8 +60,16 @@ export function Groups() {
       const b = await res.json().catch(() => ({}));
       return setMsg(b.error || "could not create");
     }
+    const created = (await res.json()) as Group;
     setName("");
     setDescription("");
+    if (purpose === "page") {
+      // Land straight on the new page instead of the group list - the
+      // share-your-page card is already the FIRST card there, plus a
+      // one-time "your page is live" callout (GroupPage, ?created=page).
+      nav(`/g/${created.id}?created=page`);
+      return;
+    }
     reload();
   }
 
@@ -64,6 +81,18 @@ export function Groups() {
 
       <form className="card stack" onSubmit={create}>
         <label className="field" htmlFor="gn">Create a group</label>
+        <div className="row wrap" role="radiogroup" aria-label="What's this group for" style={{ gap: 6 }}>
+          <button type="button" className={`chip sm ${purpose === "friends" ? "on" : ""}`}
+            aria-pressed={purpose === "friends"} data-testid="group-purpose-friends"
+            onClick={() => setPurpose("friends")}>
+            Friend group
+          </button>
+          <button type="button" className={`chip sm ${purpose === "page" ? "on" : ""}`}
+            aria-pressed={purpose === "page"} data-testid="group-purpose-page"
+            onClick={() => setPurpose("page")}>
+            Venue or performer page
+          </button>
+        </div>
         <div className="row">
           <input
             id="gn"
@@ -76,7 +105,8 @@ export function Groups() {
           <button className="btn primary" data-testid="group-create">Create</button>
         </div>
         <textarea className="input" maxLength={500} data-testid="group-desc" value={description} rows={2}
-          placeholder="What's this group about? (optional)" onChange={(e) => setDescription(e.target.value)} />
+          placeholder={purpose === "page" ? "Tell people what you do and where" : "What's this group about? (optional)"}
+          onChange={(e) => setDescription(e.target.value)} />
         <p className="muted small" style={{ margin: 0 }}>Add a photo or GIF from the group page after creating.</p>
         {msg && <p className="muted small">{msg}</p>}
       </form>
@@ -207,11 +237,21 @@ export function GroupPage() {
   const { id } = useParams();
   const api = useApi();
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data, loading, reload } = useAsync<GroupDetail>((a) => getJSON(a, `/api/groups/${id}`), [id]);
   const [addMsg, setAddMsg] = useState<string | null>(null);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickingGif, setPickingGif] = useState(false);
+  // One-time "your page is live" callout right after creating a page (see the
+  // Groups() create form's ?created=page navigation). Captured once from the
+  // initial URL, then the param is stripped so a refresh doesn't repeat it -
+  // the flag itself lives only in this render's state, not storage.
+  const [justCreatedPage] = useState(() => searchParams.get("created") === "page");
+  useEffect(() => {
+    if (searchParams.get("created") === "page") nav(`/g/${id}`, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // One-time rollout note about old links (see the Share card below).
   const [linkHintSeen, setLinkHintSeen] = useState(() => {
     try { return localStorage.getItem(LINK_HINT_KEY) === "1"; } catch { return true; }
@@ -349,6 +389,17 @@ export function GroupPage() {
           </form>
         )}
       </div>
+
+      {/* One-time "you're live" moment right after creating a page (Groups()'s
+          purpose-tuned create form) - the Share-your-page card right below is
+          already the FIRST card on this page, so this is the headline on top
+          of it, not a replacement for it. */}
+      {justCreatedPage && (
+        <div className="card stack" data-testid="group-page-live" style={{ gap: 4 }}>
+          <div className="section-h" style={{ margin: 0 }}>Your page is live</div>
+          <p className="muted small" style={{ margin: 0 }}>Share this link so people can follow you.</p>
+        </div>
+      )}
 
       {/* Rollout reality #1: links shared before this change were join links
           and are now view-only. Small, one-time, dismissible - sits above both

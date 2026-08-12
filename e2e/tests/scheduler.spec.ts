@@ -2505,13 +2505,78 @@ test.describe("scheduler", () => {
     // Pages/following leads the hero; friend-group planning is the secondary
     // path just under the primary CTA.
     await expect(page.locator(".land-title")).toContainText("Fill the room");
-    await expect(page.getByTestId("create-page")).toHaveAttribute("href", "/sign-up");
+    if (DEV_AUTH) {
+      // Dev mode has no real sign-up round trip, so the CTA is a button that
+      // simulates conversion (see the "sign-up carries intent" test below).
+      await expect(page.getByTestId("create-page")).toBeVisible();
+    } else {
+      // Carries the page-creation intent through the sign-up redirect, same
+      // mechanism as the guest-login "Log in" link's ?redirect_url=.
+      await expect(page.getByTestId("create-page")).toHaveAttribute(
+        "href", `/sign-up?redirect_url=${encodeURIComponent("/groups?purpose=page")}`);
+    }
     await expect(page.locator(".land-shot")).toHaveCount(3); // invite + week pick + month series
     await expect(page.getByTestId("start-plan")).toBeVisible();
     await expect(page.getByTestId("start-plan")).toHaveAttribute("href", "/start");
     await expect(page.locator(".land-points")).toContainText("whole series");
     // Support contact in the footer.
     await expect(page.locator('a[href^="mailto:support@whensdays.com"]')).toBeVisible();
+  });
+
+  test("sign-up intent: landing 'Create your page' lands in the purpose-tuned create flow", async ({ browser }) => {
+    test.skip(!DEV_AUTH, "dev auth simulates the sign-up conversion (see GuestSignupButton's dev path)");
+    const ctx = await browser.newContext();
+    try {
+      const page = await ctx.newPage();
+      await ensureUser(page, "pageintent1", "Page Intent", "pageintent1");
+      await page.goto("/landing");
+      await page.getByTestId("create-page").click();
+      // Lands straight in create-a-page - not a generic Home - with the
+      // purpose pre-selected and its copy already tuned.
+      await page.waitForURL(/\/groups\?purpose=page/);
+      await expect(page.getByTestId("group-purpose-page")).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByTestId("group-purpose-friends")).toHaveAttribute("aria-pressed", "false");
+      await expect(page.getByTestId("group-desc")).toHaveAttribute("placeholder", "Tell people what you do and where");
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test("create-a-page: lands on the group page with the share-your-page card live", async ({ page }) => {
+    await ensureUser(page, "pagecreator1", "Page Creator", "pagecreator1");
+    await page.goto("/groups?purpose=page");
+    await expect(page.getByTestId("group-purpose-page")).toHaveAttribute("aria-pressed", "true");
+    const gname = `Comedy Cellar ${test.info().testId}`;
+    await page.getByTestId("group-name").fill(gname);
+    await page.getByTestId("group-create").click();
+    // Page purpose lands on the GROUP PAGE (friends purpose stays on the list -
+    // covered by the existing group-create tests), share card first + the
+    // one-time "your page is live" callout above it.
+    await expect(page.getByTestId("group-title")).toHaveText(gname);
+    await expect(page.getByTestId("group-page-live")).toBeVisible();
+    await expect(page.getByTestId("group-share-page-card")).toBeVisible();
+    const cards = page.locator('[data-testid="group-share-page-card"], [data-testid="group-invite-card"]');
+    await expect(cards.first()).toHaveAttribute("data-testid", "group-share-page-card");
+    // The ?created=page marker is stripped once consumed - a refresh won't re-show it.
+    await expect(page).toHaveURL(/\/g\/[^/?]+$/);
+  });
+
+  test("brand-new page owner sees the Home empty-state 'Post your first event' nudge", async ({ page }) => {
+    await ensureUser(page, "newpageowner1", "New Page Owner", "newpageowner1");
+    await page.goto("/groups?purpose=page");
+    const gname = `Fresh Venue ${test.info().testId}`;
+    await page.getByTestId("group-name").fill(gname);
+    await page.getByTestId("group-create").click();
+    await expect(page.getByTestId("group-title")).toHaveText(gname);
+    const groupId = page.url().match(/\/g\/([^/?]+)/)?.[1];
+    expect(groupId).toBeTruthy();
+    // Owns exactly one group, zero events - Home's brand-new-page-owner nudge.
+    await page.goto("/");
+    await expect(page.getByTestId("events-empty")).toBeVisible();
+    await expect(page.getByTestId("page-owner-hint")).toContainText(gname);
+    const cta = page.getByTestId("page-first-event");
+    await expect(cta).toBeVisible();
+    await expect(cta).toHaveAttribute("href", `/new?group=${groupId}`);
   });
 
   test("zero-signup: start a plan from scratch, share-ready", async ({ browser }) => {
