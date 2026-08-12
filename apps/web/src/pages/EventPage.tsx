@@ -1061,9 +1061,9 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
                 <span className="row" style={{ gap: 12 }}>
                   <a href={mapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
                     onClick={(ev) => openGoogleMaps(ev, e.location_address)}
-                    className="accent" data-testid="directions-link">Google Maps ↗</a>
+                    className="accent" data-testid="directions-link">Google Maps</a>
                   <a href={appleMapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
-                    className="accent" data-testid="directions-apple">Apple Maps ↗</a>
+                    className="accent" data-testid="directions-apple">Apple Maps</a>
                 </span>
               </span>
             ) : "Address to come"}
