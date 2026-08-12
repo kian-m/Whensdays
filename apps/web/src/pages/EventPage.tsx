@@ -853,7 +853,7 @@ function GeneralSetup({ data, reload }: { data: EventDetail; reload: () => void 
         </div>
       )}
       {error && <p className="err">{error}</p>}
-      <button type="button" className="btn" style={{ alignSelf: "flex-start" }} data-testid="poll-setup-save"
+      <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} data-testid="poll-setup-save"
         disabled={saving || (scope === "dates" && pollDays.size === 0)} onClick={save}>
         {saving ? "Saving…" : "Start the poll"}
       </button>
@@ -1270,7 +1270,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
       {/* Sticky action bar: in a taller sectioned form Save/Cancel must stay
           reachable without scrolling back down (sticky to the form's bottom). */}
       <div className="row edit-actions">
-        <button className="btn" data-testid="edit-save">Save changes</button>
+        <button className="btn primary" data-testid="edit-save">Save changes</button>
         <button type="button" className="btn ghost sm" data-testid="edit-cancel" onClick={() => { setEditing(false); onPreviewTheme(null); }}>Cancel</button>
       </div>
     </form>
@@ -1541,7 +1541,7 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
         );
       })}
       {multi.size > 0 && (
-        <button className="btn" style={{ alignSelf: "flex-start" }} data-testid="finalize-multi" onClick={finalizeMulti}>
+        <button className="btn primary" style={{ alignSelf: "flex-start" }} data-testid="finalize-multi" onClick={finalizeMulti}>
           Schedule {multi.size} date{multi.size > 1 ? "s" : ""} as a series
         </button>
       )}
@@ -1978,7 +1978,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
       <div className="row wrap">
         <button type="button" className="btn ghost sm" data-testid="general-add-date"
           onClick={() => setMoreWhens((m) => [...m, ""])}>+ Add another date</button>
-        <button className="btn sm" data-testid="general-finalize" disabled={pickCount === 0} onClick={finalize}>
+        <button className="btn primary sm" data-testid="general-finalize" disabled={pickCount === 0} onClick={finalize}>
           {pickCount > 1 ? `Schedule ${pickCount} dates` : "Finalize"}
         </button>
       </div>

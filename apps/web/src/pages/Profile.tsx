@@ -302,7 +302,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
         </div>
         {error && <p className="err">{error}</p>}
         <div className="row">
-          <button className="btn" data-testid="save-profile">Save</button>
+          <button className="btn primary" data-testid="save-profile">Save</button>
           <button type="button" className="btn ghost sm" data-testid="profile-cancel"
             onClick={() => setEditing(false)}>Cancel</button>
         </div>

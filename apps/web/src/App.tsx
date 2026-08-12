@@ -11,6 +11,7 @@ import {
 import "./styles.css";
 import { ApiContext, ApiFn, Badges, Profile, ProfileContext, fetchDashboard, useApi, useProfile } from "./lib";
 import { Avatar } from "./ui";
+import { Ic } from "./Icons";
 import { analytics, EVENTS, denyConsent, grantConsent, needsConsent } from "./analytics";
 import { Home } from "./pages/Home";
 import { ProfileSetup } from "./pages/ProfileSetup";
@@ -353,7 +354,7 @@ function GuestJoin({ eventId, onJoined }: { eventId: string | null; onJoined: (a
         <form className="row" style={{ maxWidth: 360, width: "100%" }} onSubmit={join}>
           <input className="input" maxLength={80} data-testid="guest-name" value={name} placeholder="Your name"
             onChange={(e) => setName(e.target.value)} />
-          <button className="btn" data-testid="guest-join">Join</button>
+          <button className="btn primary" data-testid="guest-join">Join</button>
         </form>
         {err && <p className="err">{err}</p>}
         {/* Existing users shouldn't have to join as a guest: sign in and land
@@ -608,15 +609,16 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
 
 // Bottom tab bar for mobile (CSS hides it on wider screens). Same destinations
 // as the top nav, as icon + label - inspired by app-style bottom navigation.
-// Discover is deliberately NOT here (roadmap: no public social surface before
-// group density - empty rooms kill trust). Its routes stay live for direct
-// links; re-add the tab when there's density to show.
-const TABS = [
-  { to: "/", id: "events", label: "Events", end: true, icon: IconHome },
-  { to: "/friends", id: "friends", label: "Friends", icon: IconFriends },
-  { to: "/groups", id: "groups", label: "Groups", icon: IconGroups },
-  { to: "/calendars", id: "calendars", label: "Calendars", icon: IconCalendar },
-  { to: "/profile", id: "profile", label: "Profile", icon: IconUser },
+// Icons come only from Icons.tsx (§5/§1 of HOUSE-LIGHTS.md) - no bespoke inline
+// SVGs. Discover is deliberately NOT here (roadmap: no public social surface
+// before group density - empty rooms kill trust). Its routes stay live for
+// direct links; re-add the tab when there's density to show.
+const TABS: { to: string; id: string; label: string; end?: boolean; icon: () => React.ReactElement }[] = [
+  { to: "/", id: "events", label: "Events", end: true, icon: () => Ic.home() },
+  { to: "/friends", id: "friends", label: "Friends", icon: () => Ic.people() },
+  { to: "/groups", id: "groups", label: "Groups", icon: () => Ic.grid() },
+  { to: "/calendars", id: "calendars", label: "Calendars", icon: () => Ic.calendar() },
+  { to: "/profile", id: "profile", label: "Profile", icon: () => Ic.person() },
 ];
 
 function TabBar({ badges }: { badges: Badges }) {
@@ -629,7 +631,7 @@ function TabBar({ badges }: { badges: Badges }) {
         return (
           <NavLink key={t.to} to={t.to} end={t.end} className="tab" data-testid={`tab-${t.id}`} aria-label={t.label}>
             <span className="icon-wrap">
-              <t.icon />
+              {t.icon()}
               {n > 0 && <span className="dot-badge" data-testid={`badge-${t.id}`}>{n}</span>}
             </span>
             <span>{t.label}</span>
@@ -637,45 +639,5 @@ function TabBar({ badges }: { badges: Badges }) {
         );
       })}
     </nav>
-  );
-}
-
-// --- inline line icons (stroke = currentColor so they take the active color) ---
-type IconProps = { };
-const svgProps = {
-  viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
-  strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const,
-};
-function IconHome(_: IconProps) {
-  return (
-    <svg {...svgProps}><path d="M3 10.8 12 3l9 7.8" /><path d="M5 9.6V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.6" /><path d="M9.5 21v-6h5v6" /></svg>
-  );
-}
-function IconFriends(_: IconProps) {
-  return (
-    <svg {...svgProps}><circle cx="9.5" cy="8" r="3.2" /><path d="M3.8 19v-1a4 4 0 0 1 4-4h3.4a4 4 0 0 1 4 4v1" /><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6" /><path d="M17.5 14.2A4 4 0 0 1 20.2 18v1" /></svg>
-  );
-}
-// IconCompass belonged to the Discover tab - kept for when Discover returns to
-// the nav (see the TABS comment); referenced here so strict TS keeps it.
-void IconCompass;
-function IconCompass(_: IconProps) {
-  return (
-    <svg {...svgProps}><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2 5-5 2 2-5z" /></svg>
-  );
-}
-function IconGroups(_: IconProps) {
-  return (
-    <svg {...svgProps}><circle cx="12" cy="7" r="3" /><circle cx="5" cy="10" r="2.4" /><circle cx="19" cy="10" r="2.4" /><path d="M12 13a6 6 0 0 0-6 6h12a6 6 0 0 0-6-6Z" /><path d="M5 15a4 4 0 0 0-3.5 4h3.5" /><path d="M19 15a4 4 0 0 1 3.5 4h-3.5" /></svg>
-  );
-}
-function IconCalendar(_: IconProps) {
-  return (
-    <svg {...svgProps}><rect x="3.5" y="5" width="17" height="15.5" rx="2.2" /><path d="M3.5 9.5h17" /><path d="M8 3.2v3.4" /><path d="M16 3.2v3.4" /></svg>
-  );
-}
-function IconUser(_: IconProps) {
-  return (
-    <svg {...svgProps}><circle cx="12" cy="8.2" r="3.6" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>
   );
 }

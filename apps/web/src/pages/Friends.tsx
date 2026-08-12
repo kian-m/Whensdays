@@ -66,7 +66,7 @@ export function Friends() {
         <div className="row">
           <input id="h" className="input" maxLength={40} data-testid="friend-handle" value={handle}
             onChange={(e) => setHandle(e.target.value)} placeholder="alex" />
-          <button className="btn" data-testid="add-friend">Add</button>
+          <button className="btn primary" data-testid="add-friend">Add</button>
         </div>
         {msg && <p className="muted small">{msg}</p>}
       </form>

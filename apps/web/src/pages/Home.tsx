@@ -153,7 +153,7 @@ export function Home() {
     <div className="stack">
       <div className="row between">
         <h1>Your plans</h1>
-        <Link to="/new" className="btn" data-testid="new-event">+ New event</Link>
+        <Link to="/new" className="btn primary" data-testid="new-event">+ New event</Link>
       </div>
 
       {/* Filter row - tap to narrow the list (Kalshi/Partiful-style). */}
@@ -242,19 +242,21 @@ export function Home() {
 function FollowedTile({ e, onClick }: { e: PublicEvent; onClick: () => void }) {
   const page = e.group_id && e.group_name ? e.group_name : e.host_name;
   return (
-    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : "type-tile"}`}
+    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : ""}`}
       data-testid="following-tile" onClick={onClick}>
-      {e.photo_url && <EventThumb photo={e.photo_url} size={72} />}
-      <div style={{ flex: 1 }}>
+      <EventThumb photo={e.photo_url} title={e.title} size={72} />
+      <div style={{ flex: 1, minWidth: 0 }}>
         <span className="title">{e.title}</span>
-        <div className="muted small"><span className="stamp">{fmtDateTime(e.starts_at)}</span></div>
+        <div className="muted small"><span className="stamp time">{fmtDateTime(e.starts_at)}</span></div>
+        {/* "muted small line, standard link styling" - the "via" wrapper stays
+            muted, but the page name itself is a real link (default `a` color +
+            hover underline) when it's a group, not just gray text. */}
         {page && (
-          e.group_id ? (
-            <Link to={`/g/${e.group_id}`} className="muted small" data-testid="following-attribution"
-              onClick={(ev) => ev.stopPropagation()}>via {page}</Link>
-          ) : (
-            <span className="muted small" data-testid="following-attribution">via {page}</span>
-          )
+          <div className="muted small" data-testid="following-attribution">
+            via {e.group_id ? (
+              <Link to={`/g/${e.group_id}`} onClick={(ev) => ev.stopPropagation()}>{page}</Link>
+            ) : page}
+          </div>
         )}
       </div>
     </div>
@@ -269,10 +271,9 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe,
   const faces = (pile?.faces ?? []).slice(0, 5);
   const extra = (pile?.going ?? 0) - faces.length;
   return (
-    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : "type-tile"}`} data-testid="event-row" onClick={onClick}>
-      {/* Photo/GIF only - a photo-less tile leads with its title. */}
-      {e.photo_url && <EventThumb photo={e.photo_url} size={72} />}
-      <div style={{ flex: 1 }}>
+    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : ""}`} data-testid="event-row" onClick={onClick}>
+      <EventThumb photo={e.photo_url} title={e.title} size={72} />
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div className="row between">
           {/* Long titles wrap onto new lines instead of pushing the status pill
               off the tile: NOT className="row" (the mobile .row.between > .row
@@ -285,13 +286,13 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe,
             {e.status === "draft" ? <Pill kind="">Draft</Pill>
               : declinedByMe && !past ? <Pill kind="declined">Can't go</Pill>
               : past ? (attended ? <Pill kind="scheduled">Attended</Pill> : <Pill kind="">Passed</Pill>)
-              : soon ? <Pill kind="scheduled">{soon}</Pill>
+              : soon ? <Pill kind="deciding">{soon}</Pill>
               : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
               : <Pill kind="scheduled">Set</Pill>}
           </span>
         </div>
         <div className="muted small">
-          {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
+          {e.status === "polling" ? "Finding a time" : <span className="stamp time">{fmtDateTime(e.starts_at)}</span>}
           {seriesN && seriesN > 1 ? <span className="stamp" data-testid="series-badge"> · SERIES · {seriesN} DATES</span> : null}
         </div>
         <div className="muted small" style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>

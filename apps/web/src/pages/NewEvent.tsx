@@ -207,7 +207,7 @@ export function NewEvent() {
           Show to my followers
         </label>
         {err && <p className="err">{err}</p>}
-        <button className="btn btn-block" data-testid="quick-create" disabled={saving || !valid}>
+        <button className="btn primary btn-block" data-testid="quick-create" disabled={saving || !valid}>
           {saving ? "Creating…" : "Create & get the link"}
         </button>
       </form>

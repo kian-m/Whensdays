@@ -20,15 +20,15 @@ function groupStreak(events: Event[]): number {
   while (months.has(m)) { n++; m--; }
   return n;
 }
-import { Avatar, BackLink, ConfirmButton, FollowButton, GifPicker, ListSkeleton, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
+import { Avatar, BackLink, ConfirmButton, FollowButton, GifPicker, ListSkeleton, QRButton, TitlePoster, fileToAvatar, useAsync, EventThumb } from "../ui";
 import { Ic } from "../Icons";
 
-// Group icon: uploaded photo wins over monogram fallback.
+// Group icon: uploaded photo wins; otherwise the same TitlePoster monogram
+// language as event tiles (plum + grain, Fraunces initial, stripe edge) -
+// never the old emoji default (👥 stays valid server-side, just unrendered).
 function GroupIcon({ group, size = 44 }: { group: Group; size?: number }) {
   if (group.icon_url) return <Avatar url={group.icon_url} name={group.name} size={size} />;
-  // Monogram: first letter of group name, or empty placeholder (Phase 3: TitlePoster).
-  const initial = group.name.charAt(0).toUpperCase() || "·";
-  return <span style={{ fontSize: size * 0.5, fontWeight: 700, display: "grid", placeItems: "center", width: size, height: size, background: "var(--plum)", color: "var(--cream)", borderRadius: "var(--r-xs)" }}>{initial}</span>;
+  return <TitlePoster title={group.name} scale="thumb" size={size} />;
 }
 
 type GroupsResp = { groups: Group[] };
@@ -73,7 +73,7 @@ export function Groups() {
             onChange={(e) => setName(e.target.value)}
             placeholder="Group name"
           />
-          <button className="btn" data-testid="group-create">Create</button>
+          <button className="btn primary" data-testid="group-create">Create</button>
         </div>
         <textarea className="input" maxLength={500} data-testid="group-desc" value={description} rows={2}
           placeholder="What's this group about? (optional)" onChange={(e) => setDescription(e.target.value)} />
@@ -140,13 +140,13 @@ export function GroupPublicView({ id, signedOut, onJoined }: { id: string; signe
   return (
     <div className="stack">
       <div className="card stack" style={{ alignItems: "center", textAlign: "center" }} data-testid="group-public-card">
-        {entity.icon_url ? <Avatar url={entity.icon_url} name={entity.name} size={72} /> : (() => { const initial = entity.name.charAt(0).toUpperCase() || "·"; return <span style={{ fontSize: "2rem", fontWeight: 700, width: 72, height: 72, display: "grid", placeItems: "center", background: "var(--plum)", color: "var(--cream)", borderRadius: "var(--r-sm)" }}>{initial}</span>; })()}
+        {entity.icon_url ? <Avatar url={entity.icon_url} name={entity.name} size={72} /> : <TitlePoster title={entity.name} scale="thumb" size={72} />}
         <h1 data-testid="group-public-title">{entity.name}</h1>
         <p className="muted small">{entity.member_count} {entity.member_count === 1 ? "member" : "members"}</p>
         {entity.description && <p className="muted small" style={{ maxWidth: 420 }}>{entity.description}</p>}
         {/* Join shows ONLY on an invite link (the server decides). */}
         {viewer.can_join && (
-          <button className="btn" data-testid="group-join" disabled={busy} onClick={join}>
+          <button className="btn primary" data-testid="group-join" disabled={busy} onClick={join}>
             {busy ? "Joining…" : "Join this group"}
           </button>
         )}
@@ -255,8 +255,8 @@ export function GroupPage() {
             <span className="stack" style={{ gap: 4, minWidth: 0 }}>
               <h1 data-testid="group-title">{group.name}</h1>
               {groupStreak(events) >= 2 && (
-                <span className="pill polling" data-testid="group-streak" style={{ alignSelf: "flex-start" }}>
-                  {groupStreak(events)}-month streak
+                <span className="stamp time" data-testid="group-streak" style={{ alignSelf: "flex-start" }}>
+                  {groupStreak(events)}-MONTH STREAK
                 </span>
               )}
             </span>
@@ -336,7 +336,7 @@ export function GroupPage() {
             and are now view-only. Small, one-time, dismissible. */}
         {canManage && !linkHintSeen && (
           <div className="row between" data-testid="group-link-hint"
-            style={{ gap: 8, alignItems: "flex-start", background: "var(--glass-2)", border: "1px solid var(--glass-line)", borderRadius: "var(--radius-sm)", padding: "0.55rem 0.7rem" }}>
+            style={{ gap: 8, alignItems: "flex-start", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "0.55rem 0.7rem" }}>
             <span className="muted small">
               Heads up: links you shared before now open the <b>public page</b> only. To add someone as a member, send the <b>Invite to join</b> link below.
             </span>
@@ -355,7 +355,7 @@ export function GroupPage() {
           </p>
           <button type="button" className="share-copy" data-testid="group-share-copy" title="Tap to copy"
             onClick={() => { navigator.clipboard?.writeText(shareURL); setCopyMsg("Public page link copied"); }}>
-            {shareURL.replace(/^https?:\/\//, "")}
+            <span className="row" style={{ gap: 6, alignItems: "center" }}>{Ic.link(15)}{shareURL.replace(/^https?:\/\//, "")}</span>
           </button>
         </div>
 
@@ -369,7 +369,9 @@ export function GroupPage() {
           </p>
           <button type="button" className="share-copy" data-testid="group-invite-copy" title="Tap to copy"
             onClick={() => { navigator.clipboard?.writeText(inviteURL); setCopyMsg("Invite link copied"); }}>
-            {copyMsg === "Invite link copied" ? "Copied" : "Copy the invite link"}
+            <span className="row" style={{ gap: 6, alignItems: "center" }}>
+              {Ic.link(15)}{copyMsg === "Invite link copied" ? "Copied" : "Copy the invite link"}
+            </span>
           </button>
           <div className="row wrap" style={{ gap: 6 }}>
             {/* QR belongs to the JOIN link - it's the in-person "scan this to
@@ -537,7 +539,7 @@ export function GroupMembersPage() {
               onChange={(e) => setHandle(e.target.value)}
               placeholder="handle"
             />
-            <button className="btn" data-testid="member-add">Add</button>
+            <button className="btn primary" data-testid="member-add">Add</button>
           </div>
           {addMsg && <p className="muted small">{addMsg}</p>}
         </form>
@@ -549,17 +551,17 @@ export function GroupMembersPage() {
 function GroupEventRow({ event, onClick, seriesN, testid = "group-event" }: { event: Event; onClick: () => void; seriesN?: number; testid?: string }) {
   return (
     <div
-      className={`card ev tile ${event.theme ? `theme-tile theme-${event.theme}` : "type-tile"}`}
+      className={`card ev tile ${event.theme ? `theme-tile theme-${event.theme}` : ""}`}
       data-testid={testid}
       style={{ cursor: "pointer" }}
       onClick={onClick}
     >
-      {event.photo_url && <EventThumb photo={event.photo_url} size={64} />}
-      <div style={{ flex: 1 }}>
+      <EventThumb photo={event.photo_url} title={event.title} size={64} />
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div className="title">{event.title}</div>
         <div className="muted small">
-          {event.status === "polling" ? "Finding a time" : fmtDateTime(event.starts_at)}
-          {seriesN && seriesN > 1 ? <span data-testid="series-badge"> · {seriesN} dates</span> : null}
+          {event.status === "polling" ? "Finding a time" : <span className="stamp time">{fmtDateTime(event.starts_at)}</span>}
+          {seriesN && seriesN > 1 ? <span className="stamp" data-testid="series-badge"> · SERIES · {seriesN} DATES</span> : null}
         </div>
       </div>
     </div>

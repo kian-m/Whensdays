@@ -54,7 +54,7 @@ export function ProfileSetup({ onDone, prefillName }: { onDone: (p: Profile) => 
           <p className="muted small" style={{ marginTop: 4 }}>Friends add you by this. Letters, numbers, _ or -.</p>
         </div>
         {error && <p className="err">{error}</p>}
-        <button className="btn btn-block" data-testid="setup-save" disabled={saving}>
+        <button className="btn primary btn-block" data-testid="setup-save" disabled={saving}>
           {saving ? "Saving…" : "Let's go"}
         </button>
       </form>

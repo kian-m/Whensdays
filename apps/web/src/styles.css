@@ -250,26 +250,17 @@ a:hover { text-decoration: underline; }
 .wrap { flex-wrap: wrap; }
 .muted { color: var(--muted); }
 
-/* event tiles: a friendly type-colored edge, plus relationship glows.
-   tile-going  = you're going / hosting (accent glow)
-   tile-friend = hosted by or attended by your friends (green glow)
-   plain       = the public stream, neutral
-   NOTE: full tile redesign (thumb/monogram poster, stamp date line) lands in
-   a later phase - this is only the token cleanup for the glass removal. */
-.tile { border-left: 4px solid var(--line); }
-.tile-going {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 1px var(--surface-2), 0 6px 18px rgba(238, 108, 77, 0.18);
-  background: linear-gradient(135deg, rgba(238, 108, 77, 0.10), var(--surface) 45%);
-}
-.tile-friend {
-  box-shadow: 0 0 0 1px rgba(35, 160, 115, 0.24), 0 6px 18px rgba(35, 160, 115, 0.13);
-  background: linear-gradient(135deg, rgba(35, 160, 115, 0.10), var(--surface) 45%);
-}
+/* event tiles (comp's .tile): a flat --surface card (already carried by
+   .card) laid out as a thumb + title/stamp/facepile row. No gradient wash, no
+   colored glow border, no relationship-tier tinting - §9 kills that whole
+   "AI SaaS glow" language. A themed event gets ONLY the shared .theme-tile 3px
+   bottom edge (below); "you're going" reads from the pill/text in the row,
+   never from lighting up the whole card. */
+.tile { display: flex; gap: 0.85rem; align-items: center; }
 .friends-going {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 0.75rem; font-weight: 700; color: var(--go);
-  background: rgba(35, 160, 115, 0.12); border-radius: 999px; padding: 0.12rem 0.5rem;
+  background: rgba(35, 160, 115, 0.12); border-radius: var(--r-xs); padding: 0.12rem 0.5rem;
 }
 
 /* event card */
@@ -290,9 +281,15 @@ a:hover { text-decoration: underline; }
   display: inline-flex; align-items: center; gap: 0.45em;
   font: inherit; font-weight: 700; font-size: 0.95rem;
   padding: 0.6rem 1.15rem; border-radius: var(--r-sm);
-  border: 1px solid transparent; cursor: pointer;
+  cursor: pointer;
   white-space: nowrap; /* a button label must never wrap mid-phrase on mobile */
   transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  /* An unmodified .btn (no .primary/.ghost/.quiet/.danger) must still be
+     presentable - a plain <button className="btn"> used to render with a
+     transparent fill + transparent border (browser-default looking) at every
+     call site that forgot a modifier. Default to the quiet look; .primary/
+     .ghost/.danger below override it for the sites that need a different job. */
+  background: var(--surface-2); color: var(--ink); border: 1px solid var(--line);
 }
 .btn:hover { transform: translateY(-1px); }
 .btn:active { transform: translateY(0) scale(0.98); }
@@ -550,8 +547,11 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .share-copy:active { transform: scale(0.99); }
 
-/* event tile thumbnail (cover photo/gif as the tile's main visual) */
-.thumb { border-radius: 10px; object-fit: cover; flex: none; display: block; box-shadow: var(--shadow); }
+/* event tile thumbnail (cover photo/gif as the tile's main visual). No
+   box-shadow: a list has many tiles, and §1.9 reserves the one shadow per
+   screen for the element that must float (modal/phone-frame/active card) -
+   a shadow on every thumb was exactly the "AI glow" this direction removes. */
+.thumb { border-radius: var(--r-sm); object-fit: cover; flex: none; display: block; }
 /* comment thread: chat-style bubbles (avatar + bubble; own = accent tint) */
 .comment-row { display: flex; gap: 8px; align-items: flex-start; }
 .comment-bubble {
@@ -666,18 +666,6 @@ textarea.input { resize: vertical; min-height: 64px; }
   background: var(--accent);
 }
 .theme-tile .title { color: var(--ink); font-weight: 700; }
-
-/* Non-themed tiles glow with their TYPE color (--tile-accent, set inline) so
-   every tile on the events lists reads as one family - same border/glow
-   language as .theme-tile, tinted by type instead of theme. */
-.type-tile {
-  --tile-accent: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--tile-accent) 55%, var(--line));
-  border-left-width: 5px !important;
-  box-shadow: 0 8px 26px -6px color-mix(in srgb, var(--tile-accent) 65%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--tile-accent) 16%, transparent), transparent 62%), var(--surface);
-}
-.type-tile .title { color: var(--ink); font-weight: 700; }
 
 /* facepile: overlapping avatar stack on event tiles ("who's going") */
 .facepile { display: flex; align-items: center; margin-top: 6px; }

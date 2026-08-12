@@ -138,22 +138,30 @@ function PublicEventRow({ e, onOpen, canFollow, following, toggleFollow, viewerI
   viewerId?: string;
   testid: string;
 }) {
-  // Relationship tier: going/hosting (accent glow) > friend-connected (green
-  // glow) > plain public stream.
+  // "You're going" reads from the pill in the row itself now - the whole-tile
+  // glow tiers (tile-going/tile-friend) were exactly the gradient-wash "AI
+  // SaaS" language House Lights removes (§9); tiles are flat, same as Home.
   const going = e.viewer_rsvp === "going" || e.host_id === viewerId;
-  const friendly = e.from_friend || e.friends_going > 0;
-  const tier = going ? "tile-going" : friendly ? "tile-friend" : "";
 
   return (
-    <div className={`card stack tile ${tier} ${e.theme ? `theme-tile theme-${e.theme}` : ""}`} data-testid={testid}
+    // NOT .tile here - .tile's flex-row layout is for Home/Groups' single-row
+    // tiles (paired with .ev, which already wins that layout); this card is a
+    // richer two-row stack (thumb+title row, then host+follow row) and only
+    // wants .tile's SIBLING concerns: the flat --surface card + the themed
+    // bottom edge.
+    <div className={`card stack ${e.theme ? `theme-tile theme-${e.theme}` : ""}`} data-testid={testid}
       style={{ gap: 6 }}>
       <div className="row between">
-        <span className="row" style={{ gap: 10, cursor: "pointer" }} onClick={onOpen}>
-          {e.photo_url && <EventThumb photo={e.photo_url} size={64} />}
-          <span className="stack" style={{ gap: 1 }}>
-            <strong>{e.title}</strong>
+        {/* flex:auto inline (beats the ".row.between > .row" nowrap/flex:none
+            rule meant for right-pinned action clusters, not this left-side
+            thumb+title cluster) so a long title shrinks instead of shoving
+            the category tag off the card on a phone. */}
+        <span className="row" style={{ gap: 10, cursor: "pointer", minWidth: 0, flex: "1 1 auto" }} onClick={onOpen}>
+          <EventThumb photo={e.photo_url} title={e.title} size={64} />
+          <span className="stack" style={{ gap: 1, minWidth: 0 }}>
+            <strong style={{ overflowWrap: "anywhere" }}>{e.title}</strong>
             <span className="muted small">
-              {fmtDateTime(e.starts_at)}
+              <span className="stamp time">{fmtDateTime(e.starts_at)}</span>
               {e.city ? ` · ${e.city}` : ""}
               {going && <span className="pill scheduled" style={{ marginLeft: 6 }}>You're going</span>}
             </span>
