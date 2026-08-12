@@ -1,58 +1,58 @@
-/* Default theme = dark. Light theme opts in via <html data-theme="light">.
-   Look: crystal/glass panels floating over a slowly drifting sky. Everything is
-   token-driven - surfaces read --glass*, radii read --radius*, and the sky is
-   pure CSS (no image assets): a gradient (--sky) plus blurred radial "clouds"
-   (--cloud-*) that drift via one keyframe animation. */
+/* House Lights: a small theater just before the show starts. Dark is the
+   default "stage"; light is the "matinee" (house lights up). Every surface is
+   solid --surface with hairline --line borders - flat, no blur, no drifting
+   background. Palette is extracted from the wordmark (icon.svg): plum
+   stage, cream ink, and the W's candy stripes as functional color (coral =
+   action, amber = time/pending, teal = going/free). See
+   docs/design/HOUSE-LIGHTS.md for the full spec. */
 :root {
   color-scheme: dark;
-  --bg: #10141f;
-  --surface: #1a1f2e;
-  --ink: #f4f1ec;
-  --muted: #a3a0ad;
-  --line: #2e3242;
-  --accent: #ee6c4d;
-  --accent-soft: #3b2823;
-  --go: #34b986;
-  --maybe: #e2a33d;
-  --no: #e2606e;
-  --radius: 14px;       /* cards / panels */
-  --radius-sm: 10px;    /* buttons / chips / inputs - crisp, editorial */
-  --radius-xs: 7px;     /* status pills / micro elements */
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 12px 32px rgba(0, 0, 0, 0.35);
-  /* dusk sky - sunset through glass: coral glow sinking into teal-navy */
-  --sky: linear-gradient(180deg, #16203a 0%, #121728 55%, #0e1220 100%);
-  --cloud-a: rgba(238, 108, 77, 0.26);
-  --cloud-b: rgba(58, 163, 139, 0.18);
-  --cloud-c: rgba(233, 161, 59, 0.13);
-  /* glass */
-  --glass: rgba(22, 25, 40, 0.52);
-  --glass-2: rgba(255, 255, 255, 0.05);       /* inputs/chips resting on glass */
-  --glass-line: rgba(255, 255, 255, 0.09);
-  --glass-glint: rgba(255, 255, 255, 0.07);   /* top inner highlight */
+  /* stage (dark, default) */
+  --bg: #1a1424;
+  --surface: #241c31;
+  --surface-2: #2b2239;
+  --line: #3a2f4d;
+  --ink: #f2e9dc;
+  --muted: #a596b4;
+  --plum: #2f2440;        /* logo dark: button text, poster bg, avatar bg */
+  --cream: #f8e3c9;       /* logo cream: poster type, hover button text */
+  --accent: #ee6c4d;      /* coral - action only */
+  --accent-deep: #c14e33;
+  --time: #e9a13b;        /* amber - datetimes, pending, marquee */
+  --go: #3aa38b;          /* teal - going / free / success */
+  --maybe: #e9a13b;       /* alias of --time */
+  --no: #e0607a;          /* rose - busy / declined / destructive */
+  --r: 12px; --r-sm: 8px; --r-xs: 5px;
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --stripe: linear-gradient(90deg, var(--accent) 0 25%, var(--time) 25% 50%, var(--go) 50% 75%, var(--cream) 75% 100%);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  --font-display: 'Fraunces Variable', Georgia, serif;
+  --font-body: 'Familjen Grotesk Variable', system-ui, -apple-system, sans-serif;
+  --font-data: 'Spline Sans Mono Variable', ui-monospace, 'SF Mono', monospace;
+  /* back-compat aliases: components not yet respec'd in a later phase still
+     reference the old --radius* names (incl. inline styles in ui.tsx) - point
+     them at the real tokens instead of leaving them undefined. */
+  --radius: var(--r); --radius-sm: var(--r-sm); --radius-xs: var(--r-xs);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #eef1f5;
+  /* matinee - same theater, house lights up */
+  --bg: #faf5ec;
   --surface: #ffffff;
-  --ink: #211a16;
-  --muted: #6b6560;
-  --line: #e3dcd2;
-  --accent: #d3572f;
-  --accent-soft: #fbe3d8;
-  --go: #178f63;
-  --maybe: #b57f1d;
-  --no: #cd4f5e;
-  --shadow: 0 1px 2px rgba(27, 26, 34, 0.05), 0 12px 32px rgba(47, 66, 110, 0.12);
-  /* open day sky, warm sunlit horizon */
-  --sky: linear-gradient(180deg, #a9cbe8 0%, #d9e7f2 48%, #f7f1e8 100%);
-  --cloud-a: rgba(255, 255, 255, 0.95);
-  --cloud-b: rgba(255, 255, 255, 0.72);
-  --cloud-c: rgba(250, 236, 219, 0.9);
-  --glass: rgba(255, 255, 255, 0.52);
-  --glass-2: rgba(255, 255, 255, 0.55);
-  --glass-line: rgba(255, 255, 255, 0.75);
-  --glass-glint: rgba(255, 255, 255, 0.85);
+  --surface-2: #f3ecdd;
+  --line: #e5dccb;
+  --ink: #2f2440;
+  --muted: #6f6280;
+  --plum: #2f2440;
+  --cream: #f8e3c9;
+  --accent: #ee6c4d;      /* fills only (plum text on it) */
+  --accent-deep: #c14e33; /* coral text/links on paper (4.4:1) */
+  --time: #9c6614;        /* amber deepened for paper (4.5:1) */
+  --go: #2b7f6c;
+  --maybe: #9c6614;
+  --no: #c14458;
+  --shadow: 0 18px 44px rgba(47, 36, 64, 0.14);
 }
 
 * { box-sizing: border-box; }
@@ -61,49 +61,50 @@ html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--bg) var(--grain);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
-/* The sky: a fixed gradient layer with big blurred cloud blobs drifting over
-   it. Pure CSS, GPU-cheap (one animated transform), zero assets. */
-body::before,
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
+/* type scale - Fraunces at display sizes only (titles, posters, lock banner),
+   Familjen for body/UI copy, Spline Sans Mono for stamps/pills/section
+   labels. Nothing else ever goes mono; mono never does sentences. */
+h1, h2, h3 { margin: 0; overflow-wrap: break-word; }
+h1 {
+  font-family: var(--font-display); font-weight: 900; font-size: 1.7rem;
+  line-height: 1.05; letter-spacing: -0.02em;
 }
-body::before { background: var(--sky); }
-body::after {
-  z-index: -1;
-  background:
-    radial-gradient(42% 30% at 18% 20%, var(--cloud-a), transparent 70%),
-    radial-gradient(52% 36% at 80% 10%, var(--cloud-b), transparent 70%),
-    radial-gradient(36% 26% at 64% 56%, var(--cloud-c), transparent 70%),
-    radial-gradient(46% 32% at 24% 84%, var(--cloud-b), transparent 72%);
-  filter: blur(36px);
-  transform: scale(1.3);
-  animation: sky-drift 90s ease-in-out infinite alternate;
+h2 {
+  font-family: var(--font-display); font-weight: 900; font-size: 1.35rem;
+  line-height: 1.1; letter-spacing: -0.015em;
 }
-@keyframes sky-drift {
-  from { transform: scale(1.3) translate(-2.2%, -1.6%) rotate(-1.2deg); }
-  to   { transform: scale(1.3) translate(2.2%, 1.8%) rotate(1.2deg); }
+h3 {
+  /* card titles stay quiet - Familjen, NOT Fraunces */
+  font-family: var(--font-body); font-weight: 700; font-size: 1.05rem; line-height: 1.25;
 }
-@media (prefers-reduced-motion: reduce) {
-  body::after { animation: none; }
+p { margin: 0; }
+a { color: var(--accent); text-decoration: none; }
+[data-theme="light"] a { color: var(--accent-deep); }
+a:hover { text-decoration: underline; }
+.small { font-size: 0.85rem; color: var(--muted); }
+
+/* section label - mono, uppercase, letterspaced. Never sentences. */
+.section-h {
+  font-family: var(--font-data); font-weight: 600; font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);
+  margin: 1.4rem 0 0.2rem;
 }
 
-/* type scale - display-weight headings with tight tracking read editorial,
-   not template. */
-/* break-word (not anywhere) breaks a genuinely long/unbreakable word to avoid
-   overflow, but never chops a normal multi-word title mid-word - so "Dev Team"
-   stays one line when it has room, rather than shattering into three. */
-h1, h2, h3 { letter-spacing: -0.025em; line-height: 1.08; margin: 0; overflow-wrap: break-word; }
+/* stamp - dates, times, counts. Mono, uppercase, tabular. Time stamps get the
+   amber tint via the .time modifier (fmtDate/fmtDateTime render into this). */
+.stamp {
+  font-family: var(--font-data); font-weight: 600; font-size: 0.8rem;
+  letter-spacing: 0.1em; text-transform: uppercase; font-variant-numeric: tabular-nums;
+}
+.stamp.time { color: var(--time); }
 
 /* Card header (group + event hero): title block left, action buttons/status
    right on desktop; on a phone they STACK (title gets the full width, actions
@@ -114,11 +115,6 @@ h1, h2, h3 { letter-spacing: -0.025em; line-height: 1.08; margin: 0; overflow-wr
   .card-header { flex-direction: column; }
   .card-header > .card-actions { align-self: stretch; }
 }
-h1 { font-size: 2.2rem; font-weight: 850; }
-h2 { font-size: 1.35rem; font-weight: 800; }
-h3 { font-size: 1.02rem; font-weight: 750; }
-p { margin: 0; }
-a { color: inherit; text-decoration: none; }
 
 .app { max-width: 720px; margin: 0 auto; padding: 0 1.1rem 4rem; }
 
@@ -147,9 +143,9 @@ a { color: inherit; text-decoration: none; }
 .nav-right { display: flex; align-items: center; gap: 0.4rem; }
 .nav-links { display: flex; align-items: center; gap: 0.4rem; }
 .nav-links a {
-  padding: 0.4rem 0.7rem; border-radius: var(--radius-sm); color: var(--muted); font-weight: 600; font-size: 0.9rem;
+  padding: 0.4rem 0.7rem; border-radius: var(--r-sm); color: var(--muted); font-weight: 600; font-size: 0.9rem;
 }
-.nav-links a.active { background: var(--accent-soft); color: var(--accent); }
+.nav-links a.active { background: var(--surface-2); color: var(--accent); }
 
 /* bottom tab bar - mobile only (hidden on wider screens) */
 .tabbar { display: none; }
@@ -158,9 +154,9 @@ a { color: inherit; text-decoration: none; }
   gap: 3px; color: var(--muted); font-size: 0.68rem; font-weight: 650; letter-spacing: -0.01em;
 }
 .tab svg { width: 24px; height: 24px; }
-.tab .icon-wrap { border-radius: var(--radius-sm); padding: 3px 14px; transition: background 0.15s ease; }
+.tab .icon-wrap { border-radius: var(--r-sm); padding: 3px 14px; transition: background 0.15s ease; }
 .tab.active { color: var(--accent); }
-/* modern active indicator: a soft accent pill hugging the icon */
+/* active indicator: a soft accent tint hugging the icon */
 .tab.active .icon-wrap { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 /* tiny red notification count on nav items */
 .dot-badge {
@@ -183,18 +179,15 @@ a { color: inherit; text-decoration: none; }
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
     height: calc(58px + env(safe-area-inset-bottom));
     padding: 0 0.3rem env(safe-area-inset-bottom);
-    background: var(--glass);
-    -webkit-backdrop-filter: blur(16px) saturate(1.5);
-    backdrop-filter: blur(16px) saturate(1.5);
-    border-top: 1px solid var(--glass-line);
-    box-shadow: 0 -2px 12px rgba(27, 26, 34, 0.05);
+    background: var(--surface);
+    border-top: 1px solid var(--line);
   }
   /* keep content clear of the fixed bar */
   .app { padding-bottom: calc(58px + env(safe-area-inset-bottom) + 1rem); }
   /* mobile-first: rows wrap rather than overflow. Buttons are nowrap, so a row
      that can't fit folds to the next line instead of pushing off-screen.
      EXCEPT .between header rows (title left, actions right): folding drops the
-     action button under the title (the wandering ✎ Edit) - they keep one line
+     action button under the title (the wandering Edit) - they keep one line
      and their children shrink instead. */
   .row { flex-wrap: wrap; }
   .row.between { flex-wrap: nowrap; }
@@ -208,20 +201,19 @@ a { color: inherit; text-decoration: none; }
   .row.between > .btn, .row.between > .chip { flex: none; }
 }
 
-/* cards - the frosted-glass panel every feature sits in */
+/* cards - flat, solid surface with a hairline border. No blur, no glint,
+   no glow. */
 .card {
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
-  backdrop-filter: blur(16px) saturate(1.5);
-  border: 1px solid var(--glass-line);
-  border-radius: var(--radius); padding: 1.1rem 1.2rem;
-  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-glint);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 1rem;
 }
 .stack { display: flex; flex-direction: column; gap: 0.9rem; }
 
 /* Host event-edit form: grouped disclosure sections (single-open) + a sticky
    action bar so Save/Cancel stay reachable in the taller sectioned form. */
-.edit-sec { border: 1px solid var(--glass-line); border-radius: var(--radius-sm); }
+.edit-sec { border: 1px solid var(--line); border-radius: var(--r-sm); }
 .edit-sec > summary {
   cursor: pointer; font-weight: 600; padding: 0.7rem 0.85rem; list-style: none; user-select: none;
 }
@@ -232,9 +224,8 @@ a { color: inherit; text-decoration: none; }
 .edit-actions {
   position: sticky; bottom: 0; z-index: 5;
   margin: 0.2rem -1.2rem -1.1rem; padding: 0.75rem 1.2rem;
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(12px) saturate(1.5); backdrop-filter: blur(12px) saturate(1.5);
-  border-top: 1px solid var(--glass-line); border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--surface);
+  border-top: 1px solid var(--line); border-radius: 0 0 var(--r) var(--r);
 }
 @media (max-width: 640px) {
   /* keep the sticky bar clear of the fixed mobile tabbar */
@@ -243,12 +234,13 @@ a { color: inherit; text-decoration: none; }
 
 /* skeleton placeholders - a first load renders the page's real chrome with
    shimmer blocks where data will land (see Skel/ListSkeleton in ui.tsx),
-   never a bare "Loading…" wall. Gradient-only motion, same policy as themes. */
+   never a bare "Loading…" wall. Gradient-only motion, same policy as themes.
+   Recolored to plum-toned surfaces for House Lights. */
 .skel {
   display: block;
-  background: linear-gradient(100deg, var(--glass-2) 40%, var(--glass-line) 50%, var(--glass-2) 60%);
+  background: linear-gradient(100deg, var(--surface-2) 40%, var(--line) 50%, var(--surface-2) 60%);
   background-size: 300% 100%;
-  border-radius: var(--radius-xs);
+  border-radius: var(--r-xs);
   animation: skel-sweep 1.4s ease-in-out infinite;
 }
 @keyframes skel-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
@@ -257,21 +249,22 @@ a { color: inherit; text-decoration: none; }
 .between { justify-content: space-between; }
 .wrap { flex-wrap: wrap; }
 .muted { color: var(--muted); }
-.small { font-size: 0.85rem; }
 
 /* event tiles: a friendly type-colored edge, plus relationship glows.
    tile-going  = you're going / hosting (accent glow)
    tile-friend = hosted by or attended by your friends (green glow)
-   plain       = the public stream, neutral */
+   plain       = the public stream, neutral
+   NOTE: full tile redesign (thumb/monogram poster, stamp date line) lands in
+   a later phase - this is only the token cleanup for the glass removal. */
 .tile { border-left: 4px solid var(--line); }
 .tile-going {
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 18px rgba(238, 108, 77, 0.18);
-  background: linear-gradient(135deg, rgba(238, 108, 77, 0.10), var(--glass) 45%);
+  box-shadow: 0 0 0 1px var(--surface-2), 0 6px 18px rgba(238, 108, 77, 0.18);
+  background: linear-gradient(135deg, rgba(238, 108, 77, 0.10), var(--surface) 45%);
 }
 .tile-friend {
   box-shadow: 0 0 0 1px rgba(35, 160, 115, 0.24), 0 6px 18px rgba(35, 160, 115, 0.13);
-  background: linear-gradient(135deg, rgba(35, 160, 115, 0.10), var(--glass) 45%);
+  background: linear-gradient(135deg, rgba(35, 160, 115, 0.10), var(--surface) 45%);
 }
 .friends-going {
   display: inline-flex; align-items: center; gap: 3px;
@@ -284,39 +277,36 @@ a { color: inherit; text-decoration: none; }
 .ev:hover { transform: translateY(-1px); }
 .ev .emoji {
   font-size: 1.5rem; width: 46px; height: 46px; flex: none;
-  display: grid; place-items: center; background: var(--accent-soft); border-radius: 10px;
+  display: grid; place-items: center; background: var(--surface-2); border-radius: 10px;
 }
 .ev .title { font-weight: 700; }
 
-/* buttons - crisp, editorial, high-contrast. Sharp radius, confident weight,
-   real interaction physics: lift on hover, press on tap, visible focus ring.
-   Primary carries the coral gradient; ghost is a hairline-bordered dark surface.
-   Interaction feel lives here once - never per-component. */
+/* buttons - crisp, editorial. Sharp radius, confident weight, real
+   interaction physics (hover lift, press scale, visible focus ring) - defined
+   once here, never per-component. Primary is plum text on a coral fill;
+   hover flips to accent-deep with cream text (the only two safe coral text
+   pairings). No gradients on interactive elements. */
 .btn {
-  font: inherit; font-weight: 700; letter-spacing: -0.01em; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.45em;
+  font: inherit; font-weight: 700; font-size: 0.95rem;
+  padding: 0.6rem 1.15rem; border-radius: var(--r-sm);
+  border: 1px solid transparent; cursor: pointer;
   white-space: nowrap; /* a button label must never wrap mid-phrase on mobile */
-  border: 1px solid color-mix(in srgb, var(--accent) 80%, #000 20%);
-  border-radius: var(--radius-sm); padding: 0.62rem 1.2rem;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
-  color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 14px color-mix(in srgb, var(--accent) 34%, transparent);
-  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
 }
-.btn:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 6px 20px color-mix(in srgb, var(--accent) 42%, transparent); }
-.btn:active { transform: translateY(0) scale(0.98); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 8px color-mix(in srgb, var(--accent) 28%, transparent); }
-.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn:disabled { opacity: 0.5; cursor: default; transform: none; }
-.btn.ghost {
-  background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--ink); border-color: var(--glass-line);
-  box-shadow: inset 0 1px 0 var(--glass-glint);
-}
-.btn.ghost:hover { border-color: color-mix(in srgb, var(--ink) 30%, transparent); box-shadow: inset 0 1px 0 var(--glass-glint), 0 4px 14px rgba(0, 0, 0, 0.18); }
-.btn.soft {
-  background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
-  box-shadow: inset 0 1px 0 var(--glass-glint);
-}
-.btn.soft:hover { box-shadow: inset 0 1px 0 var(--glass-glint), 0 4px 14px color-mix(in srgb, var(--accent) 22%, transparent); }
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(0.98); }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--time); outline-offset: 2px; }
+.btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.btn.primary { background: var(--accent); color: var(--plum); border-color: var(--accent-deep); }
+.btn.primary:hover { background: var(--accent-deep); color: var(--cream); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.ghost:hover { border-color: var(--muted); }
+/* .quiet is the current name; .soft is kept as an alias so pages that still
+   reference the old class name keep working until they're swept in a later
+   phase. */
+.btn.quiet, .btn.soft { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+.btn.danger { background: transparent; color: var(--no); border-color: var(--line); }
 .btn.sm { padding: 0.35rem 0.85rem; font-size: 0.85rem; }
 .btn-block { width: 100%; text-align: center; }
 
@@ -324,22 +314,18 @@ a { color: inherit; text-decoration: none; }
    chips (which are for optional multi-select). Used by the create flow's
    scheduling mode. Labels wrap rather than overflow on a narrow phone. */
 .segmented {
-  display: flex; width: 100%; border: 1px solid var(--glass-line);
-  border-radius: var(--radius-sm); overflow: hidden; background: var(--glass-2);
-  box-shadow: inset 0 1px 0 var(--glass-glint);
+  display: flex; width: 100%; border: 1px solid var(--line);
+  border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2);
 }
 .segmented button {
   flex: 1 1 0; min-width: 0; font: inherit; font-weight: 600; font-size: 0.82rem;
   line-height: 1.15; white-space: normal; cursor: pointer; color: var(--ink);
   padding: 0.55rem 0.4rem; min-height: 44px; background: transparent; border: none;
-  border-left: 1px solid var(--glass-line); transition: background 0.12s ease, color 0.12s ease;
+  border-left: 1px solid var(--line); transition: background 0.12s ease, color 0.12s ease;
 }
 .segmented button:first-child { border-left: none; }
-.segmented button.on {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
-  color: #fff;
-}
-.segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.segmented button.on { background: var(--accent); color: var(--plum); }
+.segmented button:focus-visible { outline: 2px solid var(--time); outline-offset: -2px; }
 
 /* plain text link - for secondary/optional actions that must NOT read as a chip
    or a primary button (create flow's "More", "Where + more", disclosures). */
@@ -347,6 +333,7 @@ a { color: inherit; text-decoration: none; }
   background: none; border: none; padding: 0; font: inherit; font-weight: 600;
   color: var(--accent); cursor: pointer; text-align: left; white-space: nowrap;
 }
+[data-theme="light"] .linklike { color: var(--accent-deep); }
 .linklike:hover { text-decoration: underline; }
 .linklike:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
 .linklike.muted { color: var(--muted); font-weight: 500; }
@@ -354,9 +341,9 @@ a { color: inherit; text-decoration: none; }
 /* inputs */
 label.field { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35rem; }
 .input, select.input, textarea.input {
-  width: 100%; min-width: 0; max-width: 100%; font: inherit; padding: 0.65rem 0.8rem; border: 1px solid var(--glass-line);
-  border-radius: var(--radius-sm); background: var(--glass-2); color: var(--ink);
-  box-shadow: inset 0 1px 0 var(--glass-glint);
+  width: 100%; min-width: 0; max-width: 100%; font: inherit; padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--bg); color: var(--ink);
 }
 /* iOS Safari gives date/time inputs an intrinsic width that refuses to shrink,
    so they can blow past their container on phones. Strip the native chrome and
@@ -367,44 +354,48 @@ input.input[type="datetime-local"], input.input[type="date"], input.input[type="
 }
 .input:focus {
   outline: none; border-color: var(--accent);
-  box-shadow: inset 0 1px 0 var(--glass-glint), 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 textarea.input { resize: vertical; min-height: 64px; }
 /* placeholder examples read as hints, not content */
-.input::placeholder { color: var(--muted); opacity: 0.45; }
+.input::placeholder { color: var(--muted); opacity: 0.6; }
 
-/* chips / pills - crisp and typographic. A selected chip fills with the accent
-   gradient and glows. Status pills read as editorial state labels: uppercase
-   letterspaced micro-type, hairline colored border, live status dot. */
+/* chips / pills - typographic, flat. A selected chip fills teal (selection is
+   a state, coral stays reserved for instructions). Status pills read as
+   editorial state labels: mono uppercase letterspaced micro-type, hairline
+   border, colored dot. */
 .chip {
-  border: 1px solid var(--glass-line); background: var(--glass-2); border-radius: var(--radius-sm);
-  padding: 0.45rem 0.9rem; font-weight: 600; font-size: 0.9rem; cursor: pointer; white-space: nowrap;
-  color: var(--ink); box-shadow: inset 0 1px 0 var(--glass-glint);
-  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  display: inline-flex; align-items: center; gap: 0.4em;
+  border: 1px solid var(--line); background: transparent; border-radius: var(--r-sm);
+  padding: 0.5rem 0.95rem; font: inherit; font-weight: 600; font-size: 0.9rem;
+  cursor: pointer; white-space: nowrap; color: var(--ink);
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
-.chip:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--ink) 25%, transparent); }
+.chip:hover { transform: translateY(-1px); border-color: var(--muted); }
 .chip:active { transform: scale(0.97); }
-.chip.on {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
-  color: #fff; border-color: transparent;
-  box-shadow: 0 3px 12px color-mix(in srgb, var(--accent) 38%, transparent);
-}
+.chip.on { background: var(--go); border-color: var(--go); color: var(--plum); }
+.chip.on svg { color: var(--plum); }
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
-  border-radius: var(--radius-xs); padding: 0.22rem 0.6rem;
-  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase;
-  border: 1px solid transparent;
+  font-family: var(--font-data); font-weight: 600; font-size: 0.66rem;
+  letter-spacing: 0.12em; text-transform: uppercase; font-variant-numeric: tabular-nums;
+  border-radius: var(--r-xs); padding: 0.28rem 0.6rem;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
 }
-.pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.pill.going, .pill.scheduled { background: rgba(35,160,115,0.13); color: var(--go); border-color: rgba(35,160,115,0.35); }
-.pill.maybe { background: rgba(197,143,45,0.14); color: var(--maybe); border-color: rgba(197,143,45,0.36); }
-.pill.declined { background: rgba(210,90,105,0.13); color: var(--no); border-color: rgba(210,90,105,0.34); }
-.pill.polling { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 36%, transparent); }
-.pill.polling::before { animation: fx-twinkle 2s ease-in-out infinite; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+/* kinds: deciding (renames "polling") = amber; locked ("Locked in") = teal;
+   draft = muted; cancelled = rose; going/maybe/declined mirror the RSVP
+   colors. .polling/.scheduled are kept as aliases for the old kind names. */
+.pill.going, .pill.locked, .pill.scheduled { color: var(--go); }
+.pill.maybe, .pill.deciding, .pill.polling { color: var(--time); }
+.pill.declined, .pill.cancelled { color: var(--no); }
+.pill.draft { color: var(--muted); }
+.pill.polling::before, .pill.deciding::before { animation: fx-twinkle 2s ease-in-out infinite; }
 
 /* availability grid */
 .grid {
   display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 0.35rem; align-items: center;
+  font-variant-numeric: tabular-nums;
 }
 .grid .hd { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .grid .day { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -427,8 +418,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* Availability cells are tri-state:
    neutral (unselected) · green .on (free) · red .busy-mark (busy). */
 .cell {
-  min-height: 44px; min-width: 44px; border: 1px solid var(--glass-line); border-radius: 6px;
-  background: var(--glass-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+  min-height: 44px; min-width: 44px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
 }
 .cell.on { background: var(--go); border-color: var(--go); }
 .cell.busy-mark { background: var(--no); border-color: var(--no); }
@@ -439,8 +430,8 @@ textarea.input { resize: vertical; min-height: 64px; }
    1fr tracks shrink to fit (min-width:0) and keep the tap target vertical
    (min-height:40px); numbers 1-31 read fine in a ~28px-wide cell. */
 .cal-day {
-  min-width: 0; min-height: 40px; border: 1px solid var(--glass-line); border-radius: 6px;
-  background: var(--glass-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+  min-width: 0; min-height: 40px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
 }
 .cal-day.on { background: var(--go); border-color: var(--go); }
 /* Busy pulled from an imported calendar - locked, hatched red so it reads as
@@ -465,7 +456,7 @@ textarea.input { resize: vertical; min-height: 64px; }
    without cropping; tiles still thumb these square via object-fit. */
 .event-cover {
   width: auto; max-width: 100%; max-height: 340px;
-  border-radius: var(--radius); align-self: center; display: block; margin: 0 auto;
+  border-radius: var(--r); align-self: center; display: block; margin: 0 auto;
   box-shadow: var(--shadow);
 }
 /* Photo-less events have NO cover slot - the title leads, with a small
@@ -473,26 +464,26 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* Invite card: the link is the button - tap to copy. */
 .share-copy {
   font: inherit; color: var(--accent); font-weight: 700;
-  background: var(--glass-2); border: 1px dashed var(--glass-line);
-  border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; cursor: pointer;
+  background: var(--surface-2); border: 1px dashed var(--line);
+  border-radius: var(--r-sm); padding: 0.7rem 0.9rem; cursor: pointer;
   overflow-wrap: anywhere; text-align: left;
 }
 .share-copy:active { transform: scale(0.99); }
 
 /* event tile thumbnail (cover photo/gif as the tile's main visual) */
 .thumb { border-radius: 10px; object-fit: cover; flex: none; display: block; box-shadow: var(--shadow); }
-/* comment thread: chat-style bubbles (avatar + glass bubble; own = accent tint) */
+/* comment thread: chat-style bubbles (avatar + bubble; own = accent tint) */
 .comment-row { display: flex; gap: 8px; align-items: flex-start; }
 .comment-bubble {
   flex: 1; min-width: 0; padding: 0.5rem 0.7rem;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  border: 1px solid var(--glass-line);
-  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
   border-top-left-radius: 4px; /* chat tail toward the avatar */
 }
 .comment-bubble.own {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 25%, var(--glass-line));
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
 }
 .comment-meta { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; min-height: 22px; }
 .comment-meta .muted { font-size: 0.72rem; }
@@ -501,7 +492,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .comment-body + .comment-gif, .comment-meta + .comment-gif { margin-top: 6px; }
 
 /* a gif attached to a comment */
-.comment-gif { max-width: 180px; border-radius: var(--radius-sm); display: block; }
+.comment-gif { max-width: 180px; border-radius: var(--r-sm); display: block; }
 /* klipy gif results */
 /* Responsive columns: cells stay a legible size and the count adapts to width
    (≈3 across on a phone, more on desktop) instead of cramming a fixed 4 into any
@@ -514,14 +505,17 @@ textarea.input { resize: vertical; min-height: 64px; }
    ~2-row pixel max-height (no `vh`, which is unreliable on mobile) so it scrolls
    from the very first render instead of stretching to many rows. */
 .gif-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); grid-auto-rows: 96px; gap: 6px; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; -webkit-overflow-scrolling: touch; }
-.gif-grid button { border: 1px solid var(--glass-line); background: var(--glass-2); border-radius: var(--radius-sm); padding: 0; cursor: pointer; overflow: hidden; }
+.gif-grid button { border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--r-sm); padding: 0; cursor: pointer; overflow: hidden; }
 .gif-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* Event page themes change the WHOLE page vibe, two ways at once:
-   1. a bold full-viewport backdrop wash (::before, fixed, over the sky), and
+   1. a bold full-viewport backdrop wash (::before, fixed, over the stage), and
    2. design-token overrides on the .event-theme wrapper so every button, chip,
       selected state and accent inside the event page adopts the theme colour.
-   Pure CSS, one block per preset - extend by adding a .theme-x pair. */
+   Pure CSS, one block per preset - extend by adding a .theme-x pair. These
+   washes sit on a non-interactive backdrop layer, the one gradient exception
+   besides --stripe and the skeleton shimmer. Full "quiet wash" restyle per
+   the House Lights comp lands in a later phase. */
 .event-theme { position: relative; }
 .event-theme::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
@@ -561,8 +555,9 @@ textarea.input { resize: vertical; min-height: 64px; }
   background: radial-gradient(90% 55% at 50% 112%, rgba(233,120,40,0.55), transparent 70%);
 }
 
-/* who's-in social-pressure bar (invite page): committed vs invited */
-.whosin-bar { height: 8px; border-radius: 999px; background: var(--glass-2); border: 1px solid var(--glass-line); overflow: hidden; }
+/* who's-in social-pressure bar (invite page): committed vs invited.
+   Full respec (stripe fill) lands with the EventPage phase. */
+.whosin-bar { height: 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
 .whosin-bar span { display: block; height: 100%; border-radius: 999px; min-width: 4px;
   background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #ffb46b 30%));
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
@@ -570,12 +565,13 @@ textarea.input { resize: vertical; min-height: 64px; }
 
 /* the lock-moment banner. Fully visible with NO entrance animation on purpose
    (a paused CSS animation with fill:both would leave it invisible); the
-   celebration timeout unmounts it. */
+   celebration timeout unmounts it. Full stripe/teal respec + confetti removal
+   lands with the EventPage phase. */
 .fx-locked {
   position: fixed; top: 28%; left: 50%; transform: translateX(-50%); z-index: 4; pointer-events: none;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
   color: #fff; font-weight: 800; font-size: 1.15rem; letter-spacing: -0.01em;
-  padding: 0.85rem 1.7rem; border-radius: var(--radius-sm);
+  padding: 0.85rem 1.7rem; border-radius: var(--r-sm);
   box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
@@ -587,10 +583,10 @@ textarea.input { resize: vertical; min-height: 64px; }
 
 /* Themed event TILES (Home/Discover/Groups): the same palette as the event-page
    themes, scoped to the card so the WHOLE tile is unmistakably themed - a bold
-   diagonal wash over the glass, an accent-glow border, and the theme accent on
-   every child (the theme-x class also sets --accent above). Tiles carry
-   .theme-tile (never .event-theme), so the full-page ::before backdrop above
-   never applies here. */
+   diagonal wash, an accent-glow border, and the theme accent on every child
+   (the theme-x class also sets --accent above). Tiles carry .theme-tile
+   (never .event-theme), so the full-page ::before backdrop above never
+   applies here. */
 .theme-tile {
   border: 1px solid var(--accent);
   border-left-width: 5px !important;
@@ -599,22 +595,22 @@ textarea.input { resize: vertical; min-height: 64px; }
   overflow: hidden;
 }
 .theme-tile .title { color: var(--ink); font-weight: 700; }
-.theme-tile.theme-party  { background: linear-gradient(135deg, rgba(224,85,155,0.34), rgba(157,107,212,0.16) 62%), var(--glass); }
-.theme-tile.theme-beach  { background: linear-gradient(135deg, rgba(240,153,58,0.34), rgba(120,200,210,0.18) 62%), var(--glass); }
-.theme-tile.theme-forest { background: linear-gradient(135deg, rgba(63,157,111,0.36), rgba(28,74,50,0.20) 62%), var(--glass); }
-.theme-tile.theme-night  { background: linear-gradient(135deg, rgba(139,131,255,0.34), rgba(8,10,26,0.34) 62%), var(--glass); }
-.theme-tile.theme-neon   { background: linear-gradient(135deg, rgba(255,45,148,0.36), rgba(0,229,255,0.20) 62%), var(--glass); box-shadow: 0 0 22px -4px #ff2d94; }
-.theme-tile.theme-cozy   { background: linear-gradient(135deg, rgba(223,128,56,0.34), rgba(120,60,30,0.18) 62%), var(--glass); }
+.theme-tile.theme-party  { background: linear-gradient(135deg, rgba(224,85,155,0.34), rgba(157,107,212,0.16) 62%), var(--surface); }
+.theme-tile.theme-beach  { background: linear-gradient(135deg, rgba(240,153,58,0.34), rgba(120,200,210,0.18) 62%), var(--surface); }
+.theme-tile.theme-forest { background: linear-gradient(135deg, rgba(63,157,111,0.36), rgba(28,74,50,0.20) 62%), var(--surface); }
+.theme-tile.theme-night  { background: linear-gradient(135deg, rgba(139,131,255,0.34), rgba(8,10,26,0.34) 62%), var(--surface); }
+.theme-tile.theme-neon   { background: linear-gradient(135deg, rgba(255,45,148,0.36), rgba(0,229,255,0.20) 62%), var(--surface); box-shadow: 0 0 22px -4px #ff2d94; }
+.theme-tile.theme-cozy   { background: linear-gradient(135deg, rgba(223,128,56,0.34), rgba(120,60,30,0.18) 62%), var(--surface); }
 
 /* Non-themed tiles glow with their TYPE color (--tile-accent, set inline) so
    every tile on the events lists reads as one family - same border/glow
    language as .theme-tile, tinted by type instead of theme. */
 .type-tile {
   --tile-accent: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--tile-accent) 55%, var(--glass-line));
+  border: 1px solid color-mix(in srgb, var(--tile-accent) 55%, var(--line));
   border-left-width: 5px !important;
   box-shadow: 0 8px 26px -6px color-mix(in srgb, var(--tile-accent) 65%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--tile-accent) 16%, transparent), transparent 62%), var(--glass);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tile-accent) 16%, transparent), transparent 62%), var(--surface);
 }
 .type-tile .title { color: var(--ink); font-weight: 700; }
 
@@ -622,7 +618,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .facepile { display: flex; align-items: center; margin-top: 6px; }
 .facepile .face { display: inline-flex; margin-left: -7px; border-radius: 50%; }
 .facepile .face:first-child { margin-left: 0; }
-/* ring separates overlapped faces from each other and the glass */
+/* ring separates overlapped faces from each other and the surface */
 .facepile .face .avatar { box-shadow: 0 0 0 2px var(--surface); }
 /* friends get the accent ring - they're why you'd tap in */
 .facepile .face-friend .avatar { box-shadow: 0 0 0 2px var(--accent); }
@@ -637,7 +633,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* static category label on discover cards (not interactive) */
 .cat-tag {
   flex: none; font-size: 0.78rem; font-weight: 700; color: var(--muted);
-  background: var(--accent-soft); border-radius: 6px; padding: 0.2rem 0.6rem;
+  background: var(--surface-2); border-radius: 6px; padding: 0.2rem 0.6rem;
 }
 
 /* landing hero */
@@ -663,7 +659,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .land-shot {
   width: min(240px, 30vw); height: auto; display: block; flex: none;
-  border-radius: 26px; border: 1px solid var(--glass-line);
+  border-radius: 26px; border: 1px solid var(--line);
   transform: rotate(-2deg);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45), 0 0 90px color-mix(in srgb, var(--accent) 22%, transparent);
 }
@@ -680,8 +676,9 @@ textarea.input { resize: vertical; min-height: 64px; }
   .land-shot-b, .land-shot-c { transform: none; }
 }
 .land-title {
+  font-family: var(--font-display);
   font-size: clamp(2.9rem, 9vw, 5rem);
-  font-weight: 850; letter-spacing: -0.045em; line-height: 0.98;
+  font-weight: 900; letter-spacing: -0.02em; line-height: 0.98;
   margin: 3.2rem auto 0;
 }
 .land-sub { color: var(--muted); max-width: 460px; margin: 1rem auto 1.6rem; font-size: 1.05rem; }
@@ -695,11 +692,12 @@ textarea.input { resize: vertical; min-height: 64px; }
 .filter-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
 .filter-row .chip { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .filter-count {
-  background: var(--accent-soft); color: var(--accent); border-radius: 999px;
+  background: var(--surface-2); color: var(--accent); border-radius: 999px;
   font-size: 0.7rem; font-weight: 800; min-width: 17px; height: 17px; padding: 0 5px;
-  display: inline-grid; place-items: center; line-height: 1;
+  display: inline-grid; place-items: center; line-height: 1; font-variant-numeric: tabular-nums;
 }
-.chip.on .filter-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
+/* on a selected (teal) chip the badge needs to read on plum text, not white */
+.chip.on .filter-count { background: rgba(47, 36, 64, 0.2); color: var(--plum); }
 
 /* responder dots on the general-availability results - tap to see one guest's picks */
 .resp-dot { background: none; border: none; padding: 0; cursor: pointer; border-radius: 50%; opacity: 0.8; transition: opacity 0.1s ease, transform 0.1s ease; }
@@ -715,7 +713,7 @@ textarea.input { resize: vertical; min-height: 64px; }
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 60;
   background: var(--go); color: #fff; font-weight: 700; font-size: 0.92rem;
-  padding: 0.6rem 1.1rem; border-radius: var(--radius-sm);
+  padding: 0.6rem 1.1rem; border-radius: var(--r-sm);
   box-shadow: 0 6px 20px rgba(35, 160, 115, 0.35);
   animation: toast-in 0.18s ease;
 }
@@ -726,12 +724,11 @@ textarea.input { resize: vertical; min-height: 64px; }
 .crop-overlay {
   position: fixed; inset: 0; z-index: 70; display: grid; place-items: center;
   background: rgba(10, 14, 26, 0.6);
-  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
 }
 .crop-card { max-width: min(92vw, 352px); }
 .crop-viewport {
   position: relative; overflow: hidden; max-width: 100%;
-  border-radius: var(--radius-sm); border: 1px solid var(--glass-line);
+  border-radius: var(--r-sm); border: 1px solid var(--line);
   touch-action: none; cursor: grab; background: #000;
 }
 .crop-viewport:active { cursor: grabbing; }
@@ -744,9 +741,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* calendar view (month/week/day) */
 .cal-month {
   display: grid; grid-template-columns: repeat(7, 1fr);
-  background: var(--glass); border: 1px solid var(--glass-line); border-radius: var(--radius);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5);
-  overflow: hidden; box-shadow: var(--shadow), inset 0 1px 0 var(--glass-glint);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  overflow: hidden; box-shadow: var(--shadow);
 }
 .cal-head { padding: 0.5rem 0.4rem; text-align: center; font-size: 0.72rem; font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--line); }
 .cal-cell {
@@ -756,7 +752,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .cal-cell:nth-child(7n) { border-right: none; }
 .cal-other { background: rgba(127, 127, 140, 0.08); color: var(--muted); }
 .cal-daynum { font-size: 0.72rem; font-weight: 700; width: 20px; height: 20px; display: inline-grid; place-items: center; border-radius: 50%; }
-.cal-today { background: var(--accent); color: #fff; }
+.cal-today { background: var(--accent); color: var(--plum); }
 .cal-pill {
   border: none; font: inherit; text-align: left; cursor: pointer;
   font-size: 0.66rem; font-weight: 700; border-radius: 5px; padding: 1px 5px;
@@ -764,25 +760,23 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .cal-week {
   display: grid; grid-template-columns: repeat(7, 1fr);
-  background: var(--glass); border: 1px solid var(--glass-line); border-radius: var(--radius);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5);
-  overflow: hidden; box-shadow: var(--shadow), inset 0 1px 0 var(--glass-glint);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  overflow: hidden; box-shadow: var(--shadow);
 }
 .cal-week-col { border-right: 1px solid var(--line); }
 .cal-week-col:last-child { border-right: none; }
 .cal-week-head { display: flex; flex-direction: column; align-items: center; padding: 0.5rem 0.2rem; border-bottom: 1px solid var(--line); }
-.cal-week-today { background: var(--accent-soft); }
+.cal-week-today { background: var(--surface-2); }
 .cal-pill-lg { font-size: 0.72rem; padding: 4px 6px; border-radius: 7px; display: flex; flex-direction: column; align-items: flex-start; white-space: normal; }
 .cal-pill-time { font-weight: 800; font-size: 0.62rem; opacity: 0.75; }
 .cal-day-row { background: none; border: none; font: inherit; text-align: left; padding: 4px 0; gap: 10px; display: flex; align-items: center; }
 
-/* avatars */
+/* avatars - plum fill, cream initials (matches the wordmark palette) */
 .avatar { border-radius: 50%; object-fit: cover; flex: none; display: inline-grid; place-items: center; }
-.avatar-fallback { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.avatar-fallback { background: var(--plum); color: var(--cream); font-weight: 700; }
 
 /* misc */
 .empty { text-align: center; color: var(--muted); padding: 2.2rem 1rem; }
-.section-h { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 1.4rem 0 0.2rem; }
 .hero { text-align: center; padding: 3.5rem 1rem; }
 .hero h1 { font-size: 2.6rem; }
 .tally { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
@@ -793,14 +787,14 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* address autocomplete dropdown (Photon suggestions) */
 .addr-menu {
   position: absolute; z-index: 30; left: 0; right: 0; margin-top: 4px;
-  background: var(--surface); border: 1px solid var(--glass-line); border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm);
   box-shadow: var(--shadow); overflow: hidden; max-height: 240px; overflow-y: auto;
 }
 .addr-item {
   display: block; width: 100%; text-align: left; padding: 0.55rem 0.75rem;
   background: none; border: none; font: inherit; color: var(--ink); cursor: pointer;
 }
-.addr-item:hover { background: var(--accent-soft); color: var(--accent); }
+.addr-item:hover { background: var(--surface-2); color: var(--accent); }
 .accent { color: var(--accent); font-weight: 600; }
 
 /* slide-to-paint grids: touches on cells paint (never scroll); the page still
@@ -817,18 +811,17 @@ textarea.input { resize: vertical; min-height: 64px; }
   display: inline-grid; place-items: center;
 }
 
-/* EU cookie-consent bar: fixed glass strip above the tab bar */
+/* EU cookie-consent bar: fixed strip above the tab bar */
 .consent-bar {
   position: fixed; left: 10px; right: 10px; z-index: 80;
   bottom: calc(64px + env(safe-area-inset-bottom));
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 0.7rem 0.9rem; border-radius: var(--radius);
-  background: var(--glass); border: 1px solid var(--glass-line);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5);
+  padding: 0.7rem 0.9rem; border-radius: var(--r);
+  background: var(--surface); border: 1px solid var(--line);
   box-shadow: var(--shadow); max-width: 700px; margin: 0 auto;
 }
 @media (min-width: 641px) { .consent-bar { bottom: 16px; } }
 
 /* OSM attribution line under address suggestions (ODbL) */
-.addr-attrib { padding: 6px 12px; font-size: 0.68rem; color: var(--muted); border-top: 1px solid var(--glass-line); }
+.addr-attrib { padding: 6px 12px; font-size: 0.68rem; color: var(--muted); border-top: 1px solid var(--line); }
 .addr-attrib a { text-decoration: underline; }
