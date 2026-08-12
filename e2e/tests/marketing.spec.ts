@@ -45,7 +45,7 @@ test.describe("marketing screenshots", () => {
     // Create a week-scope availability poll (concrete dates x dayparts heatmap).
     // The single create flow picks the scope right here.
     await page.getByTestId("new-event").click();
-    await page.getByTestId("quick-title").fill("Board game night 🎲");
+    await page.getByTestId("quick-title").fill("Board game night");
     await page.getByTestId("quick-mode-avail").click();
     await page.getByTestId("quick-scope-week").click();
     await page.getByTestId("quick-create").click();
@@ -141,7 +141,7 @@ test.describe("marketing screenshots", () => {
     // hosts this event and gets the results view below.
     await page.goto("/?as=demo-user");
     await page.getByTestId("new-event").click();
-    await page.getByTestId("quick-title").fill("Improv practice 🎭");
+    await page.getByTestId("quick-title").fill("Improv practice");
     await page.getByTestId("quick-mode-avail").click();
     await page.getByTestId("quick-scope-month").click();
     await page.getByTestId("quick-create").click();

@@ -412,14 +412,14 @@ function Landing() {
         {!DEV_AUTH && <a href="/sign-in" className="btn ghost sm" data-testid="sign-in">Sign in</a>}
       </nav>
       <div className="land">
-        <h1 className="land-title">Your weekly meet ups,<br />handled.</h1>
+        <h1 className="land-title">Hangouts,<br />handled.</h1>
         <p className="land-sub">
           Book club, run club, game night, karaoke - one link finds when the
           whole group is free, locks the winning dates as a series, and keeps
           the streak alive.
         </p>
         <div className="land-cta">
-          <a href="/start" className="btn land-go" data-testid="start-plan">Get your link</a>
+          <a href="/start" className="btn primary land-go" data-testid="start-plan">Get your link</a>
         </div>
         <p className="land-micro">Free · no account needed</p>
         <div className="land-showcase" aria-hidden>
