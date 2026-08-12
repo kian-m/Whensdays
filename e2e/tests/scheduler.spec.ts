@@ -210,7 +210,7 @@ test.describe("scheduler", () => {
     await page.getByTestId(`grt-cell-${ymd}-1140`).click();
     await expect(page.getByTestId("picked-cells")).toBeVisible();
     await page.getByTestId("general-finalize").click();
-    await expect(page.getByText("Confirmed").first()).toBeVisible();
+    await expect(page.getByText("Locked in").first()).toBeVisible();
   });
 
   test("pick-days poll paginates its day columns", async ({ page }) => {
@@ -1313,7 +1313,7 @@ test.describe("scheduler", () => {
       await page.getByTestId("event-title").waitFor();
     }
     await page.goto(`/g/${gid}`);
-    await expect(page.getByTestId("group-streak")).toContainText("2-month streak");
+    await expect(page.getByTestId("group-streak")).toContainText("2-MONTH STREAK");
   });
 
   test("events can carry an end time", async ({ page }) => {
@@ -2684,7 +2684,7 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("picked-cells")).toBeVisible();
     await page.getByTestId("general-finalize").click();
     await expect(page.getByTestId("event-title")).toBeVisible();
-    await expect(page.getByText("Confirmed")).toBeVisible();
+    await expect(page.getByText("Locked in")).toBeVisible();
   });
 
   test("general poll finalizes MULTIPLE winning dates into a series", async ({ page }) => {
@@ -3081,7 +3081,7 @@ test.describe("scheduler", () => {
     // Host picks the first option → event becomes confirmed.
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("finalize-0").click();
-    await expect(page.getByText("Confirmed")).toBeVisible();
+    await expect(page.getByText("Locked in")).toBeVisible();
   });
 
   test("guest on an open poll lands on the vote grid, not the RSVP prompt", async ({ page, browser }) => {
@@ -3143,7 +3143,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("avail-cell-2-noon").click();
     await page.getByTestId("avail-cell-1-evening").click();
     await page.getByTestId("save-availability").click();
-    await expect(page.getByText("Availability saved ✓")).toBeVisible();
+    await expect(page.getByText("Availability saved")).toBeVisible();
     // In-app support contact (where signed-in users look for help).
     await expect(page.getByTestId("help-card").locator('a[href^="mailto:support@whensdays.com"]')).toBeVisible();
   });
@@ -3159,7 +3159,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("wk-cell-1-morning").click();
     await page.getByTestId("wk-cell-5-evening").click();
     await page.getByTestId("save-weekly").click();
-    await expect(page.getByText("Availability saved ✓")).toBeVisible();
+    await expect(page.getByText("Availability saved")).toBeVisible();
 
     // Specific dates: re-enter edit, paginate into the future, mark a cell.
     await page.getByTestId("avail-edit").click();
@@ -3171,7 +3171,7 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("avail-range")).not.toHaveText(firstRange ?? "");
     await page.getByTestId("avail-cell-0-evening").click(); // a date ~2 weeks out
     await page.getByTestId("save-availability").click();
-    await expect(page.getByText("Availability saved ✓")).toBeVisible();
+    await expect(page.getByText("Availability saved")).toBeVisible();
   });
 
   test("availability: legend + tri-state free/busy painting", async ({ page }) => {
@@ -3199,7 +3199,7 @@ test.describe("scheduler", () => {
     // Busy marks persist through a save + reload (the real bug being fixed).
     await cell.click(); // busy again
     await page.getByTestId("save-availability").click();
-    await expect(page.getByText("Availability saved ✓")).toBeVisible();
+    await expect(page.getByText("Availability saved")).toBeVisible();
     await page.reload();
     await page.getByTestId("avail-edit").click();
     await expect(page.getByTestId("avail-cell-0-morning")).toHaveClass(/busy-mark/);
@@ -3271,7 +3271,7 @@ test.describe("scheduler", () => {
       await ben.getByTestId("avail-edit").click();
       await ben.getByTestId("avail-cell-2-afternoon").click();
       await ben.getByTestId("save-availability").click();
-      await expect(ben.getByText("Availability saved ✓")).toBeVisible();
+      await expect(ben.getByText("Availability saved")).toBeVisible();
 
       await ensureUser(amy, "amy", "Amy", "amy");
       await amy.goto("/friends");

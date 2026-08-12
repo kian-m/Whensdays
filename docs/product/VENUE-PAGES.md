@@ -105,6 +105,34 @@ Make the public page worth being someone's ONLY web presence:
 - Seed list: the four venue-sync groups + the user's improv/standup contacts get their pages dressed
   (icon, description) — manual, not code.
 
+### V7 — Performers on events (follow a person, see every event they're on)
+**The vision (user, Aug 2026):** follow a person and see any event they are IN — events carry a lineup of
+performers, and anyone following a performer sees the events they're attached to, regardless of who hosts.
+Decisions (made, do not relitigate):
+- **No new follow kind.** `follows.kind='host'` already means "follow this person"; it now surfaces events
+  they host OR are a confirmed performer on. One follow, one meaning.
+- **Schema:** `event_performers(event_id, user_id, status 'pending'|'confirmed', added_by, created_at,
+  PK(event_id, user_id))` — migration 0046. Performers are real users added by handle (like cohosts).
+  Non-user "special guests" stay in the event description; no free-text rows.
+- **Consent gates distribution (anti-hijack):** display on the event page is immediate (the host's own
+  claim about their lineup), but feed + digest surfacing counts ONLY `confirmed` rows — otherwise anyone
+  could attach a well-known performer and blast their followers. The performer gets an email ("{Host}
+  added you to the lineup of {Event}") with one-tap Confirm / Remove links (HMAC namespace `perf|`, same
+  pattern as `rsvp|`, script-free confirmation page), plus an in-app banner on the event page when the
+  viewer is a pending performer. Performers can remove themselves anytime; managers add/remove
+  (manager-gated like cohosts); listed-only invariant applies as everywhere.
+- **Surfacing:** extend `ListFollowedEvents` (feed) and `ListNewFollowedEvents` (digest) with a third arm —
+  events having a confirmed performer the recipient follows (kind='host'). Dedupe already exists
+  (mergeCandidates / DISTINCT ON); attribution prefers group > performer > host, and a performer-attributed
+  row reads "with {performer name}".
+- **Web:** EventPage gains a "Lineup" card visible to everyone (avatar, name, FollowButton with
+  source="lineup", pending pill visible to managers + the performer, remove for managers/self, add-by-handle
+  for managers — mirror the cohost manager UI); pending-performer banner with Confirm/Remove; House Lights
+  §1 rules throughout.
+- **E2E:** add performer → pending (not in feed/digest query) → confirm → appears in follower's Home feed
+  with "with {name}" attribution → self-remove → gone. Plus the token round-trip unit test (`perf|`
+  namespace isolation in guests_test.go style).
+
 ### V6 — Instrumentation (Haiku) — status: instrumented
 PostHog events for the follower activation funnel. Page view → follow → digest sent → RSVP.
 
