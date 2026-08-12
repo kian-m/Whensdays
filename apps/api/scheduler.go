@@ -20,9 +20,9 @@ import (
 )
 
 // scheduler.go holds the "Whensdays" feature: profiles, general
-// availability, friends, and events (with availability polls + per-event-type
-// preference questions). Every handler scopes its writes/reads to the
-// authenticated user (userIDFrom) - never a user id from the request body.
+// availability, friends, and events (with availability polls). Every handler
+// scopes its writes/reads to the authenticated user (userIDFrom) - never a
+// user id from the request body.
 
 const maxBody = 1 << 16
 
@@ -1128,7 +1128,6 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		pollDays      []string
 		timeGrid      map[string]int32
 		attendees     []db.ListAttendeesRow
-		answers       []db.ListPreferenceAnswersForEventRow
 		comments      []db.ListEventCommentsRow
 		cohosts       []db.ListCohostsRow
 		invites       []db.ListEventInvitesRow
@@ -1181,7 +1180,6 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 			return nil
 		},
 		func() (e error) { attendees, e = s.queries.ListAttendees(ctx, id); return },
-		func() (e error) { answers, e = s.queries.ListPreferenceAnswersForEvent(ctx, id); return },
 		func() (e error) { comments, e = s.queries.ListEventComments(ctx, id); return },
 		func() (e error) { cohosts, e = s.queries.ListCohosts(ctx, id); return },
 		func() (e error) { invites, e = s.queries.ListEventInvites(ctx, id); return },
@@ -1193,7 +1191,10 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 			series, e = s.queries.ListSeriesEvents(ctx, ev.SeriesID)
 			return
 		},
-		func() error { muted, _ = s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: id, UserID: uid}); return nil },
+		func() error {
+			muted, _ = s.queries.IsEventMuted(ctx, db.IsEventMutedParams{EventID: id, UserID: uid})
+			return nil
+		},
 		func() error {
 			// Names for poll responders - a pure voter (availability filled, no
 			// RSVP) has no attendee row, so the web can't label them otherwise.
@@ -1249,16 +1250,6 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 			attendees[i].Handle = pgtype.Text{}
 		}
 	}
-	// Guests only see their own preference answers; managers see everyone's.
-	if !canManage {
-		filtered := answers[:0:0]
-		for _, a := range answers {
-			if a.UserID == uid {
-				filtered = append(filtered, a)
-			}
-		}
-		answers = filtered
-	}
 	// Best-time ranking input: for specific-time polls, score every option
 	// against ALL attendees' saved availability (free/busy for that option's
 	// day+daypart in the event's timezone) - not just the viewer's calendar.
@@ -1299,27 +1290,26 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"event":              ev,
-		"host_name":          hostName,
-		"host_avatar":        hostAvatar,
-		"following_host":     followsHost,
-		"role":               role,
-		"can_manage":         canManage,
-		"viewer_id":          uid,
-		"muted":              muted,
-		"voters":             voterProfiles,
-		"option_fit":         optionFit,
-		"time_options":       options,
-		"votes":              votes,
-		"general_votes":      generalVotes,
-		"poll_days":          pollDays,
-		"time_grid":          timeGrid,
-		"attendees":          attendees,
-		"preference_answers": answers,
-		"comments":           comments,
-		"cohosts":            cohosts,
-		"invites":            invites,
-		"series":             series,
+		"event":          ev,
+		"host_name":      hostName,
+		"host_avatar":    hostAvatar,
+		"following_host": followsHost,
+		"role":           role,
+		"can_manage":     canManage,
+		"viewer_id":      uid,
+		"muted":          muted,
+		"voters":         voterProfiles,
+		"option_fit":     optionFit,
+		"time_options":   options,
+		"votes":          votes,
+		"general_votes":  generalVotes,
+		"poll_days":      pollDays,
+		"time_grid":      timeGrid,
+		"attendees":      attendees,
+		"comments":       comments,
+		"cohosts":        cohosts,
+		"invites":        invites,
+		"series":         series,
 	})
 }
 
@@ -1647,43 +1637,6 @@ func (s *server) handleGeneralVotes(w http.ResponseWriter, r *http.Request) {
 		"picks":    len(rows),
 	})
 	s.maybeNotifyQuorum(r.Context(), ev)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func (s *server) handlePreferences(w http.ResponseWriter, r *http.Request) {
-	uid, _ := userIDFrom(r.Context())
-	id, ok := parseUUID(r.PathValue("id"))
-	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
-		return
-	}
-	if _, active := s.requireActiveEvent(w, r, id); !active {
-		return
-	}
-	var in struct {
-		Answers []struct {
-			QuestionKey string `json:"question_key"`
-			Answer      string `json:"answer"`
-		} `json:"answers"`
-	}
-	if !decodeJSON(w, r, &in) {
-		return
-	}
-	for _, a := range in.Answers {
-		key := strings.TrimSpace(a.QuestionKey)
-		ans := strings.TrimSpace(a.Answer)
-		if key == "" || len(key) > 60 || len(ans) > 400 {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid answer"})
-			return
-		}
-		if _, err := s.queries.UpsertPreferenceAnswer(r.Context(), db.UpsertPreferenceAnswerParams{
-			EventID: id, UserID: uid, QuestionKey: key, Answer: ans,
-		}); err != nil {
-			s.internal(w, "upsert answer", err)
-			return
-		}
-	}
-	s.analytics.Capture(uid, "preferences_submitted", map[string]any{"event_id": r.PathValue("id"), "answers": len(in.Answers)})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

@@ -334,22 +334,6 @@ SELECT id, event_id, user_id, rsvp, created_at, anonymous
 FROM event_attendees
 WHERE event_id = $1 AND user_id = $2;
 
--- ===================== preference answers =========================
-
--- name: UpsertPreferenceAnswer :one
-INSERT INTO event_preference_answers (event_id, user_id, question_key, answer)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (event_id, user_id, question_key) DO UPDATE
-    SET answer = EXCLUDED.answer
-RETURNING id, event_id, user_id, question_key, answer;
-
--- name: ListPreferenceAnswersForEvent :many
-SELECT pa.user_id, pa.question_key, pa.answer, p.display_name
-FROM event_preference_answers pa
-LEFT JOIN profiles p ON p.user_id = pa.user_id
-WHERE pa.event_id = $1
-ORDER BY pa.user_id, pa.question_key;
-
 -- name: ListSeriesEvents :many
 SELECT id, starts_at, status
 FROM events

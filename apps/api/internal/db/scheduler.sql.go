@@ -1687,46 +1687,6 @@ func (q *Queries) ListPollsPastDeadline(ctx context.Context) ([]Event, error) {
 	return items, nil
 }
 
-const listPreferenceAnswersForEvent = `-- name: ListPreferenceAnswersForEvent :many
-SELECT pa.user_id, pa.question_key, pa.answer, p.display_name
-FROM event_preference_answers pa
-LEFT JOIN profiles p ON p.user_id = pa.user_id
-WHERE pa.event_id = $1
-ORDER BY pa.user_id, pa.question_key
-`
-
-type ListPreferenceAnswersForEventRow struct {
-	UserID      string      `json:"user_id"`
-	QuestionKey string      `json:"question_key"`
-	Answer      string      `json:"answer"`
-	DisplayName pgtype.Text `json:"display_name"`
-}
-
-func (q *Queries) ListPreferenceAnswersForEvent(ctx context.Context, eventID pgtype.UUID) ([]ListPreferenceAnswersForEventRow, error) {
-	rows, err := q.db.Query(ctx, listPreferenceAnswersForEvent, eventID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListPreferenceAnswersForEventRow{}
-	for rows.Next() {
-		var i ListPreferenceAnswersForEventRow
-		if err := rows.Scan(
-			&i.UserID,
-			&i.QuestionKey,
-			&i.Answer,
-			&i.DisplayName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSeriesEvents = `-- name: ListSeriesEvents :many
 SELECT id, starts_at, status
 FROM events
@@ -2339,41 +2299,6 @@ type UpsertAvailabilityDayFreeParams struct {
 func (q *Queries) UpsertAvailabilityDayFree(ctx context.Context, arg UpsertAvailabilityDayFreeParams) error {
 	_, err := q.db.Exec(ctx, upsertAvailabilityDayFree, arg.UserID, arg.Day, arg.Daypart)
 	return err
-}
-
-const upsertPreferenceAnswer = `-- name: UpsertPreferenceAnswer :one
-
-INSERT INTO event_preference_answers (event_id, user_id, question_key, answer)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (event_id, user_id, question_key) DO UPDATE
-    SET answer = EXCLUDED.answer
-RETURNING id, event_id, user_id, question_key, answer
-`
-
-type UpsertPreferenceAnswerParams struct {
-	EventID     pgtype.UUID `json:"event_id"`
-	UserID      string      `json:"user_id"`
-	QuestionKey string      `json:"question_key"`
-	Answer      string      `json:"answer"`
-}
-
-// ===================== preference answers =========================
-func (q *Queries) UpsertPreferenceAnswer(ctx context.Context, arg UpsertPreferenceAnswerParams) (EventPreferenceAnswer, error) {
-	row := q.db.QueryRow(ctx, upsertPreferenceAnswer,
-		arg.EventID,
-		arg.UserID,
-		arg.QuestionKey,
-		arg.Answer,
-	)
-	var i EventPreferenceAnswer
-	err := row.Scan(
-		&i.ID,
-		&i.EventID,
-		&i.UserID,
-		&i.QuestionKey,
-		&i.Answer,
-	)
-	return i, err
 }
 
 const upsertProfile = `-- name: UpsertProfile :one
