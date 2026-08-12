@@ -150,28 +150,36 @@ func (s *server) handleGroupOGImage(w http.ResponseWriter, r *http.Request) {
 }
 
 // composeGroupOGCard mirrors composeOGCard for a group invite: icon/gif fill (or
-// brand gradient), a scrim for legibility, the inviter line top-left, and the
-// group name across the bottom.
+// the plum brand fallback), a scrim for legibility, the inviter line top-left,
+// and the group name across the bottom.
 func composeGroupOGCard(icon image.Image, inviterName, groupName string) *image.RGBA {
 	card := image.NewRGBA(image.Rect(0, 0, ogW, ogH))
-	if icon != nil {
+	fallback := icon == nil
+	if !fallback {
 		drawCoverFill(card, icon)
 	} else {
-		drawBrandGradient(card)
+		drawBrandFallback(card)
 	}
 	drawScrim(card, 0, 170, 0.62)
 	drawScrim(card, ogH-200, ogH, 0.40)
+	titleColor := color.Color(color.White)
+	if fallback {
+		titleColor = ogCream // cream Fraunces-ish type on the plum stage
+	}
 	if inviterName != "" {
-		drawText(card, ogBoldFace, truncate(inviterName, 28), 48, 84, color.White)
+		drawText(card, ogBoldFace, truncate(inviterName, 28), 48, 84, titleColor)
 		drawText(card, ogRegFace, "invites you to join", 48, 126, color.RGBA{235, 226, 218, 235})
 	} else {
 		drawText(card, ogRegFace, "You're invited to join", 48, 96, color.RGBA{235, 226, 218, 235})
 	}
-	drawText(card, ogBoldFace, truncate(groupName, 30), 48, ogH-72, color.White)
+	drawText(card, ogBoldFace, truncate(groupName, 30), 48, ogH-72, titleColor)
 	if ogLogo != nil {
 		b := ogLogo.Bounds()
 		pos := image.Rect(ogW-48-b.Dx(), 40, ogW-48, 40+b.Dy())
 		draw.Draw(card, pos, ogLogo, b.Min, draw.Over)
+	}
+	if fallback {
+		drawStripeBar(card, 0, ogStripeH)
 	}
 	return card
 }
@@ -232,15 +240,16 @@ func (s *server) loadCover(u string) image.Image {
 }
 
 // composeOGCard draws the 1200×630 unfurl tile: cover (center-cropped to fill)
-// or a brand gradient, a legibility scrim, host name top-left, logo top-right,
-// and - on the fallback - the event title.
+// or the plum brand fallback, a legibility scrim, host name top-left, logo
+// top-right, and - on the fallback - the event title + candy-stripe rule.
 func composeOGCard(cover image.Image, hostName, title string, going int) *image.RGBA {
 	card := image.NewRGBA(image.Rect(0, 0, ogW, ogH))
 
-	if cover != nil {
+	fallback := cover == nil
+	if !fallback {
 		drawCoverFill(card, cover)
 	} else {
-		drawBrandGradient(card)
+		drawBrandFallback(card)
 	}
 
 	// Scrim: darken the top band so white text reads on any cover (taller when
@@ -250,26 +259,37 @@ func composeOGCard(cover image.Image, hostName, title string, going int) *image.
 		scrimBottom = 216
 	}
 	drawScrim(card, 0, scrimBottom, 0.62)
-	if cover == nil && title != "" {
+	if fallback && title != "" {
 		drawScrim(card, ogH-200, ogH, 0.35)
 	}
 
+	// House Lights: cream Fraunces-ish type on the plum stage fallback; a real
+	// cover keeps white (the scrim makes it legible over any photo).
+	titleColor := color.Color(color.White)
+	if fallback {
+		titleColor = ogCream
+	}
+
 	if hostName != "" {
-		drawText(card, ogBoldFace, truncate(hostName, 28), 48, 84, color.White)
+		drawText(card, ogBoldFace, truncate(hostName, 28), 48, 84, titleColor)
 		drawText(card, ogRegFace, "invites you", 48, 126, color.RGBA{235, 226, 218, 235})
 	}
 	// Social pressure on the card itself: the group chat sees momentum before
-	// anyone taps. One going = just the host, so it starts at two.
+	// anyone taps. One going = just the host, so it starts at two. Coral
+	// matches --accent exactly, so it reads the same across cover/fallback.
 	if going >= 2 {
 		drawText(card, ogBoldFace, fmt.Sprintf("%d in so far", going), 48, 172, color.RGBA{238, 108, 77, 255})
 	}
-	if cover == nil && title != "" {
-		drawText(card, ogBoldFace, truncate(title, 34), 48, ogH-72, color.White)
+	if fallback && title != "" {
+		drawText(card, ogBoldFace, truncate(title, 34), 48, ogH-72, titleColor)
 	}
 	if ogLogo != nil {
 		b := ogLogo.Bounds()
 		pos := image.Rect(ogW-48-b.Dx(), 40, ogW-48, 40+b.Dy())
 		draw.Draw(card, pos, ogLogo, b.Min, draw.Over)
+	}
+	if fallback {
+		drawStripeBar(card, 0, ogStripeH)
 	}
 	return card
 }
@@ -292,24 +312,51 @@ func drawCoverFill(dst *image.RGBA, src image.Image) {
 	xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, crop, xdraw.Src, nil)
 }
 
-// drawBrandGradient paints the no-cover fallback: dusk navy with a coral glow.
-func drawBrandGradient(dst *image.RGBA) {
-	top := [3]float64{22, 32, 58}    // #16203a
-	bot := [3]float64{14, 18, 32}    // #0e1220
-	coral := [3]float64{238, 108, 77}
+// ogPlum/ogCream mirror --bg/--cream in styles.css - the House Lights stage
+// and its ink, used for the no-cover fallback card.
+var (
+	ogPlum  = color.RGBA{26, 20, 36, 255}    // #1a1424
+	ogCream = color.RGBA{248, 227, 201, 255} // #f8e3c9
+)
+
+// ogStripeH is the candy-stripe bar's height on the 1200×630 card - scaled up
+// from the web's 3px hero rule for a card viewed at a distance.
+const ogStripeH = 10
+
+// ogStripe mirrors --stripe in styles.css: coral/amber/teal/cream quarters.
+var ogStripe = [4]color.RGBA{
+	{238, 108, 77, 255},  // coral #ee6c4d
+	{233, 161, 59, 255},  // amber #e9a13b
+	{58, 163, 139, 255},  // teal  #3aa38b
+	{248, 227, 201, 255}, // cream #f8e3c9
+}
+
+// drawBrandFallback paints the no-cover fallback: a solid plum stage - House
+// Lights reserves gradients for the candy stripe only, so the old dusk/coral
+// glow gradient is gone. drawStripeBar (called by the composer) adds the
+// stripe rule that replaces it as the fallback's brand flourish.
+func drawBrandFallback(dst *image.RGBA) {
 	for y := 0; y < ogH; y++ {
-		t := float64(y) / ogH
-		r0, g0, b0 := top[0]+(bot[0]-top[0])*t, top[1]+(bot[1]-top[1])*t, top[2]+(bot[2]-top[2])*t
 		for x := 0; x < ogW; x++ {
-			// Radial coral glow anchored top-right, like the sky.
-			dx, dy := float64(x-900)/700, float64(y-40)/400
-			g := 0.42 - (dx*dx+dy*dy)*0.42
-			if g < 0 {
-				g = 0
+			dst.SetRGBA(x, y, ogPlum)
+		}
+	}
+}
+
+// drawStripeBar paints the candy-stripe rule (coral/amber/teal/cream
+// quarters) across the full width between y0 and y1 - the fallback card's
+// analog of the hero card's 3px --stripe top rule on the web.
+func drawStripeBar(dst *image.RGBA, y0, y1 int) {
+	seg := ogW / len(ogStripe)
+	for i, c := range ogStripe {
+		x0, x1 := i*seg, i*seg+seg
+		if i == len(ogStripe)-1 {
+			x1 = ogW
+		}
+		for y := y0; y < y1 && y < ogH; y++ {
+			for x := x0; x < x1; x++ {
+				dst.SetRGBA(x, y, c)
 			}
-			dst.SetRGBA(x, y, color.RGBA{
-				uint8(r0 + (coral[0]-r0)*g), uint8(g0 + (coral[1]-g0)*g), uint8(b0 + (coral[2]-b0)*g), 255,
-			})
 		}
 	}
 }

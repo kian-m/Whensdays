@@ -228,17 +228,18 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 	meta := make([]emailMetaRow, 0, len(digestMetrics))
 	for _, m := range digestMetrics {
 		if n := counts[m.Event]; n > 0 {
-			meta = append(meta, emailMetaRow{m.Label, fmt.Sprintf("%d", n)})
+			// Counts get stamp voice too (§1.5).
+			meta = append(meta, emailMetaRow{label: m.Label, value: fmt.Sprintf("%d", n), mono: true})
 			total += n
 		}
 	}
 	sub := "steady"
 	if newReg > 0 {
-		sub = fmt.Sprintf("+%d yesterday 🎉", newReg)
+		sub = fmt.Sprintf("+%d yesterday", newReg)
 	}
 	body := renderEmail(emailContent{
 		preheader: fmt.Sprintf("%d registered (+%d) · %d visitors · %d actions.", registered, newReg, stage(0), total),
-		heading:   "📊 " + dayStart.Format("Monday, Jan 2"),
+		heading:   dayStart.Format("Monday, Jan 2"),
 		hero:      &emailHero{number: fmt.Sprintf("%d", registered), label: "Registered users", sub: sub},
 		funnelT:   "Yesterday's funnel",
 		funnel:    funnel,
@@ -246,7 +247,7 @@ func (s *server) handleCronAnalytics(w http.ResponseWriter, r *http.Request) {
 		board:     board,
 		tiersT:    "Free-tier runway",
 		tiers:     tiers,
-		lines:     []string{fmt.Sprintf("👥 %d unique people did something yesterday.", dau)},
+		lines:     []string{fmt.Sprintf("%d unique people did something yesterday.", dau)},
 		meta:      meta,
 		ctaLabel:  "Open PostHog",
 		ctaURL:    "https://us.posthog.com/project/" + project,

@@ -76,13 +76,15 @@ func eventCover(ev db.Event) string {
 }
 
 // eventMeta builds the When/Where fact rows shown in time-bearing emails.
+// "When" is a date/time - stamp voice (mono, amber, §1.5); "Where" is a
+// location string and stays plain ink.
 func eventMeta(ev db.Event) []emailMetaRow {
 	var rows []emailMetaRow
 	if w := eventWhen(ev); w != "" {
-		rows = append(rows, emailMetaRow{"When", w})
+		rows = append(rows, emailMetaRow{label: "When", value: w, mono: true})
 	}
 	if ev.LocationAddress != "" {
-		rows = append(rows, emailMetaRow{"Where", ev.LocationAddress})
+		rows = append(rows, emailMetaRow{label: "Where", value: ev.LocationAddress})
 	}
 	return rows
 }
@@ -118,16 +120,16 @@ func (s *server) notifyFinalized(ctx context.Context, ev db.Event, extra []pgtyp
 		return
 	}
 	meta := eventMeta(ev)
-	heading, line := ev.Title+" has a time 🎉", "Good news - the group landed on a time. Add it to your calendar so it actually happens."
+	heading, line := ev.Title+" has a time", "Good news - the group landed on a time. Add it to your calendar so it actually happens."
 	if len(extra) > 0 {
-		heading = fmt.Sprintf("%s has its dates 🎉", ev.Title)
+		heading = fmt.Sprintf("%s has its dates", ev.Title)
 		line = fmt.Sprintf("Good news - the group locked in %d dates. Add them to your calendar so they actually happen.", 1+len(extra))
 		loc := eventLocation(ev)
 		for _, ts := range extra {
-			meta = append(meta, emailMetaRow{"Also", ts.Time.In(loc).Format("Mon Jan 2 · 3:04 PM MST")})
+			meta = append(meta, emailMetaRow{label: "Also", value: ts.Time.In(loc).Format("Mon Jan 2 · 3:04 PM MST"), mono: true})
 		}
 	}
-	subject := fmt.Sprintf("It's on - %s is locked in 🎉", ev.Title)
+	subject := fmt.Sprintf("It's on - %s is locked in", ev.Title)
 	for _, c := range contacts {
 		body := renderEmail(emailContent{
 			preheader: "A time is set - here are the details.",
@@ -178,7 +180,7 @@ func (s *server) sendReminders(ctx context.Context, events []db.Event) int {
 			body := renderEmail(emailContent{
 				preheader: "Happening soon - don't forget.",
 				heading:   ev.Title + " is tomorrow",
-				lines:     []string{"Just a heads up - this is coming up soon. See you there!"},
+				lines:     []string{"Just a heads up - this is coming up soon. See you there."},
 				meta:      eventMeta(ev),
 				ctaLabel:  "See the details →",
 				ctaURL:    campaignURL(s.eventURL(ev.ID), "reminder"),
@@ -195,11 +197,12 @@ func (s *server) sendReminders(ctx context.Context, events []db.Event) int {
 		items := make([]emailItem, 0, len(r.events))
 		for _, ev := range r.events {
 			items = append(items, emailItem{
-				title:   ev.Title,
-				when:    eventWhen(ev),
-				url:     campaignURL(s.eventURL(ev.ID), "reminder"),
-				muteURL: s.muteLink(userID, uuidStr(ev.ID)),
-				cover:   eventCover(ev),
+				title:       ev.Title,
+				when:        eventWhen(ev),
+				whenIsStamp: true,
+				url:         campaignURL(s.eventURL(ev.ID), "reminder"),
+				muteURL:     s.muteLink(userID, uuidStr(ev.ID)),
+				cover:       eventCover(ev),
 			})
 		}
 		body := renderEmail(emailContent{
@@ -237,7 +240,7 @@ func (s *server) notifyInvite(ctx context.Context, ev db.Event, inviterID, invit
 		heading:   "You're invited to " + ev.Title,
 		lines:     []string{inviter.DisplayName + " " + verb},
 		meta:      eventMeta(ev),
-		ctaLabel:  "✅ I'm going",
+		ctaLabel:  "I'm going",
 		ctaURL:    s.rsvpLink(inviteeID, uuidStr(ev.ID), "going"),
 		cta2Label: "Can't make it",
 		cta2URL:   s.rsvpLink(inviteeID, uuidStr(ev.ID), "declined"),
@@ -258,9 +261,9 @@ func (s *server) notifyRecap(ctx context.Context, ev db.Event) int {
 	return s.broadcastToGoing(ctx, ev, "How was "+ev.Title+"?", func(_, unsub string) emailContent {
 		return emailContent{
 			preheader: "Relive it - and plan the next one.",
-			heading:   "How was " + ev.Title + "? 📸",
+			heading:   "How was " + ev.Title + "?",
 			lines:     []string{"Drop a photo or a highlight in the thread - it's the group's memory now.", "And if it was a good one… same time next month?"},
-			ctaLabel:  "Drop a pic 📸",
+			ctaLabel:  "Add a photo from the night",
 			ctaURL:    campaignURL(s.eventURL(ev.ID), "recap"),
 			cta2Label: "Plan the next one",
 			cta2URL:   campaignURL(s.appOrigin+"/new?again="+uuidStr(ev.ID), "recap_next"),
@@ -288,7 +291,7 @@ func (s *server) notifySeriesEnded(ctx context.Context, ev db.Event) {
 	}
 	body := renderEmail(emailContent{
 		preheader: "That was the last one on the calendar.",
-		heading:   "Keep " + ev.Title + " going 🔁",
+		heading:   "Keep " + ev.Title + " going",
 		lines:     []string{"That was the last scheduled date for this series. One tap opens a poll with everyone already invited - find the next times that work."},
 		ctaLabel:  "Poll the group for next dates",
 		ctaURL:    campaignURL(s.appOrigin+"/new?again="+uuidStr(ev.ID)+"&repoll=1", "repoll"),
@@ -326,7 +329,7 @@ func (s *server) maybeNotifyQuorum(ctx context.Context, ev db.Event) {
 	}
 	body := renderEmail(emailContent{
 		preheader: "Everyone you invited has voted.",
-		heading:   "Everyone's voted 🎉",
+		heading:   "Everyone's voted",
 		lines:     []string{fmt.Sprintf("All %d invitees have answered the %s poll. The results are waiting - pick the winning time and lock it in.", invites, ev.Title)},
 		ctaLabel:  "See results & lock it in",
 		ctaURL:    campaignURL(s.appOrigin+"/e/"+uuidStr(ev.ID), "quorum"),
@@ -408,7 +411,7 @@ func (s *server) sendPollVelocity(ctx context.Context) (reminded, ready int) {
 				}
 				body := renderEmail(emailContent{
 					preheader: "The poll closes " + closes + ".",
-					heading:   "Last chance to vote ⏳",
+					heading:   "Last chance to vote",
 					lines:     []string{fmt.Sprintf("The poll for %s closes %s and your availability isn't in yet. It takes a few taps.", ev.Title, closes)},
 					ctaLabel:  "Vote now",
 					ctaURL:    campaignURL(s.appOrigin+"/e/"+uuidStr(ev.ID), "vote_reminder"),
@@ -436,12 +439,12 @@ func (s *server) sendPollVelocity(ctx context.Context) (reminded, ready int) {
 					lines = []string{"The poll for " + ev.Title + " has closed without any votes - nudge the group or pick a time yourself."}
 				}
 				for _, wl := range winners {
-					lines = append(lines, "🏆 "+wl)
+					lines = append(lines, wl)
 				}
 				lines = append(lines, "Pick the winner (or several dates) and everyone gets the locked-in email.")
 				body := renderEmail(emailContent{
 					preheader: "Your poll closed - time to lock it in.",
-					heading:   "Your poll is ready to lock 🗳️",
+					heading:   "Your poll is ready to lock",
 					lines:     lines,
 					ctaLabel:  "Lock in the time",
 					ctaURL:    campaignURL(s.appOrigin+"/e/"+uuidStr(ev.ID), "poll_ready"),
@@ -486,7 +489,7 @@ func (s *server) promoteFromWaitlist(ctx context.Context, ev db.Event) {
 	}
 	body := renderEmail(emailContent{
 		preheader: "A spot opened up - you're in.",
-		heading:   "You're in 🎉",
+		heading:   "You're in",
 		lines:     []string{"A spot opened up for " + ev.Title + " and you were next on the waitlist - you're now going.", eventWhen(ev)},
 		ctaLabel:  "See the details",
 		ctaURL:    campaignURL(s.eventURL(ev.ID), "waitlist_promoted"),
@@ -559,11 +562,11 @@ func (s *server) sendStreakCongrats(ctx context.Context) int {
 		if cerr != nil {
 			continue
 		}
-		subject := fmt.Sprintf("🔥 %d months strong - %s", n, group.Name)
+		subject := fmt.Sprintf("%d months strong - %s", n, group.Name)
 		for _, c := range contacts {
 			body := renderEmail(emailContent{
 				preheader: fmt.Sprintf("%s has met every month for %d months straight.", group.Name, n),
-				heading:   fmt.Sprintf("%d-month streak 🔥", n),
+				heading:   fmt.Sprintf("%d-month streak", n),
 				lines: []string{
 					fmt.Sprintf("%s has met every month for %d months straight. That doesn't happen by accident - nice work, everyone.", group.Name, n),
 					"Keep it alive: lock in next month's date before the chat goes quiet.",
@@ -633,7 +636,7 @@ func collapseActivity(rows []db.DrainDueNotificationsRow) map[string][]digestLin
 				continue
 			}
 			seenRsvp[k] = true
-			out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, "✅ " + r.ActorName + " is going", "rsvp", r.ActorName, ""})
+			out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, r.ActorName + " is going", "rsvp", r.ActorName, ""})
 			continue
 		}
 		text := r.Body
@@ -643,7 +646,7 @@ func collapseActivity(rows []db.DrainDueNotificationsRow) map[string][]digestLin
 		if text == "" {
 			text = "sent a GIF"
 		}
-		out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, "💬 " + r.ActorName + ": " + text, "comment", r.ActorName, text})
+		out[r.RecipientID] = append(out[r.RecipientID], digestLine{r.EventID, r.ActorName + ": " + text, "comment", r.ActorName, text})
 	}
 	// walking backwards reversed the order - restore oldest-first per recipient
 	for k := range out {
@@ -703,12 +706,12 @@ func (s *server) flushActivityDigests(ctx context.Context) int {
 			if gerr != nil || ev.Status == "cancelled" {
 				continue
 			}
-			subject := fmt.Sprintf("✅ %s is going to %s", ln.actorName, ev.Title)
+			subject := fmt.Sprintf("%s is going to %s", ln.actorName, ev.Title)
 			heading := ln.actorName + " is going to " + ev.Title
-			bodyLines := []string{ln.actorName + " just RSVP'd - they're going. 🎉"}
+			bodyLines := []string{ln.actorName + " just RSVP'd - they're going."}
 			campaign := "rsvp"
 			if ln.kind == "comment" {
-				subject = fmt.Sprintf("💬 %s commented on %s", ln.actorName, ev.Title)
+				subject = fmt.Sprintf("%s commented on %s", ln.actorName, ev.Title)
 				heading = ln.actorName + " commented on " + ev.Title
 				bodyLines = []string{ln.actorName + " left a comment:"}
 				campaign = "comment"

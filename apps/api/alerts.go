@@ -62,7 +62,7 @@ func (s *server) alert(topic string, err error) {
 	}
 	body := renderEmail(emailContent{
 		preheader: "A server error needs eyes.",
-		heading:   "⚠️ " + topic,
+		heading:   topic,
 		lines: []string{
 			detail,
 			time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
@@ -73,5 +73,5 @@ func (s *server) alert(topic string, err error) {
 		logoURL:  s.logoURL(),
 		theme:    "analytics",
 	})
-	s.notify.Send([]string{to}, "⚠️ Whensdays: "+topic, body)
+	s.notify.Send([]string{to}, "Whensdays: "+topic, body)
 }

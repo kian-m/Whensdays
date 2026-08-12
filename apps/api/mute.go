@@ -134,18 +134,22 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	s.analytics.Capture(userID, "event_notifications_muted", map[string]any{"event_id": eventID, "muted": !resub, "via": "email"})
 	eventURL := s.eventURL(id)
 	if resub {
-		s.unsubPage(w, http.StatusOK, "You're back on 🔔",
+		s.unsubPage(w, http.StatusOK, "You're back on",
 			`You'll get notifications about "`+ev.Title+`" again.`, eventURL, "")
 		return
 	}
 	// Offer a one-click undo (same token, resub=1).
 	undo := s.appOrigin + "/api/events/" + eventID + "/unsubscribe?token=" + s.guests.signMute(userID, eventID) + "&resub=1"
-	s.unsubPage(w, http.StatusOK, "You're unsubscribed 🔕",
+	s.unsubPage(w, http.StatusOK, "You're unsubscribed",
 		`You won't get any more emails about "`+ev.Title+`".`, eventURL, undo)
 }
 
-// unsubPage renders the confirmation. Script-free; inline style is allowed only
-// via the per-response CSP override below.
+// unsubPage renders the confirmation - House Lights palette (plum stage,
+// cream card, coral link with plum-safe contrast), no emoji, script-free;
+// inline style is allowed only via the per-response CSP override below.
+// Shared by every unauthenticated one-click email link: event mute/unmute
+// (this file), one-tap email RSVP (engage.go), and follow-digest unsubscribe
+// (followdigest.go).
 func (s *server) unsubPage(w http.ResponseWriter, status int, title, msg, eventURL, undoURL string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -158,13 +162,19 @@ func (s *server) unsubPage(w http.ResponseWriter, status int, title, msg, eventU
 	}
 	links := ""
 	if undoURL != "" {
-		links += fmt.Sprintf(`<a href="%s" style="color:#ee6c4d;font-weight:600;text-decoration:none">Undo - keep me subscribed</a><br><br>`, html.EscapeString(undoURL))
+		links += fmt.Sprintf(`<a href="%s" style="color:%s;font-weight:600;text-decoration:none">Undo - keep me subscribed</a><br><br>`, html.EscapeString(undoURL), emailAccentDeep)
 	}
 	if eventURL != "" {
-		links += fmt.Sprintf(`<a href="%s" style="color:#9aa4b6;text-decoration:none">Open the event →</a>`, html.EscapeString(eventURL))
+		links += fmt.Sprintf(`<a href="%s" style="color:%s;text-decoration:none">Open the event</a>`, html.EscapeString(eventURL), emailMuted)
 	}
-	body := fmt.Sprintf(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>%s</title></head><body style="margin:0;background:#10141f;color:#f4f1ec;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"><div style="max-width:440px;margin:12vh auto;padding:32px 28px;background:#1a2233;border:1px solid #2b3550;border-radius:14px;text-align:center">%s<h1 style="margin:0 0 10px;font-size:22px">%s</h1><p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#c9d1de">%s</p>%s</div></body></html>`,
-		html.EscapeString(title), logo, html.EscapeString(title), html.EscapeString(msg), links)
+	body := fmt.Sprintf(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>%s</title></head><body style="margin:0;background:%s;color:%s;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"><div style="max-width:440px;margin:12vh auto;background:%s;border:1px solid %s;border-radius:14px;text-align:center;overflow:hidden"><div style="height:3px;background:%s"></div><div style="padding:28px 28px 32px">%s<h1 style="margin:0 0 10px;font-size:22px;color:%s">%s</h1><p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:%s">%s</p>%s</div></div></body></html>`,
+		html.EscapeString(title), emailStage, emailStageInk, emailCream, emailLine, emailStripeCSS, logo, emailInk, html.EscapeString(title), emailMuted, html.EscapeString(msg), links)
 	w.WriteHeader(status)
 	_, _ = w.Write([]byte(body))
 }
+
+// emailStripeCSS is the candy-stripe rule as a CSS linear-gradient, for the
+// plain HTML confirmation pages (unlike email, browsers render gradients
+// fine - the 4-cell table fallback is an email-client-only concession).
+var emailStripeCSS = fmt.Sprintf("linear-gradient(90deg,%s 0 25%%,%s 25%% 50%%,%s 50%% 75%%,%s 75%% 100%%)",
+	emailStripe[0], emailStripe[1], emailStripe[2], emailStripe[3])
