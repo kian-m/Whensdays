@@ -865,6 +865,70 @@ test.describe("scheduler", () => {
     }
   });
 
+  test("following on Home: a followed page's event rides the main feed, unfollow pulls it back out", async ({ browser }) => {
+    test.skip(!DEV_AUTH, "two dev users in separate contexts");
+    const hostCtx = await browser.newContext();
+    const fanCtx = await browser.newContext();
+    const host = await hostCtx.newPage();
+    const fan = await fanCtx.newPage();
+    try {
+      await ensureUser(host, "homefolhost", "Home Fol Host", "homefolhost");
+      await ensureUser(fan, "homefolfan", "Home Fol Fan", "homefolfan");
+
+      // A club with a listed event, same setup as the API-level Following test.
+      const stamp = `${test.info().testId}-${Date.now()}`;
+      const gname = `Home Club ${stamp}`;
+      await host.goto("/groups");
+      await host.getByTestId("group-name").fill(gname);
+      await host.getByTestId("group-create").click();
+      await host.getByTestId("group-row").filter({ hasText: gname }).first().click();
+      await expect(host.getByTestId("group-title")).toHaveText(gname);
+      const gid = host.url().split("/g/")[1];
+
+      const title = `Home Jam ${stamp}`;
+      await host.getByTestId("group-new-event").click();
+      await host.getByTestId("quick-title").fill(title);
+      await host.getByTestId("quick-mode-fixed").click();
+      await host.getByTestId("quick-when").fill(future(24));
+      await expect(host.getByTestId("quick-listed")).toBeChecked();
+      await host.getByTestId("quick-create").click();
+      await expect(host.getByTestId("event-title")).toHaveText(title);
+
+      // The fan follows the group from its public page WITHOUT joining it.
+      await fan.goto(`/g/${gid}`);
+      await expect(fan.getByTestId("group-public-card")).toBeVisible();
+      await fan.getByTestId("group-follow").click();
+      await expect(fan.getByTestId("group-follow")).toContainText("Following");
+
+      // Home: the Following chip appears, and the event shows in the "From
+      // pages you follow" preview under the fan's own tiles - visible on the
+      // default view, not only behind the chip - with page attribution.
+      await fan.goto("/");
+      await expect(fan.getByTestId("filter-following")).toBeVisible();
+      await expect(fan.getByTestId("following-section")).toBeVisible();
+      const previewTile = fan.getByTestId("following-tile").filter({ hasText: title });
+      await expect(previewTile).toBeVisible();
+      await expect(previewTile.getByTestId("following-attribution")).toHaveText(`via ${gname}`);
+
+      // "See all" activates the Following chip, which lists the full followed set.
+      await fan.getByTestId("following-see-all").click();
+      await expect(fan.getByTestId("filter-following")).toHaveClass(/on/);
+      await expect(fan.getByTestId("following-tile").filter({ hasText: title })).toBeVisible();
+
+      // Unfollow: gone from Home entirely - the chip only renders when the
+      // fan follows something, mirroring the Drafts chip.
+      await fan.goto(`/g/${gid}`);
+      await fan.getByTestId("group-follow").click();
+      await expect(fan.getByTestId("group-follow")).toHaveText("+ Follow");
+      await fan.goto("/");
+      await expect(fan.getByTestId("filter-following")).toHaveCount(0);
+      await expect(fan.getByTestId("following-section")).toHaveCount(0);
+    } finally {
+      await hostCtx.close();
+      await fanCtx.close();
+    }
+  });
+
   test("first event created suggests add-to-homescreen (phones, once)", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for an isolated user");
     await page.setViewportSize({ width: 390, height: 844 }); // the prompt is phone-only

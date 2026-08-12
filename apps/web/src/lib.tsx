@@ -100,6 +100,10 @@ export type PublicEvent = {
   from_friend: boolean;
   photo_url: string;
   theme: string;
+  // Page attribution for a followed-feed tile ("via {group name}"): set only
+  // when the event belongs to a group (a page IS a group - VENUE-PAGES.md).
+  group_id: string | null;
+  group_name: string | null;
 };
 
 export type Follow = { kind: "host" | "topic"; value: string };

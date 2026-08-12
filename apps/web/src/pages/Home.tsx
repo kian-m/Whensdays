@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Event, collapseSeries, eventIsPast, fetchDashboard, seriesCounts, fmtDateTime, useProfile } from "../lib";
+import { Event, PublicEvent, collapseSeries, eventIsPast, fetchDashboard, seriesCounts, fmtDateTime, useApi, useProfile } from "../lib";
 import { Avatar, EventThumb, ListSkeleton, Pill, useAsync } from "../ui";
 import { Ic } from "../Icons";
 
@@ -8,8 +8,14 @@ import { Ic } from "../Icons";
 // with photos → initials-only) + the total going count per event.
 type Face = { name: string; avatar_url: string; is_friend: boolean };
 type Pile = { faces: Face[]; going: number };
-type EventsResp = { hosting: Event[]; attending: Event[]; unseen: string[]; faces?: Record<string, Pile>; my_rsvps?: Record<string, string> };
-type Filter = "all" | "upcoming" | "hosting" | "attending" | "past" | "drafts" | "declined";
+type EventsResp = {
+  hosting: Event[]; attending: Event[]; unseen: string[];
+  faces?: Record<string, Pile>; my_rsvps?: Record<string, string>;
+  // Cheap count so the web only bothers fetching the followed-events feed
+  // (a second round trip) when it can possibly have something to show.
+  follow_count?: number;
+};
+type Filter = "all" | "upcoming" | "hosting" | "attending" | "past" | "drafts" | "declined" | "following";
 
 const DAY = 86_400_000;
 
@@ -35,9 +41,25 @@ function byWhen(a: Event, b: Event): number {
 
 export function Home() {
   const nav = useNavigate();
+  const api = useApi();
   const profile = useProfile();
   const { data, loading } = useAsync<EventsResp>(fetchDashboard);
   const [filter, setFilter] = useState<Filter>("all");
+
+  // "From pages you follow": only worth a fetch once the dashboard tells us
+  // there's ≥1 follow to show (follow_count gates it - see VENUE-PAGES.md V2).
+  const followCount = data?.follow_count ?? 0;
+  const [followingEvents, setFollowingEvents] = useState<PublicEvent[]>([]);
+  useEffect(() => {
+    if (followCount === 0) { setFollowingEvents([]); return; }
+    let cancelled = false;
+    api("/api/feed?scope=following").then(async (res) => {
+      if (!res.ok || cancelled) return;
+      const b = await res.json();
+      if (!cancelled) setFollowingEvents(b.events ?? []);
+    });
+    return () => { cancelled = true; };
+  }, [api, followCount]);
 
   // No full-page loader: the chrome below renders instantly and the list area
   // shows skeleton tiles until the first fetch lands (revisits hit the cache).
@@ -80,7 +102,11 @@ export function Home() {
   // A recurring series shows as ONE tile: its next upcoming occurrence in the
   // active views, its most-recent one under Past (collapse then re-sort).
   const newestFirst = (a: Event, b: Event) => new Date(b.starts_at!).getTime() - new Date(a.starts_at!).getTime();
-  const lists: Record<Filter, Event[]> = {
+  // "following" isn't an Event[] list (it's PublicEvent[] from the feed
+  // endpoint, a different shape) - keep it out of this record and handle it
+  // as its own branch below.
+  type ListFilter = Exclude<Filter, "following">;
+  const lists: Record<ListFilter, Event[]> = {
     all: collapseSeries(all).sort(byWhen),
     upcoming: collapseSeries(upcoming).sort(byWhen),
     hosting: collapseSeries(activeHosting).sort(byWhen),
@@ -90,17 +116,25 @@ export function Home() {
     drafts: collapseSeries(drafts).sort(byWhen),
     declined: collapseSeries(declined).sort(byWhen),
   };
-  const counts: Record<Filter, number> = {
+  const counts: Record<ListFilter, number> = {
     all: lists.all.length, upcoming: lists.upcoming.length,
     hosting: lists.hosting.length, attending: lists.attending.length,
     past: lists.past.length, drafts: lists.drafts.length, declined: lists.declined.length,
   };
-  const shown = lists[filter];
+  const shown = filter === "following" ? [] : lists[filter];
+  const chipCount = (k: Filter) => (k === "following" ? followingEvents.length : counts[k]);
   // "🔁 N dates" counts only the occurrences relevant to the view: remaining
   // dates on active tiles (the number goes DOWN as dates pass), past ones
   // under Past. Union-wide counts would keep showing the series' full length.
   const scountActive = seriesCounts(live.filter((e) => !isPast(e)));
   const scountPast = seriesCounts(past);
+
+  // Followed-feed preview under the user's own tiles: next 3, deduped against
+  // whatever's already in their own hosting/attending list by event id (a
+  // group you're also invited to shouldn't show twice).
+  const dashboardIds = new Set(union.map((e) => e.id));
+  const dedupedFollowing = followingEvents.filter((e) => !dashboardIds.has(e.id));
+  const followingPreview = dedupedFollowing.slice(0, 3);
 
   const FILTERS: { key: Filter; label: string }[] = [
     { key: "all", label: "All" },
@@ -108,7 +142,9 @@ export function Home() {
     { key: "hosting", label: "Hosting" },
     { key: "attending", label: "Attending" },
     { key: "past", label: "Past" },
-    // These only earn a chip once one exists - zero clutter otherwise.
+    // These only earn a chip once there's something to show - zero clutter
+    // otherwise (Following mirrors how the Drafts chip behaves).
+    ...(followCount > 0 ? [{ key: "following" as Filter, label: "Following" }] : []),
     ...(drafts.length > 0 ? [{ key: "drafts" as Filter, label: "Drafts" }] : []),
     ...(declined.length > 0 ? [{ key: "declined" as Filter, label: "Can't go" }] : []),
   ];
@@ -125,43 +161,102 @@ export function Home() {
         {FILTERS.map((f) => (
           <button key={f.key} type="button" className={`chip sm ${filter === f.key ? "on" : ""}`}
             data-testid={`filter-${f.key}`} onClick={() => setFilter(f.key)}>
-            {f.label}{counts[f.key] > 0 && <span className="filter-count">{counts[f.key]}</span>}
+            {f.label}{chipCount(f.key) > 0 && <span className="filter-count">{chipCount(f.key)}</span>}
           </button>
         ))}
       </div>
 
       {firstLoad ? (
         <ListSkeleton rows={4} />
-      ) : union.length === 0 ? (
-        <div className="card empty stack" data-testid="events-empty">
-          <h3>No plans yet</h3>
-          <p className="muted">Host a dinner, movie night or camping trip - or wait for an invite.</p>
-          {/* No Discover link here - the public surface is out of the product
-              until group density exists (see the TABS comment in App.tsx). */}
-          <div className="row wrap" style={{ justifyContent: "center" }}>
-            <Link to="/new" className="btn soft">Create your first event</Link>
+      ) : filter === "following" ? (
+        followingEvents.length === 0 ? (
+          <p className="muted small" data-testid="filter-empty">
+            Nothing new from the pages you follow yet.
+          </p>
+        ) : (
+          <div className="stack" data-testid="event-list">
+            {followingEvents.map((e) => (
+              <FollowedTile key={e.id} e={e} onClick={() => nav(`/e/${e.id}`)} />
+            ))}
           </div>
-        </div>
-      ) : shown.length === 0 ? (
-        <p className="muted small" data-testid="filter-empty">
-          {filter === "upcoming" ? "Nothing scheduled yet - check your polls for times still being decided."
-            : filter === "hosting" ? "You're not hosting anything right now."
-            : filter === "past" ? "No past events yet - memories land here the day after."
-            : filter === "all" ? "Nothing coming up - everything's in Past."
-            : filter === "drafts" ? "No drafts."
-            : filter === "declined" ? "Nothing you've declined."
-            : "Nothing here - you haven't been added to any events."}
-        </p>
+        )
       ) : (
-        <div className="stack" data-testid="event-list">
-          {shown.map((e) => (
-            <EventRow key={e.id} e={e} pile={data?.faces?.[e.id]} isNew={unseen.has(e.id)}
-              past={isPast(e)} attended={attended(e)} declinedByMe={iDeclined(e)}
-              seriesN={e.series_id ? ((isPast(e) ? scountPast : scountActive)[e.series_id] ?? 1) : 0}
-              soon={!isPast(e) && e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
-          ))}
-        </div>
+        <>
+          {union.length === 0 ? (
+            <div className="card empty stack" data-testid="events-empty">
+              <h3>No plans yet</h3>
+              <p className="muted">Host a dinner, movie night or camping trip - or wait for an invite.</p>
+              {/* No Discover link here - the public surface is out of the product
+                  until group density exists (see the TABS comment in App.tsx). */}
+              <div className="row wrap" style={{ justifyContent: "center" }}>
+                <Link to="/new" className="btn soft">Create your first event</Link>
+              </div>
+            </div>
+          ) : shown.length === 0 ? (
+            <p className="muted small" data-testid="filter-empty">
+              {filter === "upcoming" ? "Nothing scheduled yet - check your polls for times still being decided."
+                : filter === "hosting" ? "You're not hosting anything right now."
+                : filter === "past" ? "No past events yet - memories land here the day after."
+                : filter === "all" ? "Nothing coming up - everything's in Past."
+                : filter === "drafts" ? "No drafts."
+                : filter === "declined" ? "Nothing you've declined."
+                : "Nothing here - you haven't been added to any events."}
+            </p>
+          ) : (
+            <div className="stack" data-testid="event-list">
+              {shown.map((e) => (
+                <EventRow key={e.id} e={e} pile={data?.faces?.[e.id]} isNew={unseen.has(e.id)}
+                  past={isPast(e)} attended={attended(e)} declinedByMe={iDeclined(e)}
+                  seriesN={e.series_id ? ((isPast(e) ? scountPast : scountActive)[e.series_id] ?? 1) : 0}
+                  soon={!isPast(e) && e.starts_at ? soonLabel(e.starts_at) : ""} onClick={() => nav(`/e/${e.id}`)} />
+              ))}
+            </div>
+          )}
+
+          {/* "From pages you follow" - visible on the default view even when
+              the user has no own plans, not only behind the Following chip. */}
+          {filter === "all" && followingPreview.length > 0 && (
+            <div className="stack" data-testid="following-section">
+              <div className="row between">
+                <div className="section-h" style={{ margin: 0 }}>From pages you follow</div>
+                <button type="button" className="btn ghost sm" data-testid="following-see-all"
+                  onClick={() => setFilter("following")}>See all</button>
+              </div>
+              <div className="stack">
+                {followingPreview.map((e) => (
+                  <FollowedTile key={e.id} e={e} onClick={() => nav(`/e/${e.id}`)} />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+// A followed-page event: the standard tile plus a small attribution line
+// ("via {group/host name}") - links to the page when it belongs to a group,
+// plain text otherwise. Lighter than EventRow since the feed row carries no
+// location/RSVP/series data (see ListPublicEventsRow).
+function FollowedTile({ e, onClick }: { e: PublicEvent; onClick: () => void }) {
+  const page = e.group_id && e.group_name ? e.group_name : e.host_name;
+  return (
+    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : "type-tile"}`}
+      data-testid="following-tile" onClick={onClick}>
+      {e.photo_url && <EventThumb photo={e.photo_url} size={72} />}
+      <div style={{ flex: 1 }}>
+        <span className="title">{e.title}</span>
+        <div className="muted small"><span className="stamp">{fmtDateTime(e.starts_at)}</span></div>
+        {page && (
+          e.group_id ? (
+            <Link to={`/g/${e.group_id}`} className="muted small" data-testid="following-attribution"
+              onClick={(ev) => ev.stopPropagation()}>via {page}</Link>
+          ) : (
+            <span className="muted small" data-testid="following-attribution">via {page}</span>
+          )
+        )}
+      </div>
     </div>
   );
 }
