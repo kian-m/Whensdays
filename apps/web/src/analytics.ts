@@ -26,8 +26,10 @@ export const EVENTS = {
   calendarConnectStarted: "calendar_connect_started",
   followed: "followed",
   unfollowed: "unfollowed",
+  followClicked: "follow_clicked",
   gifPicked: "gif_picked",
   guestSignupClicked: "guest_signup_clicked",
+  pageViewed: "page_viewed",
   qrOpened: "qr_code_opened",
 } as const;
 

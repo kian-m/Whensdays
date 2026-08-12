@@ -105,11 +105,15 @@ Make the public page worth being someone's ONLY web presence:
 - Seed list: the four venue-sync groups + the user's improv/standup contacts get their pages dressed
   (icon, description) — manual, not code.
 
-### V6 — Instrumentation (Haiku)
-PostHog events (existing wiring): `page_viewed` (public page, with entity id), `follow_clicked` from
-public page vs event hero, sign-up conversions sourced from the public page (`source: 'public_page'`
-on the existing `guest_signup_clicked` pattern), digest opens via UTM, RSVP-from-digest. Funnel to
-watch: page view → follow → digest sent → RSVP ("follower activation").
+### V6 — Instrumentation (Haiku) — status: instrumented
+PostHog events for the follower activation funnel. Page view → follow → digest sent → RSVP.
+
+Events added:
+- Web `page_viewed` (on GroupPublicView mount): props group_id, signed_out boolean
+- Web `follow_clicked` (FollowButton): props kind, value, source
+- Web `guest_signup_clicked` (existing event, enhanced): source prop = "public_page" (group public-page follow CTA), "landing_create_page" (landing "Create your page" button), or existing values
+- Server `public_page_served` (handleGroupPublicPage): group_id, signed_in boolean (captured for authenticated users only)
+- Digest email tracking (existing): `campaignURL(..., "follow_digest")` = utm_campaign=email_follow_digest; one-tap RSVP links in digest via `s.rsvpLink()`. RSVP-from-digest is already attributable via the existing rsvp-link flow analytics (unsigned token clicks hit `/api/events/{id}/rsvp-link` → browser redirect to login → `POST /api/events/{id}/rsvp` with existing RSVP analytics).
 
 ## Sequencing with the House Lights redesign
 

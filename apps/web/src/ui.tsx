@@ -176,6 +176,7 @@ export function FollowButton({ kind, value, following, onChange, source, testid 
 
   async function toggle() {
     const next = !on;
+    analytics.capture(EVENTS.followClicked, { kind, value, source });
     setOn(next);
     setBusy(true);
     const res = next

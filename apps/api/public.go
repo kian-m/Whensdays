@@ -125,6 +125,10 @@ func (s *server) handleGroupPublicPage(w http.ResponseWriter, r *http.Request) {
 	if pastEvents == nil {
 		pastEvents = []db.Event{}
 	}
+	// Capture page view for signed-in users only (anonymous visitors have uid="")
+	if uid != "" {
+		s.analytics.Capture(uid, "public_page_served", map[string]any{"group_id": uuidStr(id), "signed_in": true})
+	}
 	writeJSON(w, http.StatusOK, publicPage{
 		Entity: publicEntity{
 			Type: "group", ID: uuidStr(g.ID), Name: g.Name, Description: g.Description,

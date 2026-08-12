@@ -444,6 +444,7 @@ function Landing() {
           {DEV_AUTH ? (
             <button type="button" className="btn primary land-go" data-testid="create-page"
               onClick={() => {
+                analytics.capture(EVENTS.guestSignupClicked, { mode: "dev", source: "landing_create_page" });
                 try { sessionStorage.setItem(PAGE_INTENT_KEY, "1"); } catch { /* private mode */ }
                 location.href = "/";
               }}>
@@ -452,7 +453,10 @@ function Landing() {
           ) : (
             <a href={`/sign-up?redirect_url=${encodeURIComponent("/groups?purpose=page")}`}
               className="btn primary land-go" data-testid="create-page"
-              onClick={() => { try { sessionStorage.setItem(PAGE_INTENT_KEY, "1"); } catch { /* private mode */ } }}>
+              onClick={() => {
+                analytics.capture(EVENTS.guestSignupClicked, { mode: "clerk", source: "landing_create_page" });
+                try { sessionStorage.setItem(PAGE_INTENT_KEY, "1"); } catch { /* private mode */ }
+              }}>
               Create your page
             </a>
           )}

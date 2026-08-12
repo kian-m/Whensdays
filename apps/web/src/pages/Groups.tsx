@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Event, Group, GroupDetail, PublicPage, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
+import { EVENTS, analytics } from "../analytics";
+import { GuestSignupButton } from "../App";
 
 // One-time "your old links are view-only now" note (see the Share card).
 const LINK_HINT_KEY = "whensdays.groupLinkHint";
@@ -154,6 +156,14 @@ export function GroupPublicView({ id, signedOut, onJoined }: { id: string; signe
     (a) => getJSON(a, `/api/public/groups/${id}${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`), [id, invite]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (data) {
+      analytics.capture(EVENTS.pageViewed, {
+        group_id: id,
+        signed_out: !!signedOut,
+      });
+    }
+  }, [data, id, signedOut]);
   if (loading && !data) return <ListSkeleton rows={1} header />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Group not found.</p></div>;
   const { entity, viewer } = data;
@@ -187,7 +197,7 @@ export function GroupPublicView({ id, signedOut, onJoined }: { id: string; signe
             visitors and guests get the signup nudge instead. */}
         {signedOut || isGuest ? (
           <span className="stack" style={{ gap: 4, alignItems: "center" }}>
-            <a className="btn soft" href="/sign-up" data-testid="group-follow-signup">+ Follow</a>
+            <GuestSignupButton testid="group-follow-signup" label="+ Follow" source="public_page" />
             <span className="muted small">Sign up to follow - their plans then land in your feed.</span>
           </span>
         ) : (
