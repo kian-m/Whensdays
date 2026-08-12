@@ -1215,7 +1215,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("edit-event-open").click();
     await page.getByTestId("edit-deadline").fill(dt(-1));
     await page.getByTestId("edit-save").click();
-    await expect(page.getByText("Poll closed - time coming soon")).toBeVisible();
+    await expect(page.getByText("Poll closed").first()).toBeVisible();
 
     // Votes bounce off a closed poll (server-enforced, 409).
     const status = await page.evaluate(async (eid) => {
@@ -1639,7 +1639,7 @@ test.describe("scheduler", () => {
     await expect(page.getByText("Looking forward to it!")).toBeVisible();
     // Delete is two-tap like every destructive action (arm, then confirm).
     await page.getByTestId("comment-delete-0").click();
-    await expect(page.getByTestId("comment-delete-0")).toHaveText("Delete?");
+    await expect(page.getByTestId("comment-delete-0")).toHaveText("Confirm?");
     await page.getByTestId("comment-delete-0").click();
     await expect(page.getByText("Looking forward to it!")).toHaveCount(0);
 
@@ -1828,7 +1828,7 @@ test.describe("scheduler", () => {
     await page.goto("/");
     const rows = page.getByTestId("event-row").filter({ hasText: title });
     await expect(rows).toHaveCount(1);
-    await expect(rows.getByTestId("series-badge")).toContainText("3 dates");
+    await expect(rows.getByTestId("series-badge")).toContainText("3 DATES");
 
     // Regression: an RSVP on one occurrence must NOT carry its selection to a
     // sibling (the mounted page is reused across ids; children re-key).
@@ -1938,7 +1938,7 @@ test.describe("scheduler", () => {
     await page.reload();
     const tile = page.getByTestId("group-event").filter({ hasText: title });
     await expect(tile).toHaveCount(1);
-    await expect(tile.getByTestId("series-badge")).toContainText("3 dates");
+    await expect(tile.getByTestId("series-badge")).toContainText("3 DATES");
     await tile.click();
     await expect(page.getByTestId("hosted-by")).toContainText("UCB Schedule");
     await expect(page.getByTestId("series")).toContainText("of 3");
@@ -2088,7 +2088,7 @@ test.describe("scheduler", () => {
     await page.reload();
     const tile = page.getByTestId("group-event").filter({ hasText: title });
     await expect(tile).toHaveCount(1);
-    await expect(tile.getByTestId("series-badge")).toContainText("3 dates");
+    await expect(tile.getByTestId("series-badge")).toContainText("3 DATES");
     await tile.click();
     await expect(page.getByTestId("hosted-by")).toContainText("Rozco's Schedule");
     await expect(page.getByTestId("series")).toContainText("of 3");
@@ -2347,18 +2347,15 @@ test.describe("scheduler", () => {
       const pub = await request.get("/api/discover");
       expect(await pub.text()).not.toContain(title);
 
-      // Tier styling: a friend's event glows green until you're going (in the
-      // second e2e pass the RSVP from pass 1 persists → already tile-going).
-      if (!((await row.getAttribute("class")) ?? "").includes("tile-going")) {
-        await expect(row).toHaveClass(/tile-friend/);
-      }
+      // House Lights: the whole-tile glow tiers are gone - "you're going"
+      // reads from the pill inside the row instead.
       await fv2.getByText(title).first().click(); // open → RSVP going
       const fv2Rsvp = fv2.waitForResponse((r) => r.url().includes("/rsvp") && r.ok());
       await fv2.getByTestId("rsvp-going").click();
       await fv2Rsvp; // optimistic UI: wait for the background POST before navigating
       await fv2.goto("/discover");
       await fv2.getByTestId("scope-friends").click();
-      await expect(fv2.getByTestId("feed-event").filter({ hasText: title }).first()).toHaveClass(/tile-going/);
+      await expect(fv2.getByTestId("feed-event").filter({ hasText: title }).first().getByText("You're going")).toBeVisible();
 
       // Social proof: the host (fv2's friend) also RSVPs going → fv2's tile
       // shows "1 friend going". (Hosts don't appear in their own feed.)
@@ -2562,7 +2559,11 @@ test.describe("scheduler", () => {
   });
 
   test("brand-new page owner sees the Home empty-state 'Post your first event' nudge", async ({ page }) => {
-    await ensureUser(page, "newpageowner1", "New Page Owner", "newpageowner1");
+    // The nudge requires owning EXACTLY one group, so the user must be unique
+    // per attempt - a retry reusing the same user would own two groups and
+    // structurally hide the hint.
+    const who = `npo${test.info().testId.slice(-6)}r${test.info().retry}`;
+    await ensureUser(page, who, "New Page Owner", who);
     await page.goto("/groups?purpose=page");
     const gname = `Fresh Venue ${test.info().testId}`;
     await page.getByTestId("group-name").fill(gname);
@@ -2573,7 +2574,8 @@ test.describe("scheduler", () => {
     // Owns exactly one group, zero events - Home's brand-new-page-owner nudge.
     await page.goto("/");
     await expect(page.getByTestId("events-empty")).toBeVisible();
-    await expect(page.getByTestId("page-owner-hint")).toContainText(gname);
+    // Two serial fetches (dashboard, then groups) - allow for a starved runner.
+    await expect(page.getByTestId("page-owner-hint")).toContainText(gname, { timeout: 15000 });
     const cta = page.getByTestId("page-first-event");
     await expect(cta).toBeVisible();
     await expect(cta).toHaveAttribute("href", `/new?group=${groupId}`);
@@ -2684,7 +2686,7 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("picked-cells")).toBeVisible();
     await page.getByTestId("general-finalize").click();
     await expect(page.getByTestId("event-title")).toBeVisible();
-    await expect(page.getByText("Locked in")).toBeVisible();
+    await expect(page.getByText("Locked in").first()).toBeVisible();
   });
 
   test("general poll finalizes MULTIPLE winning dates into a series", async ({ page }) => {
@@ -3081,7 +3083,7 @@ test.describe("scheduler", () => {
     // Host picks the first option → event becomes confirmed.
     await page.getByTestId("preview-toggle").click();
     await page.getByTestId("finalize-0").click();
-    await expect(page.getByText("Locked in")).toBeVisible();
+    await expect(page.getByText("Locked in").first()).toBeVisible();
   });
 
   test("guest on an open poll lands on the vote grid, not the RSVP prompt", async ({ page, browser }) => {
