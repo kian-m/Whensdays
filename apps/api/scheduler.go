@@ -497,10 +497,11 @@ func (s *server) handlePutAvailabilityDays(w http.ResponseWriter, r *http.Reques
 func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	ctx := r.Context()
-	// Five independent reads - fan out (one DB round trip of latency, not five).
+	// Six independent reads - fan out (one DB round trip of latency, not six).
 	var (
 		hosting, cohosting, attending, invited []db.Event
 		unseenRows                             []pgtype.UUID
+		followCount                            int32
 	)
 	err := parallel(
 		func() (e error) { hosting, e = s.queries.ListEventsHosting(ctx, uid); return },
@@ -512,6 +513,9 @@ func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		// Per-event "new" markers: ids of invited events the user hasn't opened
 		// yet. (Cleared one at a time in handleGetEvent, not en masse here.)
 		func() (e error) { unseenRows, e = s.queries.ListUnseenInviteEventIDs(ctx, uid); return },
+		// Cheap gate for the web: only worth a second round trip to
+		// GET /api/feed?scope=following when the viewer follows ≥1 thing.
+		func() (e error) { followCount, e = s.queries.CountFollows(ctx, uid); return },
 	)
 	if err != nil {
 		s.internal(w, "list events: load", err)
@@ -577,7 +581,7 @@ func (s *server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "list going faces", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending, "unseen": unseen, "faces": faces, "my_rsvps": myRsvps})
+	writeJSON(w, http.StatusOK, map[string]any{"hosting": hosting, "attending": attending, "unseen": unseen, "faces": faces, "my_rsvps": myRsvps, "follow_count": followCount})
 }
 
 // pollClosed reports whether a poll's optional close date has passed - votes

@@ -30,8 +30,12 @@ RETURNING job;
 -- ==================== public discovery ============================
 
 -- name: ListPublicEvents :many
+-- group_id/group_name ride here (and on ListFollowedEvents/ListFriendsEvents,
+-- column-for-column) so the web can attribute a followed-feed tile to the page
+-- ("via {group name}") instead of just the host - the whole point of a page
+-- being a group. LEFT JOIN because most events have no group.
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
-       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme, e.group_id, g.name AS group_name,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $3::text AND f.addressee_id = a.user_id)
@@ -43,6 +47,7 @@ SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
              OR (f2.addressee_id = $3::text AND f2.requester_id = e.host_id))))::bool AS from_friend
 FROM events e
 LEFT JOIN profiles p ON p.user_id = e.host_id
+LEFT JOIN groups g ON g.id = e.group_id
 WHERE e.status IN ('polling', 'scheduled')
   AND (e.starts_at IS NULL OR e.starts_at >= now())
   AND (e.visibility = 'public'
@@ -79,6 +84,12 @@ DELETE FROM follows WHERE user_id = $1 AND kind = $2 AND value = $3;
 -- name: ListFollows :many
 SELECT kind, value FROM follows WHERE user_id = $1 ORDER BY created_at;
 
+-- name: CountFollows :one
+-- Cheap gate for the web: only fetch the followed-events feed (a second round
+-- trip) when the viewer actually follows something. Rides the dashboard's
+-- existing parallel fan-out (handleListEvents) as one more COUNT query.
+SELECT count(*)::int FROM follows WHERE user_id = $1;
+
 -- name: IsFollowing :one
 SELECT EXISTS(
     SELECT 1 FROM follows WHERE user_id = $1 AND kind = $2 AND value = $3
@@ -97,7 +108,7 @@ SELECT EXISTS(
 -- Column list mirrors ListPublicEvents exactly so the rows convert to
 -- ListPublicEventsRow for the shared ranker.
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
-       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme, e.group_id, g.name AS group_name,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $1::text AND f.addressee_id = a.user_id)
@@ -109,6 +120,7 @@ SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
              OR (f2.addressee_id = $1::text AND f2.requester_id = e.host_id))))::bool AS from_friend
 FROM events e
 LEFT JOIN profiles p ON p.user_id = e.host_id
+LEFT JOIN groups g ON g.id = e.group_id
 WHERE e.status IN ('polling', 'scheduled')
   AND (e.starts_at IS NULL OR e.starts_at >= now())
   AND e.listed = true
@@ -152,8 +164,10 @@ WHERE e.visibility = 'public' AND e.status = 'scheduled' AND e.starts_at >= now(
 GROUP BY a.event_id;
 
 -- name: ListFriendsEvents :many
+-- Column list mirrors ListPublicEvents (group_id/group_name included) so rows
+-- convert to ListPublicEventsRow for the shared ranker, same as ListFollowedEvents.
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
-       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme, e.group_id, g.name AS group_name,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $1::text AND f.addressee_id = a.user_id)
@@ -165,6 +179,7 @@ SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
              OR (f2.addressee_id = $1::text AND f2.requester_id = e.host_id))))::bool AS from_friend
 FROM events e
 LEFT JOIN profiles p ON p.user_id = e.host_id
+LEFT JOIN groups g ON g.id = e.group_id
 WHERE e.status IN ('polling', 'scheduled')
   AND (e.starts_at IS NULL OR e.starts_at >= now())
   AND e.visibility IN ('friends', 'public')
