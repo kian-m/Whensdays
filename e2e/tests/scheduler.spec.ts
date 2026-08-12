@@ -634,6 +634,98 @@ test.describe("scheduler", () => {
     }
   });
 
+  // Following (phase 1) end to end. Following is ASYMMETRIC and is NOT Groups:
+  // the fan never joins the club, they just follow it, and the group's `listed`
+  // events ride their feed. Un-listing pulls the event straight back out.
+  test("following: a followed group's listed event rides the follower's feed", async ({ browser }) => {
+    test.skip(!DEV_AUTH, "two dev users in separate contexts");
+    const hostCtx = await browser.newContext();
+    const fanCtx = await browser.newContext();
+    const host = await hostCtx.newPage();
+    const fan = await fanCtx.newPage();
+    // The feed is per-user, so read it with the fan's dev header.
+    const feedTitles = (scope: string) => fan.evaluate(async (s) => {
+      const res = await fetch(`/api/feed?scope=${s}`, { headers: { "X-Dev-User": "folfan" } });
+      const b = await res.json();
+      return (b.events ?? []).map((e: { title: string }) => e.title) as string[];
+    }, scope);
+    try {
+      await ensureUser(host, "folhost", "Fol Host", "folhost");
+      await ensureUser(fan, "folfan", "Fol Fan", "folfan");
+
+      // A club, and an event inside it. "Show to my followers" is on by default.
+      const stamp = `${test.info().testId}-${Date.now()}`;
+      const gname = `Club ${stamp}`;
+      await host.goto("/groups");
+      await host.getByTestId("group-name").fill(gname);
+      await host.getByTestId("group-create").click();
+      await host.getByTestId("group-row").filter({ hasText: gname }).first().click();
+      await expect(host.getByTestId("group-title")).toHaveText(gname);
+      const gid = host.url().split("/g/")[1];
+
+      const title = `Jam ${stamp}`;
+      await host.getByTestId("group-new-event").click();
+      await host.getByTestId("quick-title").fill(title);
+      await host.getByTestId("quick-mode-fixed").click();
+      await host.getByTestId("quick-when").fill(future(24));
+      await expect(host.getByTestId("quick-listed")).toBeChecked();
+      await host.getByTestId("quick-create").click();
+      await expect(host.getByTestId("event-title")).toHaveText(title);
+      const eid = host.url().split("/e/")[1];
+
+      // The fan is NOT a member: the group link shows the join preview, and
+      // Follow sits right beside Join - you can follow without joining.
+      await fan.goto(`/g/${gid}`);
+      await expect(fan.getByTestId("group-join-card")).toBeVisible();
+      await expect(fan.getByTestId("group-follow")).toHaveText("+ Follow");
+      await fan.getByTestId("group-follow").click();
+      await expect(fan.getByTestId("group-follow")).toHaveText("Following ✓");
+      // Still a non-member - following didn't join them in.
+      await fan.reload();
+      await expect(fan.getByTestId("group-join-card")).toBeVisible();
+      await expect(fan.getByTestId("group-follow")).toHaveText("Following ✓");
+
+      // The club's listed event is now in their feed - both the dedicated
+      // "following" scope and the default public∪followed mix.
+      await expect.poll(() => feedTitles("following")).toContain(title);
+      await expect.poll(() => feedTitles("public")).toContain(title);
+
+      // The event page offers the other half of the feature: follow the HOST.
+      await fan.goto(`/e/${eid}`);
+      await expect(fan.getByTestId("hosted-by")).toBeVisible();
+      await fan.getByTestId("follow-host").click();
+      await expect(fan.getByTestId("follow-host")).toHaveText("Following ✓");
+      await fan.reload();
+      await expect(fan.getByTestId("follow-host")).toHaveText("Following ✓");
+
+      // The host un-lists the event: it leaves every follower's feed, even
+      // though the fan follows BOTH the group and the host.
+      await host.goto(`/e/${eid}`);
+      await host.getByTestId("edit-event-open").click();
+      await host.getByTestId("edit-sec-details").click();
+      await host.getByTestId("edit-listed").uncheck();
+      await host.getByTestId("edit-save").click();
+      await expect(host.getByTestId("hero-edit")).toHaveCount(0);
+      await expect.poll(() => feedTitles("following")).not.toContain(title);
+
+      // Unfollowing is the other exit: re-list, then drop the group + host.
+      await host.getByTestId("edit-event-open").click();
+      await host.getByTestId("edit-sec-details").click();
+      await host.getByTestId("edit-listed").check();
+      await host.getByTestId("edit-save").click();
+      await expect.poll(() => feedTitles("following")).toContain(title);
+      await fan.getByTestId("follow-host").click();
+      await expect(fan.getByTestId("follow-host")).toHaveText("+ Follow");
+      await fan.goto(`/g/${gid}`);
+      await fan.getByTestId("group-follow").click();
+      await expect(fan.getByTestId("group-follow")).toHaveText("+ Follow");
+      await expect.poll(() => feedTitles("following")).not.toContain(title);
+    } finally {
+      await hostCtx.close();
+      await fanCtx.close();
+    }
+  });
+
   test("first event created suggests add-to-homescreen (phones, once)", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for an isolated user");
     await page.setViewportSize({ width: 390, height: 844 }); // the prompt is phone-only

@@ -635,6 +635,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		Timezone        string   `json:"timezone"`      // host's IANA tz (e.g. America/Los_Angeles); for server-rendered times
 		PollDeadline    string   `json:"poll_deadline"` // optional RFC3339 close date (poll/general modes)
 		Capacity        int      `json:"capacity"`      // optional max going (0 = unlimited)
+		Listed          *bool    `json:"listed"`        // show to my followers (nil = the column default, true)
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -873,6 +874,9 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "create event", err)
 		return
 	}
+	// Every occurrence this create produced - a follower opt-OUT has to cover
+	// the whole series, not just the first date.
+	occurrences := []pgtype.UUID{ev.ID}
 	// Remaining occurrences of a series (first one is ev above).
 	for i := 1; in.Repeat != "" && i < in.RepeatCount; i++ {
 		p := params
@@ -880,10 +884,12 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		if params.EndsAt.Valid {
 			p.EndsAt = pgtype.Timestamptz{Time: p.StartsAt.Time.Add(params.EndsAt.Time.Sub(params.StartsAt.Time)), Valid: true}
 		}
-		if _, err := s.queries.CreateEvent(r.Context(), p); err != nil {
+		occ, err := s.queries.CreateEvent(r.Context(), p)
+		if err != nil {
 			s.internal(w, "create series occurrence", err)
 			return
 		}
+		occurrences = append(occurrences, occ.ID)
 	}
 	for _, ts := range moreStarts {
 		p := params
@@ -891,10 +897,23 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		if params.EndsAt.Valid {
 			p.EndsAt = pgtype.Timestamptz{Time: ts.Time.Add(params.EndsAt.Time.Sub(params.StartsAt.Time)), Valid: true}
 		}
-		if _, err := s.queries.CreateEvent(r.Context(), p); err != nil {
+		occ, err := s.queries.CreateEvent(r.Context(), p)
+		if err != nil {
 			s.internal(w, "create series occurrence", err)
 			return
 		}
+		occurrences = append(occurrences, occ.ID)
+	}
+	// Following: events are listed by default (the column default), so only an
+	// explicit opt-out costs a write.
+	if in.Listed != nil && !*in.Listed {
+		for _, oid := range occurrences {
+			if err := s.queries.SetEventListed(r.Context(), db.SetEventListedParams{ID: oid, Listed: false}); err != nil {
+				s.internal(w, "create event: set listed", err)
+				return
+			}
+		}
+		ev.Listed = false
 	}
 	// Re-poll: pull the people from a previous event (e.g. the series that just
 	// ended) onto this one as invites, and email them - "the poll goes out".
@@ -965,6 +984,7 @@ func (s *server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		"time_options":    len(options),
 		"recurrence":      in.Repeat,
 		"occurrences":     in.RepeatCount,
+		"listed":          ev.Listed,
 	})
 	writeJSON(w, http.StatusCreated, ev)
 }
@@ -1114,6 +1134,7 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		availRows     []db.AvailabilityDay
 		hostName      string
 		hostAvatar    string
+		followsHost   bool
 	)
 	err = parallel(
 		func() (e error) {
@@ -1185,6 +1206,13 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 			// Host identity for the invite hero ("Hosted by ...").
 			if hp, herr := s.queries.GetProfile(ctx, ev.HostID); herr == nil {
 				hostName, hostAvatar = hp.DisplayName, hp.AvatarUrl
+			}
+			return nil
+		},
+		func() error {
+			// Following state for the hero's Follow toggle (host, not group).
+			if !isHost {
+				followsHost, _ = s.queries.IsFollowing(ctx, db.IsFollowingParams{UserID: uid, Kind: "host", Value: ev.HostID})
 			}
 			return nil
 		},
@@ -1270,6 +1298,7 @@ func (s *server) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		"event":              ev,
 		"host_name":          hostName,
 		"host_avatar":        hostAvatar,
+		"following_host":     followsHost,
 		"role":               role,
 		"can_manage":         canManage,
 		"viewer_id":          uid,

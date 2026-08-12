@@ -29,7 +29,7 @@ func (q *Queries) ClaimEventRecap(ctx context.Context, eventID pgtype.UUID) (pgt
 const listEventsNeedingRecap = `-- name: ListEventsNeedingRecap :many
 
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 FROM events
 WHERE status = 'scheduled'
   AND (starts_at AT TIME ZONE 'America/Los_Angeles')::date
@@ -82,6 +82,7 @@ func (q *Queries) ListEventsNeedingRecap(ctx context.Context) ([]Event, error) {
 			&i.VoteReminderSent,
 			&i.QuorumSent,
 			&i.Capacity,
+			&i.Listed,
 		); err != nil {
 			return nil, err
 		}

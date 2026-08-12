@@ -44,6 +44,9 @@ export function NewEvent() {
   const [pollDays, setPollDays] = useState<Set<string>>(new Set());
   const [gridStart, setGridStart] = useState(540); // 9:00 AM
   const [gridEnd, setGridEnd] = useState(1260); // 9:00 PM
+  // Following: listed events surface to people who follow you / this group.
+  // Default ON, one unobtrusive checkbox - creation stays a two-field flow.
+  const [listed, setListed] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Group context (name) when launched from a group page - implicit, read-only.
@@ -101,6 +104,7 @@ export function NewEvent() {
       location_address: clone?.location_address ?? "",
       scheduling_mode: mode,
       visibility: "private",
+      listed,
       timezone: hostTimezone(),
     };
     if (groupId) body.group_id = groupId;
@@ -196,6 +200,11 @@ export function NewEvent() {
             )}
           </>
         )}
+        <label className="row small" style={{ gap: 6, cursor: "pointer" }}>
+          <input type="checkbox" data-testid="quick-listed" checked={listed}
+            onChange={(e) => setListed(e.target.checked)} />
+          Show to my followers
+        </label>
         {err && <p className="err">{err}</p>}
         <button className="btn btn-block" data-testid="quick-create" disabled={saving || !valid}>
           {saving ? "Creating…" : "Create & get the link"}

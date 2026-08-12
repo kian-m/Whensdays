@@ -26,6 +26,9 @@ export type Event = {
   ends_at: string | null;
   poll_deadline: string | null;
   capacity: number;
+  // Following: "show this to people who follow me / this group". Distinct from
+  // `visibility` (who can find it in Discover) and from group MEMBERSHIP.
+  listed: boolean;
   created_at: string;
 };
 
@@ -263,7 +266,7 @@ export function guessCity(): string {
 export type SeriesItem = { id: string; starts_at: string; status: string };
 export type Group = { id: string; owner_id: string; name: string; description: string; emoji: string; created_at: string; icon_url: string };
 export type GroupMember = { role: "member" | "admin"; user_id: string; display_name: string | null; handle: string | null; avatar_url: string | null };
-export type GroupDetail = { group: Group; members: GroupMember[]; events: Event[]; is_owner: boolean; is_admin: boolean; viewer_id: string };
+export type GroupDetail = { group: Group; members: GroupMember[]; events: Event[]; is_owner: boolean; is_admin: boolean; viewer_id: string; is_following: boolean };
 
 export type Comment = {
   id: string;
@@ -295,6 +298,8 @@ export type EventDetail = {
   event: Event;
   host_name: string;
   host_avatar: string;
+  // Does the viewer follow this event's host? (false for the host themselves.)
+  following_host: boolean;
   role: "host" | "cohost" | "guest";
   can_manage: boolean;
   viewer_id: string;

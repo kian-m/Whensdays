@@ -332,9 +332,10 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 			ID       string `json:"id"`
 			StartsAt string `json:"starts_at"`
 		} `json:"series_times"`
-		AddStarts []string `json:"add_starts"` // optional: add MORE dates - grows a lone event into a series
-		PollDeadline string `json:"poll_deadline"` // optional close date while polling ("" clears)
-		Capacity *int `json:"capacity"` // optional max going (0 = unlimited; nil = keep)
+		AddStarts    []string `json:"add_starts"`    // optional: add MORE dates - grows a lone event into a series
+		PollDeadline string   `json:"poll_deadline"` // optional close date while polling ("" clears)
+		Capacity     *int     `json:"capacity"`      // optional max going (0 = unlimited; nil = keep)
+		Listed       *bool    `json:"listed"`        // show to my followers (nil = keep)
 	}
 	// Covers ride in as data URLs, so this endpoint gets a larger body cap.
 	if !decodeJSONLimit(w, r, &in, coverMaxBody) {
@@ -480,6 +481,16 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "update event", err)
 		return
 	}
+	// Following: "show to my followers" is its own statement (a bool folded into
+	// UpdateEvent would un-list an event whenever a caller omitted the field).
+	// With apply_series it rides along to every occurrence below.
+	if in.Listed != nil && *in.Listed != ev.Listed {
+		if lerr := s.queries.SetEventListed(r.Context(), db.SetEventListedParams{ID: id, Listed: *in.Listed}); lerr != nil {
+			s.internal(w, "update event: set listed", lerr)
+			return
+		}
+		ev.Listed = *in.Listed
+	}
 	// Series editing (edit one vs ALL): with apply_series, copy the CONTENT
 	// fields to every sibling occurrence. Each keeps its own starts_at and
 	// reminder state - only this event's time was (possibly) rescheduled above.
@@ -501,6 +512,9 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 					StartsAt: full.StartsAt, ReminderSent: full.ReminderSent, EndsAt: full.EndsAt,
 					PollDeadline: full.PollDeadline, Capacity: full.Capacity,
 				})
+				if in.Listed != nil && *in.Listed != full.Listed {
+					_ = s.queries.SetEventListed(r.Context(), db.SetEventListedParams{ID: sib.ID, Listed: *in.Listed})
+				}
 			}
 		}
 	}
@@ -578,10 +592,15 @@ func (s *server) handleUpdateEvent(w http.ResponseWriter, r *http.Request) {
 				StartsAt: ats, ReminderSent: false, EndsAt: sibEnd,
 				Capacity: ev.Capacity,
 			}) // no PollDeadline - siblings are born scheduled
+			// New occurrences inherit this event's follower listing (CreateEvent
+			// leaves the column at its `true` default).
+			if !ev.Listed {
+				_ = s.queries.SetEventListed(r.Context(), db.SetEventListedParams{ID: sib.ID, Listed: false})
+			}
 			_ = s.queries.CopyAttendees(r.Context(), db.CopyAttendeesParams{EventID: id, Column2: sib.ID})
 			_ = s.queries.CopyInvites(r.Context(), db.CopyInvitesParams{EventID: id, Column2: sib.ID})
 		}
 	}
-	s.analytics.Capture(uid, "event_edited", map[string]any{"event_id": r.PathValue("id"), "role": role, "series": in.ApplySeries, "added_dates": len(addStarts)})
+	s.analytics.Capture(uid, "event_edited", map[string]any{"event_id": r.PathValue("id"), "role": role, "series": in.ApplySeries, "added_dates": len(addStarts), "listed": ev.Listed})
 	writeJSON(w, http.StatusOK, ev)
 }

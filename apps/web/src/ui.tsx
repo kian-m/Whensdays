@@ -151,6 +151,53 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, testid }: {
   );
 }
 
+// Follow / Following toggle. FOLLOWING is asymmetric - "put this host's or
+// this group's plans in my feed" - and is NOT Groups (symmetric membership,
+// you join and admins create events); the two live side by side. It is also
+// deliberately not called "subscribe": that word means .ics calendar sync here.
+//
+// Optimistic: the label flips on tap and reverts if the request fails.
+// Following needs an account, so the caller hides it for guest viewers
+// (viewerId starting "guest_"), the same gate as "+ Add friend".
+export function FollowButton({ kind, value, following, onChange, source, testid = "follow-toggle", size = "sm" }: {
+  kind: "host" | "topic" | "group";
+  value: string;
+  following: boolean;
+  onChange?: (following: boolean) => void;
+  source?: string;
+  testid?: string;
+  size?: "sm" | "";
+}) {
+  const api = useApi();
+  const [on, setOn] = useState(following);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setOn(following); }, [following]);
+
+  async function toggle() {
+    const next = !on;
+    setOn(next);
+    setBusy(true);
+    const res = next
+      ? await api("/api/follows", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, value }),
+      })
+      : await api(`/api/follows/${kind}/${encodeURIComponent(value)}`, { method: "DELETE" });
+    setBusy(false);
+    if (!res.ok) return setOn(!next); // revert
+    analytics.capture(next ? EVENTS.followed : EVENTS.unfollowed, { kind, source });
+    onChange?.(next);
+  }
+
+  const cls = `btn ${on ? "ghost" : "soft"}${size ? ` ${size}` : ""}`;
+  return (
+    <button type="button" className={cls} data-testid={testid} disabled={busy}
+      aria-pressed={on} onClick={toggle}>
+      {on ? "Following ✓" : "+ Follow"}
+    </button>
+  );
+}
+
 // Availability grid: rows = dates, columns = the 6 dayparts. Editable (tap a
 // cell; tap a date or daypart header to fill that row/column) or read-only.
 // `selected` and `busy` are sets of "YYYY-MM-DD:daypart" keys.

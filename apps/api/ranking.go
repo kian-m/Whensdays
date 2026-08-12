@@ -103,6 +103,27 @@ func score(ev db.ListPublicEventsRow, sig feedSignals) float64 {
 	return s
 }
 
+// mergeCandidates appends `extra` to `base`, skipping ids already present.
+// The default feed is "public browse ∪ what you follow", and a public event
+// hosted by someone you follow lands in both lists - it must render once.
+// Pure: order-preserving (base first, then the new extras in their own order).
+func mergeCandidates(base, extra []db.ListPublicEventsRow) []db.ListPublicEventsRow {
+	seen := make(map[string]bool, len(base))
+	for _, e := range base {
+		seen[uuidStr(e.ID)] = true
+	}
+	out := base
+	for _, e := range extra {
+		id := uuidStr(e.ID)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, e)
+	}
+	return out
+}
+
 // rankEvents scores and sorts candidates best-first (stable on ties by time).
 func rankEvents(events []db.ListPublicEventsRow, sig feedSignals) []db.ListPublicEventsRow {
 	type scored struct {

@@ -7,7 +7,7 @@
 -- Pacific calendar date is compared to tomorrow's Pacific date. reminder_sent
 -- keeps it idempotent if the job runs more than once in a day.
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 FROM events
 WHERE status = 'scheduled' AND reminder_sent = false
   AND (starts_at AT TIME ZONE 'America/Los_Angeles')::date
@@ -78,6 +78,47 @@ DELETE FROM follows WHERE user_id = $1 AND kind = $2 AND value = $3;
 
 -- name: ListFollows :many
 SELECT kind, value FROM follows WHERE user_id = $1 ORDER BY created_at;
+
+-- name: IsFollowing :one
+SELECT EXISTS(
+    SELECT 1 FROM follows WHERE user_id = $1 AND kind = $2 AND value = $3
+)::bool;
+
+-- name: ListFollowedEvents :many
+-- Following (phase 1): upcoming events from the hosts and GROUPS this user
+-- follows. Asymmetric and independent of Groups membership - following a club
+-- means "put their plans in my feed", not "I'm in the club".
+--
+-- Only `listed` events surface: the host's per-event opt-in ("Show to my
+-- followers"). That's what makes visibility='private' safe here - a private
+-- event is still link-capability-gated for RSVP, but the host explicitly chose
+-- to announce it to their followers. Same status/time filters as every other
+-- feed query, so cancelled/draft/past never appear.
+-- Column list mirrors ListPublicEvents exactly so the rows convert to
+-- ListPublicEventsRow for the shared ranker.
+SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme,
+       (SELECT count(*)::int FROM event_attendees a
+          JOIN friendships f ON f.status = 'accepted'
+           AND ((f.requester_id = $1::text AND f.addressee_id = a.user_id)
+             OR (f.addressee_id = $1::text AND f.requester_id = a.user_id))
+        WHERE a.event_id = e.id AND a.rsvp = 'going') AS friends_going,
+       COALESCE((SELECT a2.rsvp FROM event_attendees a2 WHERE a2.event_id = e.id AND a2.user_id = $1::text), '')::text AS viewer_rsvp,
+       (EXISTS(SELECT 1 FROM friendships f2 WHERE f2.status = 'accepted'
+           AND ((f2.requester_id = $1::text AND f2.addressee_id = e.host_id)
+             OR (f2.addressee_id = $1::text AND f2.requester_id = e.host_id))))::bool AS from_friend
+FROM events e
+LEFT JOIN profiles p ON p.user_id = e.host_id
+WHERE e.status IN ('polling', 'scheduled')
+  AND (e.starts_at IS NULL OR e.starts_at >= now())
+  AND e.listed = true
+  AND (EXISTS(SELECT 1 FROM follows fh
+              WHERE fh.user_id = $1::text AND fh.kind = 'host' AND fh.value = e.host_id)
+    OR (e.group_id IS NOT NULL AND EXISTS(
+              SELECT 1 FROM follows fg
+              WHERE fg.user_id = $1::text AND fg.kind = 'group' AND fg.value = e.group_id::text)))
+ORDER BY e.starts_at NULLS LAST
+LIMIT 100;
 
 -- ==================== feed ranking signals =========================
 

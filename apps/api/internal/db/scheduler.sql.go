@@ -168,7 +168,7 @@ const cancelEvent = `-- name: CancelEvent :one
 UPDATE events SET status = 'cancelled'
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 `
 
 func (q *Queries) CancelEvent(ctx context.Context, id pgtype.UUID) (Event, error) {
@@ -206,6 +206,7 @@ func (q *Queries) CancelEvent(ctx context.Context, id pgtype.UUID) (Event, error
 		&i.VoteReminderSent,
 		&i.QuorumSent,
 		&i.Capacity,
+		&i.Listed,
 	)
 	return i, err
 }
@@ -426,7 +427,7 @@ INSERT INTO events (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 `
 
 type CreateEventParams struct {
@@ -513,6 +514,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (Event
 		&i.VoteReminderSent,
 		&i.QuorumSent,
 		&i.Capacity,
+		&i.Listed,
 	)
 	return i, err
 }
@@ -584,7 +586,7 @@ UPDATE events
 SET starts_at = $2, status = 'scheduled'
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 `
 
 type FinalizeEventParams struct {
@@ -627,6 +629,7 @@ func (q *Queries) FinalizeEvent(ctx context.Context, arg FinalizeEventParams) (E
 		&i.VoteReminderSent,
 		&i.QuorumSent,
 		&i.Capacity,
+		&i.Listed,
 	)
 	return i, err
 }
@@ -658,7 +661,7 @@ func (q *Queries) GetAttendee(ctx context.Context, arg GetAttendeeParams) (Event
 
 const getEvent = `-- name: GetEvent :one
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 FROM events
 WHERE id = $1
 `
@@ -698,6 +701,7 @@ func (q *Queries) GetEvent(ctx context.Context, id pgtype.UUID) (Event, error) {
 		&i.VoteReminderSent,
 		&i.QuorumSent,
 		&i.Capacity,
+		&i.Listed,
 	)
 	return i, err
 }
@@ -953,7 +957,7 @@ func (q *Queries) ListAvailabilityDays(ctx context.Context, userID string) ([]Li
 
 const listEventsAttending = `-- name: ListEventsAttending :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent, e.capacity
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent, e.capacity, e.listed
 FROM events e
 JOIN event_attendees a ON a.event_id = e.id
 WHERE a.user_id = $1 AND e.host_id <> $1 AND e.status <> 'cancelled' AND e.status <> 'draft'
@@ -1002,6 +1006,7 @@ func (q *Queries) ListEventsAttending(ctx context.Context, userID string) ([]Eve
 			&i.VoteReminderSent,
 			&i.QuorumSent,
 			&i.Capacity,
+			&i.Listed,
 		); err != nil {
 			return nil, err
 		}
@@ -1015,7 +1020,7 @@ func (q *Queries) ListEventsAttending(ctx context.Context, userID string) ([]Eve
 
 const listEventsCohosting = `-- name: ListEventsCohosting :many
 SELECT e.id, e.host_id, e.title, e.event_type, e.description,
-       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent, e.capacity
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent, e.capacity, e.listed
 FROM events e
 JOIN event_cohosts ch ON ch.event_id = e.id
 WHERE ch.user_id = $1 AND e.status <> 'cancelled'
@@ -1063,6 +1068,7 @@ func (q *Queries) ListEventsCohosting(ctx context.Context, userID string) ([]Eve
 			&i.VoteReminderSent,
 			&i.QuorumSent,
 			&i.Capacity,
+			&i.Listed,
 		); err != nil {
 			return nil, err
 		}
@@ -1076,7 +1082,7 @@ func (q *Queries) ListEventsCohosting(ctx context.Context, userID string) ([]Eve
 
 const listEventsHosting = `-- name: ListEventsHosting :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 FROM events
 WHERE host_id = $1 AND status <> 'cancelled'
 ORDER BY created_at DESC
@@ -1123,6 +1129,7 @@ func (q *Queries) ListEventsHosting(ctx context.Context, hostID string) ([]Event
 			&i.VoteReminderSent,
 			&i.QuorumSent,
 			&i.Capacity,
+			&i.Listed,
 		); err != nil {
 			return nil, err
 		}
@@ -1555,7 +1562,7 @@ func (q *Queries) ListPollDays(ctx context.Context, eventID pgtype.UUID) ([]pgty
 
 const listPollsNeedingVoteReminder = `-- name: ListPollsNeedingVoteReminder :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 FROM events
 WHERE status = 'polling' AND poll_deadline IS NOT NULL
   AND poll_deadline > now() AND poll_deadline <= now() + interval '26 hours'
@@ -1605,6 +1612,7 @@ func (q *Queries) ListPollsNeedingVoteReminder(ctx context.Context) ([]Event, er
 			&i.VoteReminderSent,
 			&i.QuorumSent,
 			&i.Capacity,
+			&i.Listed,
 		); err != nil {
 			return nil, err
 		}
@@ -1618,7 +1626,7 @@ func (q *Queries) ListPollsNeedingVoteReminder(ctx context.Context) ([]Event, er
 
 const listPollsPastDeadline = `-- name: ListPollsPastDeadline :many
 SELECT id, host_id, title, event_type, description,
-       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 FROM events
 WHERE status = 'polling' AND poll_deadline IS NOT NULL
   AND poll_deadline < now() AND poll_ready_sent = false
@@ -1667,6 +1675,7 @@ func (q *Queries) ListPollsPastDeadline(ctx context.Context) ([]Event, error) {
 			&i.VoteReminderSent,
 			&i.QuorumSent,
 			&i.Capacity,
+			&i.Listed,
 		); err != nil {
 			return nil, err
 		}
@@ -1971,7 +1980,7 @@ SET status = CASE WHEN $2::bool THEN 'draft'
                   ELSE 'polling' END
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 `
 
 type SetEventDraftParams struct {
@@ -2016,6 +2025,7 @@ func (q *Queries) SetEventDraft(ctx context.Context, arg SetEventDraftParams) (E
 		&i.VoteReminderSent,
 		&i.QuorumSent,
 		&i.Capacity,
+		&i.Listed,
 	)
 	return i, err
 }
@@ -2033,6 +2043,24 @@ type SetEventHostParams struct {
 // the previous host stays on as cohost - see ucbsync.go).
 func (q *Queries) SetEventHost(ctx context.Context, arg SetEventHostParams) error {
 	_, err := q.db.Exec(ctx, setEventHost, arg.ID, arg.HostID)
+	return err
+}
+
+const setEventListed = `-- name: SetEventListed :exec
+UPDATE events SET listed = $2 WHERE id = $1
+`
+
+type SetEventListedParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Listed bool        `json:"listed"`
+}
+
+// "Show this to people who follow me / this group." Its own statement (like
+// comments_enabled) rather than an UpdateEvent column: a bool's zero value is
+// false, so folding it into the big update would silently un-list an event any
+// time a caller forgot the field.
+func (q *Queries) SetEventListed(ctx context.Context, arg SetEventListedParams) error {
+	_, err := q.db.Exec(ctx, setEventListed, arg.ID, arg.Listed)
 	return err
 }
 
@@ -2214,7 +2242,7 @@ SET title = $2, description = $3, location_mode = $4, location_address = $5,
     starts_at = $11, reminder_sent = $12, ends_at = $13, poll_deadline = $14, capacity = $15
 WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
-          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity
+          location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
 `
 
 type UpdateEventParams struct {
@@ -2289,6 +2317,7 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Event
 		&i.VoteReminderSent,
 		&i.QuorumSent,
 		&i.Capacity,
+		&i.Listed,
 	)
 	return i, err
 }

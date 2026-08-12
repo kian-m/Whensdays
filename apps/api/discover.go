@@ -23,6 +23,13 @@ import (
 // topicRe: topics are lowercase slugs, e.g. "twitch", "board-games".
 var topicRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
 
+// followKinds are the things you can FOLLOW (asymmetric, "put their plans in my
+// feed") - mirrors the follows.kind CHECK in migration 0044. Following is NOT
+// Groups (symmetric membership) and is deliberately not called "subscriptions"
+// (that word means .ics calendar sync in this product). No 'venue' kind: venue
+// bots are ordinary hosts, so 'host' already covers them.
+var followKinds = []string{"host", "topic", "group"}
+
 // ---------------------- reminders (cron) ----------------------
 
 // handleCronReminders is unauthenticated but gated by CRON_KEY (constant-time
@@ -141,23 +148,49 @@ func (s *server) discoverFor(w http.ResponseWriter, r *http.Request, viewer stri
 	writeJSON(w, http.StatusOK, map[string]any{"events": events, "topics": topics})
 }
 
-// handleFeed returns the ranked "For you" feed (auth required): every upcoming
-// public event, scored by the algorithm in ranking.go. Cold start degrades
-// gracefully to time-proximity + popularity.
+// handleFeed returns the ranked "For you" feed (auth required), scored by the
+// algorithm in ranking.go. Cold start degrades gracefully to time-proximity +
+// popularity. Three scopes:
+//
+//	(default)  public events UNION the listed events of everyone you follow -
+//	           the natural "for you" mix for a signed-in user
+//	following  ONLY the followed hosts'/groups' listed events (the primitive a
+//	           dedicated Following surface consumes)
+//	friends    upcoming events your accepted friends are hosting
 func (s *server) handleFeed(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
-	// ?scope=friends → upcoming events your accepted friends are hosting
-	// (friends- or public-visible); default scope is all public events.
 	var candidates []db.ListPublicEventsRow
 	var err error
-	if r.URL.Query().Get("scope") == "friends" {
+	switch r.URL.Query().Get("scope") {
+	case "friends":
 		rows, ferr := s.queries.ListFriendsEvents(r.Context(), uid)
 		err = ferr
 		for _, x := range rows {
 			candidates = append(candidates, db.ListPublicEventsRow(x))
 		}
-	} else {
-		candidates, err = s.queries.ListPublicEvents(r.Context(), db.ListPublicEventsParams{Column1: "", Column2: []string{}, Column3: uid})
+	case "following":
+		rows, ferr := s.queries.ListFollowedEvents(r.Context(), uid)
+		err = ferr
+		for _, x := range rows {
+			candidates = append(candidates, db.ListPublicEventsRow(x))
+		}
+	default:
+		// Public browse + what you follow, deduped (a public event from a host
+		// you follow is one tile, not two - the ranker still boosts it).
+		var followed []db.ListFollowedEventsRow
+		perr := parallel(
+			func() (e error) {
+				candidates, e = s.queries.ListPublicEvents(r.Context(), db.ListPublicEventsParams{Column1: "", Column2: []string{}, Column3: uid})
+				return
+			},
+			func() (e error) { followed, e = s.queries.ListFollowedEvents(r.Context(), uid); return },
+		)
+		err = perr
+		extra := make([]db.ListPublicEventsRow, 0, len(followed))
+		for _, x := range followed {
+			extra = append(extra, db.ListPublicEventsRow(x))
+		}
+		candidates = mergeCandidates(candidates, extra)
 	}
 	if err != nil {
 		s.internal(w, "feed candidates", err)
@@ -175,9 +208,12 @@ func (s *server) handleFeed(w http.ResponseWriter, r *http.Request) {
 		FriendGoing: map[string]int{}, Going: map[string]int{}, Now: time.Now(),
 	}
 	for _, f := range follows {
-		if f.Kind == "host" {
+		// 'group' follows carry a group id, which is neither a host nor a topic -
+		// they shape WHICH events are candidates (ListFollowedEvents), not the score.
+		switch f.Kind {
+		case "host":
 			sig.FollowedHosts[f.Value] = true
-		} else {
+		case "topic":
 			sig.FollowedTopics[f.Value] = true
 		}
 	}
@@ -222,13 +258,27 @@ func (s *server) handleAddFollow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.Value = strings.TrimSpace(in.Value)
-	if !oneOf(in.Kind, "host", "topic") || in.Value == "" || len(in.Value) > 100 {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "kind must be host/topic with a value"})
+	if !oneOf(in.Kind, followKinds...) || in.Value == "" || len(in.Value) > 100 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "kind must be host/topic/group with a value"})
 		return
 	}
 	if in.Kind == "topic" && !topicRe.MatchString(in.Value) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid topic"})
 		return
+	}
+	// A group follow's value is the group id - normalize it through the UUID
+	// parser so the stored text always matches `group_id::text` in the feed query.
+	if in.Kind == "group" {
+		gid, ok := parseUUID(in.Value)
+		if !ok {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid group"})
+			return
+		}
+		if _, err := s.queries.GetGroup(r.Context(), gid); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		in.Value = uuidStr(gid)
 	}
 	if in.Kind == "host" && in.Value == uid {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "you can't follow yourself"})
@@ -238,14 +288,14 @@ func (s *server) handleAddFollow(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "add follow", err)
 		return
 	}
-	s.analytics.Capture(uid, "followed", map[string]any{"kind": in.Kind})
+	s.analytics.Capture(uid, "followed", map[string]any{"kind": in.Kind, "value": in.Value})
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "ok"})
 }
 
 func (s *server) handleRemoveFollow(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	kind, value := r.PathValue("kind"), r.PathValue("value")
-	if !oneOf(kind, "host", "topic") {
+	if !oneOf(kind, followKinds...) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad kind"})
 		return
 	}
@@ -253,6 +303,7 @@ func (s *server) handleRemoveFollow(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "remove follow", err)
 		return
 	}
+	s.analytics.Capture(uid, "unfollowed", map[string]any{"kind": kind, "value": value})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

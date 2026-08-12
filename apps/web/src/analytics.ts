@@ -25,6 +25,7 @@ export const EVENTS = {
   addToCalendarClicked: "add_to_calendar_clicked",
   calendarConnectStarted: "calendar_connect_started",
   followed: "followed",
+  unfollowed: "unfollowed",
   gifPicked: "gif_picked",
   guestSignupClicked: "guest_signup_clicked",
   qrOpened: "qr_code_opened",

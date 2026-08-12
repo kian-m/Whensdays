@@ -17,7 +17,7 @@ function groupStreak(events: Event[]): number {
   while (months.has(m)) { n++; m--; }
   return n;
 }
-import { Avatar, BackLink, ConfirmButton, GifPicker, ListSkeleton, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
+import { Avatar, BackLink, ConfirmButton, FollowButton, GifPicker, ListSkeleton, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
 
 // Group icon: uploaded photo wins over emoji.
 function GroupIcon({ group, size = 44 }: { group: Group; size?: number }) {
@@ -98,7 +98,7 @@ export function Groups() {
   );
 }
 
-type GroupPreview = { id: string; name: string; description: string; emoji: string; icon_url: string; member_count: number; is_member: boolean };
+type GroupPreview = { id: string; name: string; description: string; emoji: string; icon_url: string; member_count: number; is_member: boolean; is_following: boolean; viewer_id: string };
 
 // The join view anyone (guests included) sees when they open a group link
 // they're not a member of yet.
@@ -126,6 +126,16 @@ function GroupJoin({ id, onJoined }: { id: string; onJoined: () => void }) {
         <button className="btn" data-testid="group-join" disabled={busy} onClick={join}>
           {busy ? "Joining…" : "Join the group"}
         </button>
+        {/* You can FOLLOW a club without joining it - their listed events then
+            show up in your feed. Following needs an account, so guests (who
+            have no way to see a feed later) only get Join. */}
+        {!data.viewer_id.startsWith("guest_") && (
+          <span className="stack" style={{ gap: 4, alignItems: "center" }}>
+            <FollowButton kind="group" value={id} following={data.is_following}
+              source="group_join" testid="group-follow" size="" />
+            <span className="muted small">Not joining? Follow to see their plans in your feed.</span>
+          </span>
+        )}
         {err && <p className="muted small">{err}</p>}
       </div>
     </div>
@@ -196,12 +206,23 @@ export function GroupPage() {
               )}
             </span>
           </span>
-          {canManage && !editing && (
+          {!editing && (
             <span className="row card-actions" style={{ gap: 6 }}>
-              <button type="button" className="btn ghost sm" data-testid="group-edit"
-                onClick={() => { setEditName(group.name); setEditDesc(group.description); setEditing(true); }}>✎ Edit</button>
-              <button className="btn sm" data-testid="group-new-event"
-                onClick={() => nav(`/new?group=${group.id}`)}>+ New event</button>
+              {/* Following is separate from membership: a member can follow too
+                  (their feed then carries the group's listed events). Kept small
+                  and first so it never competes with the member/admin actions. */}
+              {!viewer_id.startsWith("guest_") && (
+                <FollowButton kind="group" value={group.id} following={data.is_following}
+                  source="group_page" testid="group-follow" />
+              )}
+              {canManage && (
+                <>
+                  <button type="button" className="btn ghost sm" data-testid="group-edit"
+                    onClick={() => { setEditName(group.name); setEditDesc(group.description); setEditing(true); }}>✎ Edit</button>
+                  <button className="btn sm" data-testid="group-new-event"
+                    onClick={() => nav(`/new?group=${group.id}`)}>+ New event</button>
+                </>
+              )}
             </span>
           )}
         </div>

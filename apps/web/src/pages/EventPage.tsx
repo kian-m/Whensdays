@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, ImportedEvent, TimeOption, Vote, WEEKDAYS, EVENT_THEMES, busyConflict, daysFromDate, dayLabel as dayCol, fmtDate, fmtDateTime, fmtMinutes, gridSlots, toDatetimeLocal, getJSON, guessCity, importedBusy, mapsUrl, appleMapsUrl, openGoogleMaps, isStandalone, nextMonths, sendJSON, timeAgo, useApi } from "../lib";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, GifPicker, HomescreenPrompt, Linkify, MonthPicker, Pill, TimeGrid, fileToPhoto, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, FollowButton, GifPicker, HomescreenPrompt, Linkify, MonthPicker, Pill, TimeGrid, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH, GuestSignupButton } from "../App";
 
@@ -913,6 +913,8 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
   const [deadline, setDeadline] = useState(e.poll_deadline ? toDatetimeLocal(e.poll_deadline) : "");
   const [capacity, setCapacity] = useState(e.capacity > 0 ? String(e.capacity) : "");
   const [endsAt, setEndsAt] = useState(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
+  // Following: does this event surface to people who follow the host/group?
+  const [listed, setListed] = useState(e.listed);
   // Sibling occurrences (multi-date series): every date is editable from here,
   // one input per occurrence. Keyed by sibling event id.
   const sibs = (data.series ?? []).filter((x) => x.id !== e.id && x.starts_at);
@@ -945,6 +947,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
     setDeadline(e.poll_deadline ? toDatetimeLocal(e.poll_deadline) : "");
     setCapacity(e.capacity > 0 ? String(e.capacity) : "");
     setEndsAt(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
+    setListed(e.listed);
     setSibTimes({});
     setAddStarts([]);
     setOpenSec("when"); // reopen to the most-common edit each time
@@ -974,6 +977,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
       add_starts: addStarts.filter((d) => d.trim() !== "").map((d) => new Date(d).toISOString()),
       poll_deadline: deadline ? new Date(deadline).toISOString() : "",
       capacity: capacity.trim() === "" ? 0 : Number(capacity),
+      listed,
     });
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
@@ -998,6 +1002,13 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
               <span className="row" style={{ gap: 6, marginTop: 4 }} data-testid="hosted-by">
                 <Avatar url={data.host_avatar || null} name={data.host_name} size={20} />
                 <span className="muted small">Hosted by <strong>{data.host_name}</strong></span>
+                {/* Follow the HOST (asymmetric - their listed events land in your
+                    feed). Hidden for the host themselves and for guests, who have
+                    no account to hang a follow on (same gate as "+ Add friend"). */}
+                {data.role !== "host" && !data.viewer_id.startsWith("guest_") && (
+                  <FollowButton kind="host" value={e.host_id} following={data.following_host}
+                    source="event_page" testid="follow-host" />
+                )}
               </span>
             )}
           </div>
@@ -1136,6 +1147,11 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
         <div className="stack">
           <input className="input" maxLength={140} data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
           <textarea className="input" maxLength={2000} data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
+          <label className="row small" style={{ gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" data-testid="edit-listed" checked={listed}
+              onChange={(ev) => setListed(ev.target.checked)} />
+            Show to my followers
+          </label>
         </div>
       </details>
 

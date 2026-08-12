@@ -110,14 +110,21 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 	// Three independent reads - fan out (the DB is a network hop away).
 	ctx := r.Context()
 	var (
-		members []db.ListGroupMembersRow
-		events  []db.Event
-		isAdmin bool
+		members   []db.ListGroupMembersRow
+		events    []db.Event
+		isAdmin   bool
+		following bool
 	)
 	err := parallel(
 		func() (e error) { members, e = s.queries.ListGroupMembers(ctx, g.ID); return },
 		func() (e error) { events, e = s.queries.ListGroupEvents(ctx, g.ID); return },
 		func() error { isAdmin, _ = s.queries.IsGroupAdmin(ctx, db.IsGroupAdminParams{ID: g.ID, UserID: uid}); return nil },
+		func() error {
+			// Following a group is separate from belonging to it: members can
+			// follow too (their listed events then ride the feed).
+			following, _ = s.queries.IsFollowing(ctx, db.IsFollowingParams{UserID: uid, Kind: "group", Value: uuidStr(g.ID)})
+			return nil
+		},
 	)
 	if err != nil {
 		s.internal(w, "group detail: load", err)
@@ -126,6 +133,7 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"group": g, "members": members, "events": events,
 		"is_owner": g.OwnerID == uid, "is_admin": isAdmin, "viewer_id": uid,
+		"is_following": following,
 	})
 }
 
@@ -150,9 +158,13 @@ func (s *server) handleGroupPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	count, _ := s.queries.CountGroupMembers(r.Context(), id)
 	member, _ := s.queries.IsGroupMember(r.Context(), db.IsGroupMemberParams{ID: id, UserID: uid})
+	// You can FOLLOW a club without joining it - the preview is where that
+	// choice lives for a non-member, so it needs the current state.
+	following, _ := s.queries.IsFollowing(r.Context(), db.IsFollowingParams{UserID: uid, Kind: "group", Value: uuidStr(id)})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": g.ID, "name": g.Name, "emoji": g.Emoji, "icon_url": g.IconUrl,
 		"member_count": count, "is_member": member,
+		"is_following": following, "viewer_id": uid,
 	})
 }
 

@@ -84,7 +84,8 @@ Leave the keys empty and analytics stays disabled (the API logs
 - **Intent events** the server can't see: `create_event_opened`,
   `preview_as_guest_toggled`, `share_link_copied`, `friend_availability_viewed`,
   `invite_opened` (guest lands on an invite), `guest_signup_clicked` (conversion intent),
-  `gif_picked`, `intent_link_clicked`, `followed`, `add_to_calendar_clicked`.
+  `gif_picked`, `intent_link_clicked`, `followed`/`unfollowed` (both carry `kind`
+  host|topic|group + a `source` — which surface the tap came from), `add_to_calendar_clicked`.
 - **Identify** — on profile load: distinct id = app user id, with `handle`.
 
 **Backend** (`apps/api/internal/analytics`)
@@ -96,7 +97,8 @@ Leave the keys empty and analytics stays disabled (the API logs
   `event_viewed`, `rsvp_submitted`, `poll_voted`, `general_voted`,
   `preferences_submitted`, `event_finalized`, `friend_requested`,
   `friend_accepted`, `profile_updated`, `avatar_updated`, `availability_updated`,
-  `guest_joined` (no-account join), `guest_merged` (guest → account on sign-up).
+  `guest_joined` (no-account join), `guest_merged` (guest → account on sign-up),
+  `followed`/`unfollowed` (server-side truth for the Following loop; `kind` + `value`).
 - **Identify** — person properties (`handle`, `name`) on profile update.
 
 Every event also carries `service` (`api`/`web`), `environment`, and `release`.

@@ -77,6 +77,42 @@ func TestRankOrdering(t *testing.T) {
 	}
 }
 
+// The default feed is "public browse ∪ what you follow": an event that lands in
+// both lists must render once, and the followed-only extras must survive.
+func TestMergeCandidates(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	a := pubEvent(1, "h1", "", "other", 3, now)
+	b := pubEvent(2, "h2", "", "other", 4, now)
+	c := pubEvent(3, "h3", "", "other", 5, now)
+
+	cases := []struct {
+		name      string
+		base      []db.ListPublicEventsRow
+		extra     []db.ListPublicEventsRow
+		wantHosts []string
+	}{
+		{"empty both", nil, nil, nil},
+		{"extras only", nil, []db.ListPublicEventsRow{a, b}, []string{"h1", "h2"}},
+		{"base only", []db.ListPublicEventsRow{a}, nil, []string{"h1"}},
+		{"dedupes the overlap", []db.ListPublicEventsRow{a, b}, []db.ListPublicEventsRow{b, c}, []string{"h1", "h2", "h3"}},
+		{"extras duplicated among themselves", nil, []db.ListPublicEventsRow{a, a}, []string{"h1"}},
+		{"base order preserved first", []db.ListPublicEventsRow{c, a}, []db.ListPublicEventsRow{b}, []string{"h3", "h1", "h2"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mergeCandidates(tc.base, tc.extra)
+			if len(got) != len(tc.wantHosts) {
+				t.Fatalf("len = %d, want %d", len(got), len(tc.wantHosts))
+			}
+			for i, h := range tc.wantHosts {
+				if got[i].HostID != h {
+					t.Errorf("[%d] = %s, want %s", i, got[i].HostID, h)
+				}
+			}
+		})
+	}
+}
+
 func TestTimeProximityShape(t *testing.T) {
 	now := time.Now()
 	if timeProximity(now, now.Add(-time.Hour)) != 0 {
