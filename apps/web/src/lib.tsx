@@ -266,7 +266,19 @@ export function guessCity(): string {
 export type SeriesItem = { id: string; starts_at: string; status: string };
 export type Group = { id: string; owner_id: string; name: string; description: string; emoji: string; created_at: string; icon_url: string };
 export type GroupMember = { role: "member" | "admin"; user_id: string; display_name: string | null; handle: string | null; avatar_url: string | null };
-export type GroupDetail = { group: Group; members: GroupMember[]; events: Event[]; is_owner: boolean; is_admin: boolean; viewer_id: string; is_following: boolean };
+// invite_token: the signed capability that turns a group link into a JOIN link
+// (/g/{id}?invite=…). Members-only field - the bare link is view + follow.
+export type GroupDetail = { group: Group; members: GroupMember[]; events: Event[]; is_owner: boolean; is_admin: boolean; viewer_id: string; is_following: boolean; invite_token: string };
+
+// The PUBLIC entity page (GET /api/public/groups/{id}, unauthenticated).
+// Deliberately entity-shaped: a public host page (/u/{handle}) will return the
+// same envelope with entity.type = "host".
+export type PublicEntity = { type: "group" | "host"; id: string; name: string; description: string; emoji: string; icon_url: string; member_count: number };
+export type PublicPage = {
+  entity: PublicEntity;
+  events: Event[];
+  viewer: { id: string; is_member: boolean; is_following: boolean; can_join: boolean };
+};
 
 export type Comment = {
   id: string;

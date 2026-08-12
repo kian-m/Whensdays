@@ -47,6 +47,7 @@ const Groups = lazy(() => importChunk(() => import("./pages/Groups").then((m) =>
 const GroupPage = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.GroupPage }))));
 const GroupMembersPage = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.GroupMembersPage }))));
 const Discover = lazy(() => importChunk(() => import("./pages/Discover").then((m) => ({ default: m.Discover }))));
+const GroupPublicView = lazy(() => importChunk(() => import("./pages/Groups").then((m) => ({ default: m.GroupPublicView }))));
 
 // Warm the lazy chunks once the first paint has settled: navigation then swaps
 // routes instantly instead of flashing "Loading…". Chunks are tiny and cached,
@@ -87,6 +88,10 @@ export const DEV_USER = resolveDevUser();
 
 const devApi: ApiFn = (p, i) =>
   fetch(p, { ...i, headers: { ...(i?.headers as Record<string, string>), "X-Dev-User": DEV_USER } });
+
+// No credentials at all - for the genuinely public reads a signed-out visitor
+// makes (today: the public group page). The API answers these anonymously.
+const publicApi: ApiFn = (p, i) => fetch(p, i);
 
 // Dev-only guest simulation: open with ?guest=1 to exercise the no-account
 // guest flow in hermetic dev/E2E runs (persisted per tab like the dev user).
@@ -217,11 +222,39 @@ function AuthPage({ kind }: { kind: "in" | "up" }) {
   );
 }
 
+// A bare group link (/g/{id} with no ?invite=) is a PUBLIC page, so a
+// signed-out visitor must land on it - not on a guest name-entry wall. Only the
+// group root qualifies; /g/{id}/members stays member-only.
+const publicGroupId = (pathname: string, search: string) => {
+  const m = /^\/(?:g|gv)\/([^/]+)\/?$/.exec(pathname);
+  return m && !new URLSearchParams(search).get("invite") ? m[1] : null;
+};
+
 function GuestOrLanding() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   // Auth pages first - reachable even for stored guests (converting to an account).
   if (pathname.startsWith("/sign-in")) return <AuthPage kind="in" />;
   if (pathname.startsWith("/sign-up")) return <AuthPage kind="up" />;
+  // Public group page: no account, no guest identity, no friction. (An
+  // ?invite= link still routes into the guest flow so the visitor can pick a
+  // name and actually join.)
+  const gid = !storedGuest() && publicGroupId(pathname, search);
+  if (gid) {
+    return (
+      <div className="app">
+        <nav className="nav">
+          <NavLink to="/" className="brand" aria-label="Whensdays"><span className="dot" /><span className="word" /></NavLink>
+          <a href="/sign-in" className="btn sm" data-testid="sign-in">Sign in</a>
+        </nav>
+        {/* Plain fetch: this endpoint is unauthenticated by design. */}
+        <ApiContext.Provider value={publicApi}>
+          <Suspense fallback={<ListSkeleton rows={3} header />}>
+            <GroupPublicView id={gid} signedOut onJoined={() => location.reload()} />
+          </Suspense>
+        </ApiContext.Provider>
+      </div>
+    );
+  }
   if (storedGuest() || pathname.startsWith("/e/") || pathname.startsWith("/ev/") || pathname.startsWith("/g/") || pathname.startsWith("/gv/") || pathname.startsWith("/start")) return <GuestFlow />;
   // Discover is public: browsable without any account (follow requires one).
   if (pathname.startsWith("/discover")) {

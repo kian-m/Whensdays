@@ -265,10 +265,17 @@ test.describe("scheduler", () => {
     expect(og.status()).toBe(200);
     expect(og.headers()["content-type"]).toContain("image/png");
 
-    // ?from=<a member> names the inviter ("<name> invited you to join"); a
-    // non-member id falls back to the generic form (no "invited you to join").
-    expect(await (await request.get(`/g/${gid}?from=demo-user`)).text()).toContain("invited you to join");
-    expect(await (await request.get(`/g/${gid}?from=nobody-xyz`)).text()).not.toContain("invited you to join");
+    // Two links, two unfurls. A BARE link is the public page - it must never
+    // promise a seat, so no "invited you to join" even with ?from=.
+    expect(await (await request.get(`/g/${gid}?from=demo-user`)).text()).not.toContain("invited you to join");
+    // With the signed invite token it's a join link: ?from=<a member> names the
+    // inviter; a non-member id falls back to the generic invite copy.
+    const detail = await (await request.get(`/api/groups/${gid}`, { headers: { "X-Dev-User": "demo-user" } })).json();
+    const inv = detail.invite_token as string;
+    expect(inv).toBeTruthy();
+    expect(await (await request.get(`/g/${gid}?invite=${inv}&from=demo-user`)).text()).toContain("Improv Crew");
+    expect(await (await request.get(`/g/${gid}?invite=${inv}&from=demo-user`)).text()).toContain("invited you to join");
+    expect(await (await request.get(`/g/${gid}?invite=${inv}&from=nobody-xyz`)).text()).not.toContain("invited you to join");
   });
 
   test("hero edit-in-place: cover photo + backdrop theme", async ({ page }) => {
@@ -564,11 +571,14 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("group-title")).toHaveText(gname);
     const gid = page.url().split("/g/")[1];
 
-    // A plain member joins via the API; they can NOT create group events.
+    // A plain member joins via the API - with the signed invite token, which
+    // joining now requires - and still can NOT create group events.
     const denied = await page.evaluate(async (g) => {
       const h = { "Content-Type": "application/json", "X-Dev-User": "plainpeer" };
       await fetch("/api/profile", { method: "PUT", headers: h, body: JSON.stringify({ display_name: "Plain Peer", handle: "plainpeer" }) });
-      await fetch(`/api/groups/${g}/join`, { method: "POST", headers: h });
+      const owner = { "Content-Type": "application/json", "X-Dev-User": "adminboss" };
+      const invite = (await (await fetch(`/api/groups/${g}`, { headers: owner })).json()).invite_token;
+      await fetch(`/api/groups/${g}/join`, { method: "POST", headers: h, body: JSON.stringify({ invite }) });
       const res = await fetch("/api/events", {
         method: "POST", headers: h,
         body: JSON.stringify({ title: "sneaky", location_mode: "find_venue", scheduling_mode: "general", group_id: g }),
@@ -618,19 +628,148 @@ test.describe("scheduler", () => {
     await page.getByTestId("quick-create").click();
     await expect(page.getByTestId("event-title")).toHaveText(etitle);
 
-    // A guest opens the group link: name -> preview -> Join -> sees the events.
+    // The host copies the INVITE link (the one that grants membership) - it
+    // carries a signed token; the bare link would only open the public page.
+    // (/g/ is the unfurl path - it meta-refreshes to /gv/, so let the bounce
+    // settle before evaluating in the page.)
+    await page.goto(`/g/${gid}`);
+    await expect(page.getByTestId("group-title")).toHaveText(gname);
+    const invite = await page.evaluate(async (id) =>
+      (await (await fetch(`/api/groups/${id}`, { headers: { "X-Dev-User": "grpinv" } })).json()).invite_token as string, gid);
+    expect(invite).toBeTruthy();
+
+    // A guest opens the invite link: name -> preview -> Join -> sees the events.
     const gctx = await browser.newContext();
     try {
       const g = await gctx.newPage();
-      await g.goto(`/g/${gid}?guest=1`);
+      await g.goto(`/g/${gid}?invite=${encodeURIComponent(invite)}&guest=1`);
       await g.getByTestId("guest-name").fill("Linky Guest");
       await g.getByTestId("guest-join").click();
-      await expect(g.getByTestId("group-join-card")).toBeVisible();
+      await expect(g.getByTestId("group-public-card")).toBeVisible();
       await g.getByTestId("group-join").click();
       await expect(g.getByTestId("group-title")).toHaveText(gname);
       await expect(g.getByTestId("group-event").filter({ hasText: etitle }).first()).toBeVisible();
     } finally {
       await gctx.close();
+    }
+  });
+
+  // TWO LINKS off one group, and the difference is a security boundary:
+  //   /g/{id}                 public page - view + follow, NO membership
+  //   /g/{id}?invite=<token>  the same page plus "Join this group"
+  // The absent button is NOT the boundary, so this asserts the API directly: a
+  // tokenless POST /join must 403, and a regenerated token must kill the old one.
+  test("group links: the public page can't join, only a signed invite can", async ({ browser, request }) => {
+    test.skip(!DEV_AUTH, "two dev users in separate contexts");
+    const hostCtx = await browser.newContext();
+    const outCtx = await browser.newContext();
+    const host = await hostCtx.newPage();
+    const outsider = await outCtx.newPage();
+    try {
+      await ensureUser(host, "gplock", "GP Lock", "gplock");
+      await ensureUser(outsider, "gpout", "GP Out", "gpout");
+      const stamp = `${test.info().testId}-${Date.now()}`;
+      const gname = `Locked ${stamp}`;
+      await host.goto("/groups");
+      await host.getByTestId("group-name").fill(gname);
+      await host.getByTestId("group-create").click();
+      await host.getByTestId("group-row").filter({ hasText: gname }).first().click();
+      await expect(host.getByTestId("group-title")).toHaveText(gname);
+      const gid = host.url().split("/g/")[1];
+
+      // Two events: one listed (public page), one NOT (must stay hidden).
+      const shown = `Open Jam ${stamp}`;
+      await host.getByTestId("group-new-event").click();
+      await host.getByTestId("quick-title").fill(shown);
+      await host.getByTestId("quick-mode-fixed").click();
+      await host.getByTestId("quick-when").fill(future(26));
+      await expect(host.getByTestId("quick-listed")).toBeChecked();
+      await host.getByTestId("quick-create").click();
+      await expect(host.getByTestId("event-title")).toHaveText(shown);
+
+      const hidden = `Secret Jam ${stamp}`;
+      await host.goto(`/g/${gid}`);
+      await host.getByTestId("group-new-event").click();
+      await host.getByTestId("quick-title").fill(hidden);
+      await host.getByTestId("quick-mode-fixed").click();
+      await host.getByTestId("quick-when").fill(future(27));
+      await host.getByTestId("quick-listed").uncheck();
+      await host.getByTestId("quick-create").click();
+      await expect(host.getByTestId("event-title")).toHaveText(hidden);
+
+      // The share card offers BOTH links, clearly separated.
+      await host.goto(`/g/${gid}`);
+      await expect(host.getByTestId("group-share-copy")).toBeVisible();
+      await expect(host.getByTestId("group-invite-copy")).toBeVisible();
+
+      // (1) The public page needs no account at all: a bare, header-less
+      //     request gets the group + its LISTED events, and nothing else.
+      const pub = await request.get(`/api/public/groups/${gid}`);
+      expect(pub.status()).toBe(200);
+      const body = await pub.json();
+      expect(body.entity.type).toBe("group"); // entity-shaped: /u/{handle} reuses it
+      expect(body.entity.name).toBe(gname);
+      expect(body.viewer.id).toBe("");
+      expect(body.viewer.can_join).toBe(false);
+      const titles = (body.events as { title: string }[]).map((e) => e.title);
+      expect(titles).toContain(shown);
+      expect(titles).not.toContain(hidden); // unlisted stays off the public page
+      expect(body.members).toBeUndefined(); // never the member list
+
+      // (2) A non-member on the bare link sees the page, NOT a way in.
+      await outsider.goto(`/g/${gid}`);
+      await expect(outsider.getByTestId("group-public-card")).toBeVisible();
+      await expect(outsider.getByTestId("group-public-title")).toHaveText(gname);
+      await expect(outsider.getByTestId("group-public-event").filter({ hasText: shown })).toBeVisible();
+      await expect(outsider.getByTestId("group-public-event").filter({ hasText: hidden })).toHaveCount(0);
+      await expect(outsider.getByTestId("group-join")).toHaveCount(0);
+
+      // (3) THE security property: a tokenless join is refused by the API.
+      const join = (invite: string) => outsider.evaluate(async ({ id, invite }) => {
+        const res = await fetch(`/api/groups/${id}/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Dev-User": "gpout" },
+          body: JSON.stringify(invite ? { invite } : {}),
+        });
+        return res.status;
+      }, { id: gid, invite });
+      expect(await join("")).toBe(403);
+      expect(await join("not-a-token")).toBe(403);
+      // Still a non-member.
+      await outsider.reload();
+      await expect(outsider.getByTestId("group-public-card")).toBeVisible();
+
+      // (4) The invite link works: the page grows a Join button, and it joins.
+      const token = await host.evaluate(async (id) =>
+        (await (await fetch(`/api/groups/${id}`, { headers: { "X-Dev-User": "gplock" } })).json()).invite_token as string, gid);
+      expect(token).toBeTruthy();
+      await outsider.goto(`/g/${gid}?invite=${encodeURIComponent(token)}`);
+      await outsider.getByTestId("group-join").click();
+      await expect(outsider.getByTestId("group-title")).toHaveText(gname);
+      // A member sees everything, unlisted events included.
+      await expect(outsider.getByTestId("group-event").filter({ hasText: hidden })).toBeVisible();
+
+      // (5) Regenerate: the OLD token dies, a freshly-read one works. Checked
+      //     with a THIRD user, since the outsider is already in.
+      await host.getByTestId("group-invite-rotate").click(); // arm
+      await host.getByTestId("group-invite-rotate").click(); // confirm
+      await expect(host.getByTestId("group-share-msg")).toContainText("no longer works");
+      const joinAs = (user: string, invite: string) => host.evaluate(async ({ id, user, invite }) => {
+        const res = await fetch(`/api/groups/${id}/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Dev-User": user },
+          body: JSON.stringify({ invite }),
+        });
+        return res.status;
+      }, { id: gid, user, invite });
+      expect(await joinAs("gplate", token)).toBe(403); // stale version
+      const fresh = await host.evaluate(async (id) =>
+        (await (await fetch(`/api/groups/${id}`, { headers: { "X-Dev-User": "gplock" } })).json()).invite_token as string, gid);
+      expect(fresh).not.toBe(token);
+      expect(await joinAs("gplate", fresh)).toBe(200);
+    } finally {
+      await hostCtx.close();
+      await outCtx.close();
     }
   });
 
@@ -673,16 +812,16 @@ test.describe("scheduler", () => {
       await expect(host.getByTestId("event-title")).toHaveText(title);
       const eid = host.url().split("/e/")[1];
 
-      // The fan is NOT a member: the group link shows the join preview, and
-      // Follow sits right beside Join - you can follow without joining.
+      // The fan is NOT a member: the bare group link shows the PUBLIC page -
+      // no join affordance at all, just Follow.
       await fan.goto(`/g/${gid}`);
-      await expect(fan.getByTestId("group-join-card")).toBeVisible();
+      await expect(fan.getByTestId("group-public-card")).toBeVisible();
       await expect(fan.getByTestId("group-follow")).toHaveText("+ Follow");
       await fan.getByTestId("group-follow").click();
       await expect(fan.getByTestId("group-follow")).toHaveText("Following ✓");
       // Still a non-member - following didn't join them in.
       await fan.reload();
-      await expect(fan.getByTestId("group-join-card")).toBeVisible();
+      await expect(fan.getByTestId("group-public-card")).toBeVisible();
       await expect(fan.getByTestId("group-follow")).toHaveText("Following ✓");
 
       // The club's listed event is now in their feed - both the dedicated

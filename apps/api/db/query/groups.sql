@@ -3,15 +3,15 @@
 -- name: CreateGroup :one
 INSERT INTO groups (owner_id, name, description, emoji)
 VALUES ($1, $2, $3, $4)
-RETURNING id, owner_id, name, emoji, created_at, icon_url, description;
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version;
 
 -- name: GetGroup :one
-SELECT id, owner_id, name, emoji, created_at, icon_url, description
+SELECT id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version
 FROM groups
 WHERE id = $1;
 
 -- name: ListMyGroups :many
-SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url, g.description
+SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url, g.description, g.invite_token_version
 FROM groups g
 LEFT JOIN group_members m ON m.group_id = g.id
 WHERE g.owner_id = $1 OR m.user_id = $1
@@ -55,7 +55,7 @@ WHERE a.event_id = $1 AND a.rsvp = 'going' AND p.email <> '';
 -- name: SetGroupIcon :one
 UPDATE groups SET icon_url = $2
 WHERE id = $1
-RETURNING id, owner_id, name, emoji, created_at, icon_url, description;
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version;
 
 -- name: ListGroupEventMonths :many
 -- Start times of every HAPPENED scheduled group event - the cron computes
@@ -95,4 +95,32 @@ UPDATE group_members SET role = $3 WHERE group_id = $1 AND user_id = $2;
 
 -- name: UpdateGroupDetails :one
 UPDATE groups SET name = $2, description = $3 WHERE id = $1
-RETURNING id, owner_id, name, emoji, created_at, icon_url, description;
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version;
+
+
+-- ---------------------- invite link (see 0045) ----------------------
+-- The join token is signed over "group|<id>|<version>". The version rides the
+-- group SELECTs above only so sqlc keeps generating the shared db.Group model
+-- (a column list that no longer matches the table splits into per-query row
+-- types); handlers read it through the two statements below.
+
+-- name: GetGroupInviteVersion :one
+SELECT invite_token_version FROM groups WHERE id = $1;
+
+-- name: BumpGroupInviteVersion :one
+-- Regenerate: invalidates only THIS group's outstanding invite links.
+UPDATE groups SET invite_token_version = invite_token_version + 1
+WHERE id = $1
+RETURNING invite_token_version;
+
+-- name: ListGroupListedEvents :many
+-- The public group page's event list: upcoming, live, and explicitly LISTED by
+-- the host ("show to my followers"). Column list mirrors ListGroupEvents so the
+-- rows are plain db.Event. Never returns drafts, cancellations, or past dates.
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
+FROM events
+WHERE group_id = $1 AND listed = true
+  AND status IN ('polling', 'scheduled')
+  AND (starts_at IS NULL OR starts_at >= now() - interval '12 hours')
+ORDER BY starts_at NULLS LAST;

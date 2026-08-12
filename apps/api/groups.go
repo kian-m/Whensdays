@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/clsandbox/api/internal/db"
 )
@@ -30,6 +34,93 @@ func validEmoji(s string) bool {
 // groups.go - recurring groups (the product wedge): a persistent circle that
 // plans together. Owner manages members; any member sees the group and can
 // attach events to it. Access is membership-gated, not link-capability.
+//
+// TWO LINKS off one group (see public.go for the read side):
+//
+//	/g/{id}                  public page: name, icon, description, upcoming
+//	                         LISTED events, Follow. No members, no join.
+//	/g/{id}?invite=<token>   the same page PLUS "Join this group".
+//
+// Membership is not cosmetic (members see the member list and ALL the group's
+// events), so joining requires the signed token - the bare id is NOT a join
+// capability. Share-attribution (?from=<uid>, "who invited you") is orthogonal:
+// it names an inviter in the unfurl and authorizes nothing.
+
+// --- the join token ---
+//
+// Same envelope as every other capability link (mute|, rsvp|, icsfeed|), with
+// its own "group|" payload namespace so no other token can be replayed here.
+// The group's invite_token_version (migration 0045) is signed in and checked
+// against the CURRENT row on every verify: bumping it revokes that ONE group's
+// outstanding links. Signing over the bare key alone would make revocation mean
+// rotating GUEST_TOKEN_KEY, which would kill every guest session, unsubscribe
+// link, one-tap RSVP link and .ics feed at the same time.
+func (g guestSigner) signGroupInvite(groupID string, version int32) string {
+	return hmacSeal(g.key, "group|"+groupID+"|"+strconv.Itoa(int(version)))
+}
+
+func (g guestSigner) verifyGroupInvite(token string) (groupID string, version int32, ok bool) {
+	payload, ok := hmacOpen(g.key, token)
+	if !ok {
+		return "", 0, false
+	}
+	parts := strings.Split(string(payload), "|")
+	if len(parts) != 3 || parts[0] != "group" || parts[1] == "" {
+		return "", 0, false
+	}
+	v, err := strconv.Atoi(parts[2])
+	if err != nil || v < 1 {
+		return "", 0, false
+	}
+	return parts[1], int32(v), true
+}
+
+// groupInviteToken mints the current invite token for a group.
+func (s *server) groupInviteToken(ctx context.Context, id pgtype.UUID) string {
+	v, err := s.queries.GetGroupInviteVersion(ctx, id)
+	if err != nil {
+		return ""
+	}
+	return s.guests.signGroupInvite(uuidStr(id), v)
+}
+
+// validGroupInvite reports whether token is a live invite for this group: right
+// namespace, right group, and the group's CURRENT version (a regenerate bumps
+// the version, so every older token stops verifying).
+func (s *server) validGroupInvite(ctx context.Context, id pgtype.UUID, token string) bool {
+	if token == "" {
+		return false
+	}
+	gid, version, ok := s.guests.verifyGroupInvite(token)
+	if !ok || gid != uuidStr(id) {
+		return false
+	}
+	current, err := s.queries.GetGroupInviteVersion(ctx, id)
+	return err == nil && current == version
+}
+
+// handleRotateGroupInvite regenerates the group's invite link (owner/admin).
+// Irreversible for links already shared - the web arms it behind a two-tap
+// confirm.
+func (s *server) handleRotateGroupInvite(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	g, ok := s.loadGroupForMember(w, r)
+	if !ok {
+		return
+	}
+	isAdmin, _ := s.queries.IsGroupAdmin(r.Context(), db.IsGroupAdminParams{ID: g.ID, UserID: uid})
+	if !isAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admins only"})
+		return
+	}
+	v, err := s.queries.BumpGroupInviteVersion(r.Context(), g.ID)
+	if err != nil {
+		s.internal(w, "rotate group invite", err)
+		return
+	}
+	s.analytics.Capture(uid, "group_invite_rotated", map[string]any{"group_id": uuidStr(g.ID)})
+	writeJSON(w, http.StatusOK, map[string]string{"invite_token": s.guests.signGroupInvite(uuidStr(g.ID), v)})
+}
 
 func (s *server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
@@ -110,15 +201,19 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 	// Three independent reads - fan out (the DB is a network hop away).
 	ctx := r.Context()
 	var (
-		members   []db.ListGroupMembersRow
-		events    []db.Event
-		isAdmin   bool
-		following bool
+		members     []db.ListGroupMembersRow
+		events      []db.Event
+		isAdmin     bool
+		following   bool
+		inviteToken string
 	)
 	err := parallel(
 		func() (e error) { members, e = s.queries.ListGroupMembers(ctx, g.ID); return },
 		func() (e error) { events, e = s.queries.ListGroupEvents(ctx, g.ID); return },
 		func() error { isAdmin, _ = s.queries.IsGroupAdmin(ctx, db.IsGroupAdminParams{ID: g.ID, UserID: uid}); return nil },
+		// Any member can grow the group, so any member gets the invite token
+		// (this endpoint is already member-gated). Regenerating it is admin-only.
+		func() error { inviteToken = s.groupInviteToken(ctx, g.ID); return nil },
 		func() error {
 			// Following a group is separate from belonging to it: members can
 			// follow too (their listed events then ride the feed).
@@ -133,44 +228,15 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"group": g, "members": members, "events": events,
 		"is_owner": g.OwnerID == uid, "is_admin": isAdmin, "viewer_id": uid,
-		"is_following": following,
+		"is_following": following, "invite_token": inviteToken,
 	})
 }
 
-// handleGroupPreview - NOT member-gated: the group link is the invite
-// capability (same model as events), so anyone holding it sees what they'd
-// be joining. Read-only, minimal fields.
-func (s *server) handleGroupPreview(w http.ResponseWriter, r *http.Request) {
-	uid, _ := userIDFrom(r.Context())
-	id, ok := parseUUID(r.PathValue("id"))
-	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
-		return
-	}
-	g, err := s.queries.GetGroup(r.Context(), id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-		return
-	}
-	if err != nil {
-		s.internal(w, "group preview", err)
-		return
-	}
-	count, _ := s.queries.CountGroupMembers(r.Context(), id)
-	member, _ := s.queries.IsGroupMember(r.Context(), db.IsGroupMemberParams{ID: id, UserID: uid})
-	// You can FOLLOW a club without joining it - the preview is where that
-	// choice lives for a non-member, so it needs the current state.
-	following, _ := s.queries.IsFollowing(r.Context(), db.IsFollowingParams{UserID: uid, Kind: "group", Value: uuidStr(id)})
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id": g.ID, "name": g.Name, "emoji": g.Emoji, "icon_url": g.IconUrl,
-		"member_count": count, "is_member": member,
-		"is_following": following, "viewer_id": uid,
-	})
-}
-
-// handleJoinGroup lets ANYONE holding the group link join - including guests
-// (they're real low-privilege users). Membership then unlocks the group page
-// and its events, exactly like an event invite link unlocks the event.
+// handleJoinGroup grants MEMBERSHIP, so it demands the signed invite token -
+// the bare group id only ever buys the public page (see public.go). Guests can
+// still join (they're real low-privilege users), they just need the invite
+// link. The token rides in the BODY, not the query: a join is a write, and the
+// body keeps the capability out of access logs and Referer headers.
 func (s *server) handleJoinGroup(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())
 	id, ok := parseUUID(r.PathValue("id"))
@@ -185,11 +251,27 @@ func (s *server) handleJoinGroup(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, "join group: load", err)
 		return
 	}
-	if err := s.queries.AddGroupMember(r.Context(), db.AddGroupMemberParams{GroupID: id, UserID: uid}); err != nil {
-		s.internal(w, "join group", err)
+	var in struct {
+		Invite string `json:"invite"`
+	}
+	// A bodyless POST is a TOKENLESS join, not a malformed request - fall
+	// through to the 403 so the refusal says what's actually wrong.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	s.analytics.Capture(uid, "group_joined", map[string]any{"group_id": r.PathValue("id"), "via": "link"})
+	// Already in (owner included): idempotent no-op, no token needed.
+	if member, _ := s.queries.IsGroupMember(r.Context(), db.IsGroupMemberParams{ID: id, UserID: uid}); !member {
+		if !s.validGroupInvite(r.Context(), id, strings.TrimSpace(in.Invite)) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "this group needs an invite link to join"})
+			return
+		}
+		if err := s.queries.AddGroupMember(r.Context(), db.AddGroupMemberParams{GroupID: id, UserID: uid}); err != nil {
+			s.internal(w, "join group", err)
+			return
+		}
+		s.analytics.Capture(uid, "group_joined", map[string]any{"group_id": r.PathValue("id"), "via": "invite_link"})
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

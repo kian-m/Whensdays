@@ -1,6 +1,9 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Event, Group, GroupDetail, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
+import { Event, Group, GroupDetail, PublicPage, collapseSeries, eventIsPast, seriesCounts, fmtDateTime, getJSON, sendJSON, useApi } from "../lib";
+
+// One-time "your old links are view-only now" note (see the Share card).
+const LINK_HINT_KEY = "whensdays.groupLinkHint";
 
 // Consecutive months (ending now, with a one-month grace) in which the group
 // had at least one scheduled event - the ritual streak. Loss aversion is the
@@ -98,46 +101,82 @@ export function Groups() {
   );
 }
 
-type GroupPreview = { id: string; name: string; description: string; emoji: string; icon_url: string; member_count: number; is_member: boolean; is_following: boolean; viewer_id: string };
+// The invite token turns a link into a JOIN link. It rides the URL as
+// ?invite=…; a bare group link is public and view-only.
+export function inviteTokenFromURL(): string {
+  return new URLSearchParams(window.location.search).get("invite") || "";
+}
 
-// The join view anyone (guests included) sees when they open a group link
-// they're not a member of yet.
-function GroupJoin({ id, onJoined }: { id: string; onJoined: () => void }) {
+// GroupPublicView - what a NON-MEMBER sees at /g/{id}: the public page. Name,
+// icon, description, member count, and the group's upcoming LISTED events, plus
+// Follow. There is no join affordance here unless the visitor arrived on an
+// invite link (viewer.can_join, server-verified) - the bare link buys a view,
+// not a seat. Works with no account at all: the endpoint is unauthenticated, so
+// `signedOut` visitors get a sign-up nudge in place of Follow/Join.
+export function GroupPublicView({ id, signedOut, onJoined }: { id: string; signedOut?: boolean; onJoined: () => void }) {
   const api = useApi();
-  const { data, loading } = useAsync<GroupPreview>((a) => getJSON(a, `/api/groups/${id}/preview`), [id]);
+  const nav = useNavigate();
+  const invite = inviteTokenFromURL();
+  const { data, loading } = useAsync<PublicPage>(
+    (a) => getJSON(a, `/api/public/groups/${id}${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`), [id, invite]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   if (loading && !data) return <ListSkeleton rows={1} header />;
   if (!data) return <div className="stack"><BackLink /><p className="muted">Group not found.</p></div>;
+  const { entity, viewer } = data;
+  const isGuest = viewer.id.startsWith("guest_");
   async function join() {
     setBusy(true);
-    const res = await sendJSON(api, "POST", `/api/groups/${id}/join`, {});
+    // The token also rides the POST body - the button is UI, the server
+    // re-verifies the capability on the write.
+    const res = await sendJSON(api, "POST", `/api/groups/${id}/join`, { invite });
     setBusy(false);
-    if (!res.ok) return setErr("could not join - try again");
+    if (!res.ok) return setErr("that invite link is no longer valid - ask for a new one");
     onJoined();
   }
   return (
     <div className="stack">
-      <div className="card stack" style={{ alignItems: "center", textAlign: "center" }} data-testid="group-join-card">
-        {data.icon_url ? <Avatar url={data.icon_url} name={data.name} size={72} /> : <span style={{ fontSize: "3rem" }}>{data.emoji || "👥"}</span>}
-        <h1>{data.name}</h1>
-        <p className="muted small">{data.member_count} {data.member_count === 1 ? "member" : "members"} · you're invited to join</p>
-        {data.description && <p className="muted small" style={{ maxWidth: 420 }}>{data.description}</p>}
-        <button className="btn" data-testid="group-join" disabled={busy} onClick={join}>
-          {busy ? "Joining…" : "Join the group"}
-        </button>
+      <div className="card stack" style={{ alignItems: "center", textAlign: "center" }} data-testid="group-public-card">
+        {entity.icon_url ? <Avatar url={entity.icon_url} name={entity.name} size={72} /> : <span style={{ fontSize: "3rem" }}>{entity.emoji || "👥"}</span>}
+        <h1 data-testid="group-public-title">{entity.name}</h1>
+        <p className="muted small">{entity.member_count} {entity.member_count === 1 ? "member" : "members"}</p>
+        {entity.description && <p className="muted small" style={{ maxWidth: 420 }}>{entity.description}</p>}
+        {/* Join shows ONLY on an invite link (the server decides). */}
+        {viewer.can_join && (
+          <button className="btn" data-testid="group-join" disabled={busy} onClick={join}>
+            {busy ? "Joining…" : "Join this group"}
+          </button>
+        )}
         {/* You can FOLLOW a club without joining it - their listed events then
-            show up in your feed. Following needs an account, so guests (who
-            have no way to see a feed later) only get Join. */}
-        {!data.viewer_id.startsWith("guest_") && (
+            show up in your feed. Following needs an account: signed-out
+            visitors and guests get the signup nudge instead. */}
+        {signedOut || isGuest ? (
           <span className="stack" style={{ gap: 4, alignItems: "center" }}>
-            <FollowButton kind="group" value={id} following={data.is_following}
-              source="group_join" testid="group-follow" size="" />
+            <a className="btn soft" href="/sign-up" data-testid="group-follow-signup">+ Follow</a>
+            <span className="muted small">Sign up to follow - their plans then land in your feed.</span>
+          </span>
+        ) : (
+          <span className="stack" style={{ gap: 4, alignItems: "center" }}>
+            <FollowButton kind="group" value={id} following={viewer.is_following}
+              source="group_public" testid="group-follow" size="" />
             <span className="muted small">Not joining? Follow to see their plans in your feed.</span>
           </span>
         )}
-        {err && <p className="muted small">{err}</p>}
+        {err && <p className="muted small" data-testid="group-join-err">{err}</p>}
       </div>
+
+      {data.events.length > 0 && (
+        <>
+          <div className="section-h">What's coming up</div>
+          {collapseSeries([...data.events], "next")
+            .sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime())
+            .map((e) => (
+              <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
+                testid="group-public-event"
+                seriesN={e.series_id ? (seriesCounts(data.events)[e.series_id] ?? 1) : 0} />
+            ))}
+        </>
+      )}
     </div>
   );
 }
@@ -151,6 +190,10 @@ export function GroupPage() {
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickingGif, setPickingGif] = useState(false);
+  // One-time rollout note about old links (see the Share card below).
+  const [linkHintSeen, setLinkHintSeen] = useState(() => {
+    try { return localStorage.getItem(LINK_HINT_KEY) === "1"; } catch { return true; }
+  });
 
   async function onPickIcon(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -176,18 +219,27 @@ export function GroupPage() {
   }
 
   if (loading && !data) return <ListSkeleton rows={4} header />;
-  // Not a member (or arriving fresh from an invite link): the link is the
-  // capability - show a preview + Join instead of a wall.
-  if (!data) return <GroupJoin id={id!} onJoined={reload} />;
+  // Not a member: the group's PUBLIC page (view + follow). Joining needs an
+  // invite link - the bare id is not a membership capability.
+  if (!data) return <GroupPublicView id={id!} onJoined={reload} />;
 
-  const { group, members, events, is_owner, is_admin, viewer_id } = data;
+  const { group, members, events, is_owner, is_admin, viewer_id, invite_token: inviteToken } = data;
   // The list shows only what's still happening: no past occurrences, and a
   // cancelled event never lingers even if a stale cached response carries one.
   const upcomingEvents = events.filter((e) => e.status !== "cancelled" && !eventIsPast(e));
   const canManage = is_owner || is_admin;
-  // ?from=<me> lets the unfurl say "<name> invited you to join" (server checks
-  // the id is a real member before showing any name).
-  const inviteURL = `${location.origin}/g/${group.id}?from=${encodeURIComponent(viewer_id)}`;
+  // TWO links, and the difference matters: the bare one is a public page
+  // (view + follow), the ?invite= one grants MEMBERSHIP (members see the member
+  // list and every group event). ?from=<me> is share attribution only - it lets
+  // the unfurl say "<name> invited you to join" (the server checks the id is a
+  // real member before showing any name) and authorizes nothing.
+  const from = `from=${encodeURIComponent(viewer_id)}`;
+  const shareURL = `${location.origin}/g/${group.id}?${from}`;
+  const inviteURL = `${location.origin}/g/${group.id}?invite=${encodeURIComponent(inviteToken)}&${from}`;
+  // Rollout reality #2: every event created before migration 0044 is
+  // listed=false, so an established group's public page can look empty. Say so,
+  // and offer the one-tap fix.
+  const unlisted = upcomingEvents.filter((e) => !e.listed);
 
   return (
     <div className="stack">
@@ -271,20 +323,87 @@ export function GroupPage() {
         )}
       </div>
 
-      {/* Invite lives in its own box - any member can grow the group (the link
-          IS the invite). */}
-      <div className="card stack" style={{ gap: 8 }}>
-        <div className="section-h" style={{ margin: 0 }}>Invite people</div>
-        <p className="muted small" style={{ margin: 0 }}>Anyone with the link can preview the group and join in one tap.</p>
-        <div className="row wrap" style={{ gap: 6 }}>
-          <button type="button" className="btn soft sm" data-testid="group-invite-copy"
-            onClick={() => { navigator.clipboard?.writeText(inviteURL); setCopyMsg("Invite link copied ✓"); }}>
-            🔗 Invite via link
+      {/* Sharing lives in its own box, and it is TWO different things. Making
+          the distinction unmissable is the whole point: a host must never hand
+          out membership when they only meant to share the page. */}
+      <div className="card stack" style={{ gap: 14 }}>
+        <div className="section-h" style={{ margin: 0 }}>Share</div>
+
+        {/* Rollout reality #1: links shared before this change were join links
+            and are now view-only. Small, one-time, dismissible. */}
+        {canManage && !linkHintSeen && (
+          <div className="row between" data-testid="group-link-hint"
+            style={{ gap: 8, alignItems: "flex-start", background: "var(--glass-2)", border: "1px solid var(--glass-line)", borderRadius: "var(--radius-sm)", padding: "0.55rem 0.7rem" }}>
+            <span className="muted small">
+              Heads up: links you shared before now open the <b>public page</b> only. To add someone as a member, send the <b>Invite to join</b> link below.
+            </span>
+            <button type="button" className="btn ghost sm" data-testid="group-link-hint-dismiss"
+              aria-label="Dismiss" onClick={() => { localStorage.setItem(LINK_HINT_KEY, "1"); setLinkHintSeen(true); }}>✕</button>
+          </div>
+        )}
+
+        <div className="stack" style={{ gap: 6 }}>
+          <div className="row between" style={{ gap: 6 }}>
+            <b>Share page</b>
+            <span className="pill">public</span>
+          </div>
+          <p className="muted small" style={{ margin: 0 }}>
+            Anyone can open it: what the group is and what's coming up. They can follow, <b>not</b> join.
+          </p>
+          <button type="button" className="share-copy" data-testid="group-share-copy" title="Tap to copy"
+            onClick={() => { navigator.clipboard?.writeText(shareURL); setCopyMsg("Public page link copied ✓"); }}>
+            {shareURL.replace(/^https?:\/\//, "")}
           </button>
-          <QRButton url={inviteURL} testid="group-qr" />
         </div>
-        {copyMsg && <p className="muted small" style={{ margin: 0 }}>{copyMsg}</p>}
+
+        <div className="stack" style={{ gap: 6 }}>
+          <div className="row between" style={{ gap: 6 }}>
+            <b>Invite to join</b>
+            <span className="pill scheduled">members</span>
+          </div>
+          <p className="muted small" style={{ margin: 0 }}>
+            Grants membership: they'll see every event and the member list. Send it to people you actually want in.
+          </p>
+          <button type="button" className="share-copy" data-testid="group-invite-copy" title="Tap to copy"
+            onClick={() => { navigator.clipboard?.writeText(inviteURL); setCopyMsg("Invite link copied ✓"); }}>
+            {copyMsg === "Invite link copied ✓" ? "Copied ✓" : "🔗 Copy the invite link"}
+          </button>
+          <div className="row wrap" style={{ gap: 6 }}>
+            {/* QR belongs to the JOIN link - it's the in-person "scan this to
+                join the club" moment. */}
+            <QRButton url={inviteURL} testid="group-qr" label="QR to join" />
+            {canManage && (
+              <ConfirmButton label="Regenerate" confirmLabel="Tap again - old invite links stop working"
+                testid="group-invite-rotate"
+                onConfirm={async () => {
+                  await sendJSON(api, "POST", `/api/groups/${id}/invite/rotate`, {});
+                  setCopyMsg("New invite link - the old one no longer works");
+                  reload();
+                }} />
+            )}
+          </div>
+        </div>
+        {copyMsg && <p className="muted small" style={{ margin: 0 }} data-testid="group-share-msg">{copyMsg}</p>}
       </div>
+
+      {/* Rollout reality #2: pre-0044 events are all listed=false, so the
+          public page can read as broken. Count them and offer the fix. */}
+      {canManage && unlisted.length > 0 && (
+        <div className="card stack" style={{ gap: 6 }} data-testid="group-unlisted-hint">
+          <span className="muted small">
+            {unlisted.length} upcoming {unlisted.length === 1 ? "event isn't" : "events aren't"} shown on your public page.
+          </span>
+          <span className="row wrap" style={{ gap: 6 }}>
+            <button type="button" className="btn soft sm" data-testid="group-unlisted-fix"
+              onClick={async () => {
+                await Promise.all(unlisted.map((e) => sendJSON(api, "PUT", `/api/events/${e.id}/listed`, { listed: true })));
+                reload();
+              }}>
+              Show {unlisted.length === 1 ? "it" : "them"} publicly
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* Compact members summary (Instagram-style): a few faces + a count that
           opens the dedicated members page - the full list no longer floods the
@@ -424,11 +543,11 @@ export function GroupMembersPage() {
   );
 }
 
-function GroupEventRow({ event, onClick, seriesN }: { event: Event; onClick: () => void; seriesN?: number }) {
+function GroupEventRow({ event, onClick, seriesN, testid = "group-event" }: { event: Event; onClick: () => void; seriesN?: number; testid?: string }) {
   return (
     <div
       className={`card ev tile ${event.theme ? `theme-tile theme-${event.theme}` : "type-tile"}`}
-      data-testid="group-event"
+      data-testid={testid}
       style={{ cursor: "pointer" }}
       onClick={onClick}
     >

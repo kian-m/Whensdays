@@ -27,6 +27,20 @@ func (q *Queries) AddGroupMember(ctx context.Context, arg AddGroupMemberParams) 
 	return err
 }
 
+const bumpGroupInviteVersion = `-- name: BumpGroupInviteVersion :one
+UPDATE groups SET invite_token_version = invite_token_version + 1
+WHERE id = $1
+RETURNING invite_token_version
+`
+
+// Regenerate: invalidates only THIS group's outstanding invite links.
+func (q *Queries) BumpGroupInviteVersion(ctx context.Context, id pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, bumpGroupInviteVersion, id)
+	var invite_token_version int32
+	err := row.Scan(&invite_token_version)
+	return invite_token_version, err
+}
+
 const countGroupMembers = `-- name: CountGroupMembers :one
 SELECT count(*)::int FROM group_members WHERE group_id = $1
 `
@@ -42,7 +56,7 @@ const createGroup = `-- name: CreateGroup :one
 
 INSERT INTO groups (owner_id, name, description, emoji)
 VALUES ($1, $2, $3, $4)
-RETURNING id, owner_id, name, emoji, created_at, icon_url, description
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version
 `
 
 type CreateGroupParams struct {
@@ -69,12 +83,13 @@ func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (Group
 		&i.CreatedAt,
 		&i.IconUrl,
 		&i.Description,
+		&i.InviteTokenVersion,
 	)
 	return i, err
 }
 
 const getGroup = `-- name: GetGroup :one
-SELECT id, owner_id, name, emoji, created_at, icon_url, description
+SELECT id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version
 FROM groups
 WHERE id = $1
 `
@@ -90,8 +105,26 @@ func (q *Queries) GetGroup(ctx context.Context, id pgtype.UUID) (Group, error) {
 		&i.CreatedAt,
 		&i.IconUrl,
 		&i.Description,
+		&i.InviteTokenVersion,
 	)
 	return i, err
+}
+
+const getGroupInviteVersion = `-- name: GetGroupInviteVersion :one
+
+SELECT invite_token_version FROM groups WHERE id = $1
+`
+
+// ---------------------- invite link (see 0045) ----------------------
+// The join token is signed over "group|<id>|<version>". The version rides the
+// group SELECTs above only so sqlc keeps generating the shared db.Group model
+// (a column list that no longer matches the table splits into per-query row
+// types); handlers read it through the two statements below.
+func (q *Queries) GetGroupInviteVersion(ctx context.Context, id pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, getGroupInviteVersion, id)
+	var invite_token_version int32
+	err := row.Scan(&invite_token_version)
+	return invite_token_version, err
 }
 
 const isGroupAdmin = `-- name: IsGroupAdmin :one
@@ -257,6 +290,72 @@ func (q *Queries) ListGroupEvents(ctx context.Context, groupID pgtype.UUID) ([]E
 	return items, nil
 }
 
+const listGroupListedEvents = `-- name: ListGroupListedEvents :many
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
+FROM events
+WHERE group_id = $1 AND listed = true
+  AND status IN ('polling', 'scheduled')
+  AND (starts_at IS NULL OR starts_at >= now() - interval '12 hours')
+ORDER BY starts_at NULLS LAST
+`
+
+// The public group page's event list: upcoming, live, and explicitly LISTED by
+// the host ("show to my followers"). Column list mirrors ListGroupEvents so the
+// rows are plain db.Event. Never returns drafts, cancellations, or past dates.
+func (q *Queries) ListGroupListedEvents(ctx context.Context, groupID pgtype.UUID) ([]Event, error) {
+	rows, err := q.db.Query(ctx, listGroupListedEvents, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Event{}
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.HostID,
+			&i.Title,
+			&i.EventType,
+			&i.Description,
+			&i.LocationMode,
+			&i.LocationAddress,
+			&i.SchedulingMode,
+			&i.StartsAt,
+			&i.Status,
+			&i.CreatedAt,
+			&i.CommentsEnabled,
+			&i.GroupID,
+			&i.SeriesID,
+			&i.Recurrence,
+			&i.ReminderSent,
+			&i.Visibility,
+			&i.Topic,
+			&i.City,
+			&i.CustomEmoji,
+			&i.CustomLabel,
+			&i.GeneralScope,
+			&i.PhotoUrl,
+			&i.Theme,
+			&i.Timezone,
+			&i.EndsAt,
+			&i.PollDeadline,
+			&i.PollReadySent,
+			&i.VoteReminderSent,
+			&i.QuorumSent,
+			&i.Capacity,
+			&i.Listed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGroupMemberContacts = `-- name: ListGroupMemberContacts :many
 SELECT p.user_id, p.display_name, p.email
 FROM group_members m
@@ -335,7 +434,7 @@ func (q *Queries) ListGroupMembers(ctx context.Context, groupID pgtype.UUID) ([]
 }
 
 const listMyGroups = `-- name: ListMyGroups :many
-SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url, g.description
+SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url, g.description, g.invite_token_version
 FROM groups g
 LEFT JOIN group_members m ON m.group_id = g.id
 WHERE g.owner_id = $1 OR m.user_id = $1
@@ -359,6 +458,7 @@ func (q *Queries) ListMyGroups(ctx context.Context, ownerID string) ([]Group, er
 			&i.CreatedAt,
 			&i.IconUrl,
 			&i.Description,
+			&i.InviteTokenVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -406,7 +506,7 @@ func (q *Queries) RemoveGroupMember(ctx context.Context, arg RemoveGroupMemberPa
 const setGroupIcon = `-- name: SetGroupIcon :one
 UPDATE groups SET icon_url = $2
 WHERE id = $1
-RETURNING id, owner_id, name, emoji, created_at, icon_url, description
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version
 `
 
 type SetGroupIconParams struct {
@@ -425,6 +525,7 @@ func (q *Queries) SetGroupIcon(ctx context.Context, arg SetGroupIconParams) (Gro
 		&i.CreatedAt,
 		&i.IconUrl,
 		&i.Description,
+		&i.InviteTokenVersion,
 	)
 	return i, err
 }
@@ -446,7 +547,7 @@ func (q *Queries) SetGroupMemberRole(ctx context.Context, arg SetGroupMemberRole
 
 const updateGroupDetails = `-- name: UpdateGroupDetails :one
 UPDATE groups SET name = $2, description = $3 WHERE id = $1
-RETURNING id, owner_id, name, emoji, created_at, icon_url, description
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version
 `
 
 type UpdateGroupDetailsParams struct {
@@ -466,6 +567,7 @@ func (q *Queries) UpdateGroupDetails(ctx context.Context, arg UpdateGroupDetails
 		&i.CreatedAt,
 		&i.IconUrl,
 		&i.Description,
+		&i.InviteTokenVersion,
 	)
 	return i, err
 }

@@ -161,6 +161,12 @@ func main() {
 	mux.Handle("GET /api/groups/{id}/og.png", readLimit(http.HandlerFunc(s.handleGroupOGImage)))
 	// Public browse (read-only, publishes only host-chosen fields) + cron.
 	mux.Handle("GET /api/discover", readLimit(http.HandlerFunc(s.handleDiscover)))
+	// The public entity page behind a bare /g/{id} share link: view + follow, no
+	// membership. UNauthenticated so a signed-out visitor never hits a name-entry
+	// wall; optionalAuth still resolves a signed-in viewer for follow/join state.
+	// Entity-shaped on purpose - /u/{handle} will hang off the same envelope.
+	optAuth := s.optionalAuth()
+	mux.Handle("GET /api/public/groups/{id}", readLimit(optAuth(http.HandlerFunc(s.handleGroupPublicPage))))
 	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
 	mux.HandleFunc("POST /api/cron/analytics", s.handleCronAnalytics)        // CRON_KEY-gated daily digest
 	mux.HandleFunc("POST /api/cron/flush", s.handleCronFlush)                // CRON_KEY-gated manual digest flush (unscheduled - see notifications.go)
@@ -208,6 +214,7 @@ func main() {
 	mux.Handle("POST /api/events/{id}/comments", auth(http.HandlerFunc(s.handlePostComment)))
 	mux.Handle("DELETE /api/events/{id}/comments/{commentId}", auth(http.HandlerFunc(s.handleDeleteComment)))
 	mux.Handle("PUT /api/events/{id}/comments-enabled", auth(http.HandlerFunc(s.handleSetCommentsEnabled)))
+	mux.Handle("PUT /api/events/{id}/listed", auth(http.HandlerFunc(s.handleSetEventListed)))
 	mux.Handle("POST /api/events/{id}/cohosts", auth(http.HandlerFunc(s.handleAddCohost)))
 	mux.Handle("DELETE /api/events/{id}/cohosts/{userId}", auth(http.HandlerFunc(s.handleRemoveCohost)))
 	// Notification mute: signed-in toggle + the one-click email link (the latter
@@ -246,8 +253,11 @@ func main() {
 	mux.Handle("GET /api/groups", auth(http.HandlerFunc(s.handleListGroups)))
 	mux.Handle("GET /api/groups/{id}", auth(http.HandlerFunc(s.handleGetGroup)))
 	mux.Handle("POST /api/groups/{id}/members", auth(http.HandlerFunc(s.handleAddGroupMember)))
-	mux.Handle("GET /api/groups/{id}/preview", auth(http.HandlerFunc(s.handleGroupPreview)))
+	// Joining needs the signed invite token in the body - the bare group id is
+	// NOT a join capability any more (see groups.go). Regenerating that token is
+	// owner/admin only and kills only this group's outstanding links.
 	mux.Handle("POST /api/groups/{id}/join", auth(http.HandlerFunc(s.handleJoinGroup)))
+	mux.Handle("POST /api/groups/{id}/invite/rotate", auth(http.HandlerFunc(s.handleRotateGroupInvite)))
 	mux.Handle("PUT /api/groups/{id}", auth(http.HandlerFunc(s.handleUpdateGroup)))
 	mux.Handle("PUT /api/groups/{id}/icon", auth(http.HandlerFunc(s.handleSetGroupIcon)))
 	mux.Handle("DELETE /api/groups/{id}/members/{userId}", auth(http.HandlerFunc(s.handleRemoveGroupMember)))
@@ -343,6 +353,27 @@ func (s *server) authMiddleware() func(http.Handler) http.Handler {
 					return
 				}
 				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userIDKey, uid)))
+				return
+			}
+			wrapped.ServeHTTP(w, r)
+		})
+	}
+}
+
+// optionalAuth resolves the caller when credentials are present and lets the
+// request through ANONYMOUSLY (userIDFrom → "") when they aren't. It's the
+// middleware for genuinely public reads that still want viewer state if the
+// visitor happens to be signed in - today the public group page (public.go).
+// Credentials = an Authorization header (Clerk bearer or "Guest <token>"), or
+// X-Dev-User under AUTH_MODE=dev; anything present is verified for real by the
+// normal chain, so a bad token still 401s rather than silently downgrading.
+func (s *server) optionalAuth() func(http.Handler) http.Handler {
+	full := s.authMiddleware()
+	return func(next http.Handler) http.Handler {
+		wrapped := full(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "" && r.Header.Get("X-Dev-User") == "" {
+				next.ServeHTTP(w, r)
 				return
 			}
 			wrapped.ServeHTTP(w, r)

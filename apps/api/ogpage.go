@@ -57,9 +57,15 @@ func (s *server) handleGroupOGPage(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		if g, err := s.queries.GetGroup(r.Context(), id); err == nil {
 			title = g.Name + " · Whensdays"
-			if inviter := s.groupInviterName(r.Context(), id, from); inviter != "" {
+			// Two links, two unfurls: only the ?invite=<token> link offers
+			// membership. The bare link is a public page - say so, or the
+			// preview promises a seat the page won't hand out.
+			switch inviter := s.groupInviterName(r.Context(), id, from); {
+			case !s.validGroupInvite(r.Context(), id, r.URL.Query().Get("invite")):
+				desc = "See what " + g.Name + " is planning on Whensdays."
+			case inviter != "":
 				desc = inviter + " invited you to join " + g.Name + " on Whensdays. Tap to join, no account needed."
-			} else {
+			default:
 				desc = "You're invited to join " + g.Name + " on Whensdays. Tap to join, no account needed."
 			}
 		}

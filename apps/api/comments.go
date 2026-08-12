@@ -178,6 +178,45 @@ func (s *server) handleSetCommentsEnabled(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]bool{"comments_enabled": in.Enabled})
 }
 
+// handleSetEventListed is the one-field twin of the above for "show this to my
+// followers / on my group's public page" - manager only. It exists because the
+// full PUT /api/events/{id} demands the whole event body, which is the wrong
+// shape for a one-tap "list these" fix-up (the group page's unlisted-events
+// hint uses it).
+func (s *server) handleSetEventListed(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	id, ok := parseUUID(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
+		return
+	}
+	_, role, err := s.eventAndRole(r.Context(), id, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err != nil {
+		s.internal(w, "listed toggle: load event", err)
+		return
+	}
+	if !isManager(role) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not allowed"})
+		return
+	}
+	var in struct {
+		Listed bool `json:"listed"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if err := s.queries.SetEventListed(r.Context(), db.SetEventListedParams{ID: id, Listed: in.Listed}); err != nil {
+		s.internal(w, "set event listed", err)
+		return
+	}
+	s.analytics.Capture(uid, "event_listed_set", map[string]any{"event_id": r.PathValue("id"), "listed": in.Listed})
+	writeJSON(w, http.StatusOK, map[string]bool{"listed": in.Listed})
+}
+
 // handleAddCohost delegates to another user by handle - host only.
 func (s *server) handleAddCohost(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userIDFrom(r.Context())

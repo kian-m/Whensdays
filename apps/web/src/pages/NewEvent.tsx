@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Event, fmtMinutes, getJSON, gridSlots, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
+import { Event, PublicPage, fmtMinutes, getJSON, gridSlots, hostTimezone, sendJSON, toDatetimeLocal, useApi } from "../lib";
 import { MonthPicker } from "../ui";
 import { DEV_AUTH } from "../App";
 import { EVENTS, analytics } from "../analytics";
@@ -66,8 +66,9 @@ export function NewEvent() {
 
   useEffect(() => {
     if (!groupId) return;
-    getJSON<{ name: string; emoji: string }>(api, `/api/groups/${groupId}/preview`)
-      .then((g) => setGroupName(`${g.emoji} ${g.name}`.trim()))
+    // The public entity page doubles as the cheap name+icon lookup.
+    getJSON<PublicPage>(api, `/api/public/groups/${groupId}`)
+      .then((g) => setGroupName(`${g.entity.emoji} ${g.entity.name}`.trim()))
       .catch(() => { /* stale link - no context line */ });
   }, [api, groupId]);
 

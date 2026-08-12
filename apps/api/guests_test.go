@@ -83,6 +83,63 @@ func TestRsvpTokenRoundTrip(t *testing.T) {
 	}
 }
 
+// The group-invite token is the ONLY thing standing between a shared link and
+// membership, so: it round-trips, it's namespaced, it's key-bound, and a
+// version bump (the per-group "regenerate invite link") invalidates it.
+func TestGroupInviteTokenRoundTrip(t *testing.T) {
+	g := guestSigner{key: []byte("test-key")}
+	const gid = "11111111-2222-3333-4444-555555555555"
+	tok := g.signGroupInvite(gid, 1)
+
+	got, ver, ok := g.verifyGroupInvite(tok)
+	if !ok || got != gid || ver != 1 {
+		t.Fatalf("verifyGroupInvite = %q,%d,%v", got, ver, ok)
+	}
+	// Verification returns the SIGNED version; the caller compares it with the
+	// group's current one, so a bump can't be forged into a match.
+	if _, v2, _ := g.verifyGroupInvite(g.signGroupInvite(gid, 2)); v2 == ver {
+		t.Fatal("a bumped version must not verify as the old one")
+	}
+
+	bad := []struct {
+		name  string
+		token string
+	}{
+		{"tampered", tok + "x"},
+		{"wrong key", (guestSigner{key: []byte("other")}).signGroupInvite(gid, 1)},
+		{"guest bearer replayed", g.sign("guest_abc")},
+		{"mute token replayed", g.signMute("user_2abc", gid)},
+		{"rsvp token replayed", g.signRsvp("user_2abc", gid)},
+		{"feed token replayed", g.signFeed("user_2abc")},
+		{"empty", ""},
+		{"malformed", "not-a-token"},
+		{"version zero", hmacSeal([]byte("test-key"), "group|"+gid+"|0")},
+		{"version not a number", hmacSeal([]byte("test-key"), "group|"+gid+"|abc")},
+		{"empty group", hmacSeal([]byte("test-key"), "group||1")},
+		{"wrong namespace", hmacSeal([]byte("test-key"), "grouP|"+gid+"|1")},
+	}
+	for _, c := range bad {
+		if _, _, ok := g.verifyGroupInvite(c.token); ok {
+			t.Errorf("%s: token should NOT verify", c.name)
+		}
+	}
+	// Cross-group replay: a valid token for group A must not open group B. The
+	// handler compares the decoded id with the path id.
+	if id, _, _ := g.verifyGroupInvite(tok); id == "99999999-2222-3333-4444-555555555555" {
+		t.Fatal("token id must stay bound to the group it was signed for")
+	}
+	// A group-invite token must not be replayable as any OTHER capability.
+	if _, ok := g.verify(tok); ok {
+		t.Error("group invite accepted as a guest bearer")
+	}
+	if _, _, ok := g.verifyMute(tok); ok {
+		t.Error("group invite accepted as a mute token")
+	}
+	if _, _, ok := g.verifyRsvp(tok); ok {
+		t.Error("group invite accepted as an rsvp token")
+	}
+}
+
 func TestNotifyPayload(t *testing.T) {
 	p := notify.Payload("a@x.com", []string{"b@y.com"}, "Sub", "<b>hi</b>")
 	if p["from"] != "a@x.com" || p["subject"] != "Sub" {
