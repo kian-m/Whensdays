@@ -217,6 +217,10 @@ func main() {
 	// One-tap RSVP from email (UNauthenticated - signed token; see engage.go)
 	// and the host's nudge-non-responders lever.
 	mux.Handle("GET /api/events/{id}/rsvp-link", readLimit(http.HandlerFunc(s.handleEmailRsvp)))
+	// Unfollow-from-email (V3 follow digest, UNauthenticated - signed token;
+	// see followdigest.go). Same script-free confirmation page pattern as the
+	// event mute unsubscribe above.
+	mux.Handle("GET /api/follows/unsubscribe", readLimit(http.HandlerFunc(s.handleFollowUnsubscribe)))
 	mux.Handle("POST /api/events/{id}/draft", auth(http.HandlerFunc(s.handleSetDraft)))
 	mux.Handle("POST /api/events/{id}/nudge", auth(http.HandlerFunc(s.handleNudge)))
 	// Public on purpose: the event id IS the invite capability (same fields the

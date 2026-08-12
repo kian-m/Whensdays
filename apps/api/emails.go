@@ -1,9 +1,9 @@
 package main
 
 import (
-	"os"
 	"fmt"
 	"html"
+	"os"
 	"strings"
 )
 
@@ -102,9 +102,19 @@ type emailBoardRow struct {
 
 // emailItem is one row of a digest list (e.g. "your events tomorrow"): a title
 // with its own links and (optionally) the event's cover/GIF as a thumbnail.
+// page/rsvpGoingURL/rsvpDeclinedURL are optional (the follow digest, V3, is
+// the only caller that sets them) - zero-valued for every other digest, so
+// the row renders exactly as before for reminders/activity.
 type emailItem struct {
 	title, when, url, muteURL, cover string
+	page                             string // optional page attribution ("via {group/host}")
+	rsvpGoingURL, rsvpDeclinedURL    string // optional one-tap RSVP links (rsvp| pattern)
 }
+
+// emailUnfollowLink is one "Following {Page} - unfollow" footer line - the
+// follow digest can carry several (one per distinct followed page in the
+// email), each with its own follow|<uid>|<kind>|<value> token.
+type emailUnfollowLink struct{ label, url string }
 
 // themeAccent maps an event theme to its accent gradient pair - mirrors the
 // .theme-* --accent tokens in styles.css (keep in sync). Empty theme → brand coral.
@@ -133,29 +143,30 @@ func themeAccent(theme string) (string, string) {
 // emailContent is the variable payload for one message; renderEmail turns it into
 // a full, client-safe HTML document.
 type emailContent struct {
-	preheader string         // hidden inbox-preview line
-	heading   string         // big title inside the card
-	lines     []string       // body paragraphs (plain text, escaped here)
-	meta      []emailMetaRow // optional When/Where facts
-	quote     string         // optional highlighted snippet (e.g. a comment)
-	ctaLabel  string         // button text
-	ctaURL    string         // button href (already UTM-tagged by the caller)
-	cta2Label string         // optional secondary button (ghost style)
-	cta2URL   string
-	moreLabel string // optional centered text link under the buttons
-	moreURL   string
-	logoURL   string      // hosted PNG logo (APP_ORIGIN/apple-touch-icon.png)
-	unsubURL  string      // optional one-click mute link for THIS recipient
-	coverURL  string      // optional event cover/GIF banner (https only - mail clients block data: URIs)
-	theme     string      // optional event theme - tints the header/CTA to match the event page
-	items     []emailItem // optional digest list (e.g. multiple events tomorrow)
-	hero      *emailHero        // optional giant stat tile
-	funnel    []emailFunnelStep // optional drop-off funnel with bars
-	funnelT   string            // funnel section title
-	tiers     []emailFunnelStep // optional second bar section (free-tier runway)
-	tiersT    string
-	board     []emailBoardRow   // optional leaderboard
-	boardT    string            // leaderboard section title
+	preheader     string         // hidden inbox-preview line
+	heading       string         // big title inside the card
+	lines         []string       // body paragraphs (plain text, escaped here)
+	meta          []emailMetaRow // optional When/Where facts
+	quote         string         // optional highlighted snippet (e.g. a comment)
+	ctaLabel      string         // button text
+	ctaURL        string         // button href (already UTM-tagged by the caller)
+	cta2Label     string         // optional secondary button (ghost style)
+	cta2URL       string
+	moreLabel     string // optional centered text link under the buttons
+	moreURL       string
+	logoURL       string            // hosted PNG logo (APP_ORIGIN/apple-touch-icon.png)
+	unsubURL      string            // optional one-click mute link for THIS recipient
+	coverURL      string            // optional event cover/GIF banner (https only - mail clients block data: URIs)
+	theme         string            // optional event theme - tints the header/CTA to match the event page
+	items         []emailItem       // optional digest list (e.g. multiple events tomorrow)
+	hero          *emailHero        // optional giant stat tile
+	funnel        []emailFunnelStep // optional drop-off funnel with bars
+	funnelT       string            // funnel section title
+	tiers         []emailFunnelStep // optional second bar section (free-tier runway)
+	tiersT        string
+	board         []emailBoardRow     // optional leaderboard
+	boardT        string              // leaderboard section title
+	unfollowLinks []emailUnfollowLink // optional per-page unfollow footer lines (follow digest)
 }
 
 func esc(s string) string { return html.EscapeString(s) }
@@ -242,8 +253,19 @@ func renderEmail(c emailContent) string {
 		if it.cover != "" {
 			thumb = fmt.Sprintf(`<td style="width:68px;vertical-align:top;padding:10px 0 10px 12px"><img src="%s" width="56" height="56" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;display:block"></td>`, esc(it.cover))
 		}
-		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:0 0 10px;background:%s;border:1px solid %s;border-radius:10px"><tr>%s<td style="padding:12px 16px"><span style="font-size:15px;font-weight:700;color:%s">%s</span><br><span style="font-size:13px;color:%s">%s</span><br><a href="%s" style="font-size:13px;color:%s;font-weight:600;text-decoration:none">View →</a>&nbsp;&nbsp;<a href="%s" style="font-size:12px;color:%s;text-decoration:underline">mute</a></td></tr></table>`,
-			emailBG, emailLine, thumb, emailInk, esc(it.title), emailMuted, esc(it.when), esc(it.url), accent, esc(it.muteURL), emailMuted)
+		// page attribution - only the follow digest sets this ("via {Page}").
+		page := ""
+		if it.page != "" {
+			page = fmt.Sprintf(`<br><span style="font-size:12px;color:%s">via %s</span>`, emailMuted, esc(it.page))
+		}
+		// one-tap RSVP links - only the follow digest sets these.
+		rsvp := ""
+		if it.rsvpGoingURL != "" && it.rsvpDeclinedURL != "" {
+			rsvp = fmt.Sprintf(`<a href="%s" style="font-size:13px;color:%s;font-weight:600;text-decoration:none">Going</a>&nbsp;&nbsp;<a href="%s" style="font-size:13px;color:%s;text-decoration:none">Can't go</a>&nbsp;&nbsp;`,
+				esc(it.rsvpGoingURL), accent, esc(it.rsvpDeclinedURL), emailMuted)
+		}
+		fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:0 0 10px;background:%s;border:1px solid %s;border-radius:10px"><tr>%s<td style="padding:12px 16px"><span style="font-size:15px;font-weight:700;color:%s">%s</span>%s<br><span style="font-size:13px;color:%s">%s</span><br>%s<a href="%s" style="font-size:13px;color:%s;font-weight:600;text-decoration:none">View →</a>&nbsp;&nbsp;<a href="%s" style="font-size:12px;color:%s;text-decoration:underline">mute</a></td></tr></table>`,
+			emailBG, emailLine, thumb, emailInk, esc(it.title), page, emailMuted, esc(it.when), rsvp, esc(it.url), accent, esc(it.muteURL), emailMuted)
 	}
 
 	if len(c.meta) > 0 {
@@ -278,6 +300,12 @@ func renderEmail(c emailContent) string {
 	unsub := ""
 	if c.unsubURL != "" {
 		unsub = fmt.Sprintf(`<br><a href="%s" style="color:%s;text-decoration:underline">Mute notifications for this event</a>`, esc(c.unsubURL), emailMuted)
+	}
+	// Follow digest (V3): one "Following {Page} - unfollow" line per distinct
+	// page represented in this email, each its own follow|<uid>|<kind>|<value>
+	// token (see followdigest.go).
+	for _, u := range c.unfollowLinks {
+		unsub += fmt.Sprintf(`<br><a href="%s" style="color:%s;text-decoration:underline">%s</a>`, esc(u.url), emailMuted, esc(u.label))
 	}
 	// CAN-SPAM: commercial email needs a physical postal address. Optional
 	// (EMAIL_POSTAL_ADDRESS env - a PO box works); renders nothing when unset.
