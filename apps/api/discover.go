@@ -104,8 +104,12 @@ func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
 	// reminder, recap, and quorum ("everyone voted") - sends immediately and
 	// never touches this queue.
 	activity := s.flushActivityDigests(r.Context())
-	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady, "activity": activity})
-	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady, "activity": activity})
+	// V3: the daily "new events from pages you follow" digest. A single global
+	// claim ('follow_digest', run_day) in cron_run_claims - see followdigest.go
+	// for why this differs from the per-event claims above.
+	followDigest := s.sendFollowDigest(r.Context())
+	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady, "activity": activity, "follow_digest": followDigest})
+	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady, "activity": activity, "follow_digest": followDigest})
 }
 
 // ---------------------- public discovery ----------------------

@@ -140,6 +140,40 @@ func TestGroupInviteTokenRoundTrip(t *testing.T) {
 	}
 }
 
+func TestFollowTokenRoundTrip(t *testing.T) {
+	g := guestSigner{key: []byte("test-key")}
+	tok := g.signFollow("user_2abc", "group", "11111111-2222-3333-4444-555555555555")
+	uid, kind, value, ok := g.verifyFollow(tok)
+	if !ok || uid != "user_2abc" || kind != "group" || value != "11111111-2222-3333-4444-555555555555" {
+		t.Fatalf("verifyFollow = %q,%q,%q,%v", uid, kind, value, ok)
+	}
+	if _, _, _, ok := g.verifyFollow(tok + "x"); ok {
+		t.Fatal("tampered follow token verified")
+	}
+	if _, _, _, ok := (guestSigner{key: []byte("other")}).verifyFollow(tok); ok {
+		t.Fatal("wrong-key follow token verified")
+	}
+	// Namespace isolation: no other capability's token should validate here,
+	// and a follow token should not validate as any other capability.
+	if _, _, _, ok := g.verifyFollow(g.signMute("user_2abc", "evt-123")); ok {
+		t.Fatal("mute token accepted as follow token")
+	}
+	if _, _, _, ok := g.verifyFollow(g.sign("guest_abc")); ok {
+		t.Fatal("guest token accepted as follow token")
+	}
+	if _, _, ok := g.verifyMute(tok); ok {
+		t.Error("follow token accepted as a mute token")
+	}
+	if _, _, ok := g.verifyRsvp(tok); ok {
+		t.Error("follow token accepted as an rsvp token")
+	}
+	// Host-kind follow round-trips too (value = a Clerk user id, not a UUID).
+	tok2 := g.signFollow("user_2abc", "host", "user_9xyz")
+	if _, kind2, value2, ok := g.verifyFollow(tok2); !ok || kind2 != "host" || value2 != "user_9xyz" {
+		t.Fatalf("verifyFollow (host) = %q,%q,%v", kind2, value2, ok)
+	}
+}
+
 func TestNotifyPayload(t *testing.T) {
 	p := notify.Payload("a@x.com", []string{"b@y.com"}, "Sub", "<b>hi</b>")
 	if p["from"] != "a@x.com" || p["subject"] != "Sub" {
@@ -274,6 +308,57 @@ func TestStreakLen(t *testing.T) {
 		if got := streakLen(c.months, c.cur); got != c.want {
 			t.Errorf("%s: streakLen = %d, want %d", c.name, got, c.want)
 		}
+	}
+}
+
+func TestGroupFollowedEvents(t *testing.T) {
+	ev1, ev2, ev3 := newUUID(), newUUID(), newUUID()
+	rows := []db.ListNewFollowedEventsRow{
+		{RecipientID: "u1", ID: ev1, Title: "Jam night"},
+		{RecipientID: "u2", ID: ev2, Title: "Open mic"},
+		{RecipientID: "u1", ID: ev3, Title: "Improv 101"}, // u1's second event
+	}
+	byUser, order := groupFollowedEvents(rows)
+	if len(order) != 2 || order[0] != "u1" || order[1] != "u2" {
+		t.Fatalf("order = %v, want [u1 u2] (first-seen)", order)
+	}
+	if len(byUser["u1"]) != 2 {
+		t.Fatalf("u1 events = %d, want 2", len(byUser["u1"]))
+	}
+	if len(byUser["u2"]) != 1 {
+		t.Fatalf("u2 events = %d, want 1", len(byUser["u2"]))
+	}
+	if byUser["u1"][0].Title != "Jam night" || byUser["u1"][1].Title != "Improv 101" {
+		t.Fatalf("u1 events out of order: %+v", byUser["u1"])
+	}
+}
+
+func TestFollowDigestSubject(t *testing.T) {
+	one := []db.ListNewFollowedEventsRow{{PageName: "UCB", Title: "Improv Jam"}}
+	if got := followDigestSubject(one); got != "UCB: Improv Jam" {
+		t.Errorf("single event subject = %q, want %q", got, "UCB: Improv Jam")
+	}
+	many := []db.ListNewFollowedEventsRow{
+		{PageName: "UCB", Title: "Improv Jam"},
+		{PageName: "WGIS", Title: "Open Mic"},
+	}
+	if got := followDigestSubject(many); got != "New from pages you follow" {
+		t.Errorf("multi-event subject = %q, want the generic subject", got)
+	}
+	if got := followDigestSubject(nil); got != "New from pages you follow" {
+		t.Errorf("empty subject = %q, want the generic subject", got)
+	}
+}
+
+func TestFollowKindValue(t *testing.T) {
+	gid := newUUID()
+	group := db.ListNewFollowedEventsRow{ViaGroup: true, GroupID: gid, HostID: "user_host"}
+	if kind, value := followKindValue(group); kind != "group" || value != uuidStr(gid) {
+		t.Errorf("group-matched row = %q,%q, want group,%q", kind, value, uuidStr(gid))
+	}
+	host := db.ListNewFollowedEventsRow{ViaGroup: false, HostID: "user_host"}
+	if kind, value := followKindValue(host); kind != "host" || value != "user_host" {
+		t.Errorf("host-matched row = %q,%q, want host,user_host", kind, value)
 	}
 }
 
