@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, ImportedEvent, TimeOption, Vote, WEEKDAYS, EVENT_THEMES, busyConflict, daysFromDate, dayLabel as dayCol, fmtDate, fmtDateTime, fmtMinutes, gridSlots, toDatetimeLocal, getJSON, guessCity, importedBusy, mapsUrl, appleMapsUrl, openGoogleMaps, isStandalone, nextMonths, sendJSON, timeAgo, useApi } from "../lib";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, FollowButton, GifPicker, HomescreenPrompt, Linkify, MonthPicker, Pill, TimeGrid, fileToPhoto, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, FollowButton, GifPicker, HomescreenPrompt, Linkify, MonthPicker, Pill, TimeGrid, TitlePoster, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH, GuestSignupButton } from "../App";
 import { Ic } from "../Icons";
@@ -82,7 +82,14 @@ export function EventPage() {
 
   return (
     <div key={e.id} className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
-      {celebrate && <div className="fx-locked" data-testid="locked-banner">Locked in</div>}
+      {celebrate && (
+        <div className="fx-locked" data-testid="locked-banner">
+          <div className="fx-locked-body">
+            <b>Locked in — {fmtDate(e.starts_at, e.timezone)}</b>
+            <span>Everyone going gets the details by email.</span>
+          </div>
+        </div>
+      )}
       {data2.event.status === "draft" && data2.can_manage && (
         <div className="card row between" data-testid="draft-banner">
           <span className="small"><strong>Draft</strong> - only you{data2.cohosts.length > 0 ? " and cohosts" : ""} can see this. Guests, emails, and reminders are paused.</span>
@@ -162,6 +169,13 @@ const DAYPART_HOUR: Record<string, number> = {
 
 const RECURRENCE_LABEL: Record<string, string> = {
   weekly: "weekly", biweekly: "every 2 weeks", monthly: "monthly", custom: "on picked dates",
+};
+
+// Theme picker swatch colors - mirrors the --accent values set per .theme-x
+// in styles.css. Keep in sync (same idiom as the Go themeAccent map).
+const THEME_SWATCH: Record<string, string> = {
+  party: "#e0559b", beach: "#f0993a", forest: "#3f9d6f",
+  night: "#8b83ff", neon: "#ff2d94", cozy: "#df8038",
 };
 
 // Sibling occurrences of a recurring event; the one being viewed is highlighted.
@@ -377,7 +391,7 @@ function GuestView({ data, reload, previewingAsGuest }: { data: EventDetail; rel
       ) : (
         <>
           <Rsvp eventId={e.id} current={myRsvp} currentAnon={!!me?.anonymous} reload={reload}
-            isGuest={isGuest} onSelect={setRsvpSel} />
+            isGuest={isGuest} onSelect={setRsvpSel} hostName={data.host_name} />
           {pollClosed(e) && (
             <div className="card" data-testid="poll-closed">
               <span className="muted small">This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
@@ -414,25 +428,33 @@ function WhosIn({ data }: { data: EventDetail }) {
   const pending = data.invites.filter((i) => !responded.has(i.user_id)).length;
   const total = data.attendees.length + pending;
   if (total < 2) return null; // nothing social to show yet
+  const pct = Math.max(3, Math.min(100, (going.length / total) * 100));
   return (
-    <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap", padding: "2px 4px" }} data-testid="whos-in">
-      {going.length > 0 && (
-        <div className="facepile" style={{ flex: "none" }}>
-          {going.slice(0, 5).map((a) => (
-            <span className="face" key={a.user_id}><Avatar url={a.avatar_url ?? ""} name={a.display_name ?? "?"} size={24} /></span>
-          ))}
-        </div>
-      )}
-      <span className="muted small" data-testid="whos-in-count">
-        <b>{going.length}</b> of {total} in
-        {going.length > 5 && <> · +{going.length - 5} more</>}
-        {data.event.capacity > 0 && <> · {Math.max(0, data.event.capacity - going.length)} of {data.event.capacity} spots left</>}
-      </span>
+    <div className="stack" style={{ gap: 6, padding: "2px 4px" }} data-testid="whos-in">
+      <div className="row between">
+        <span className="section-h" style={{ margin: 0 }}>Who&rsquo;s in</span>
+        <span className="stamp">{going.length} / {total}</span>
+      </div>
+      <div className="whosin-bar" aria-hidden><span style={{ width: `${pct}%` }} /></div>
+      <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        {going.length > 0 && (
+          <div className="facepile" style={{ flex: "none" }}>
+            {going.slice(0, 5).map((a) => (
+              <span className="face" key={a.user_id}><Avatar url={a.avatar_url ?? ""} name={a.display_name ?? "?"} size={24} /></span>
+            ))}
+          </div>
+        )}
+        <span className="muted small" data-testid="whos-in-count">
+          <b>{going.length}</b> of {total} in
+          {going.length > 5 && <> · +{going.length - 5} more</>}
+          {data.event.capacity > 0 && <> · {Math.max(0, data.event.capacity - going.length)} of {data.event.capacity} spots left</>}
+        </span>
+      </div>
     </div>
   );
 }
 
-function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect }: { eventId: string; current?: string; currentAnon?: boolean; reload: () => void; isGuest?: boolean; onSelect?: (r: string) => void }) {
+function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect, hostName }: { eventId: string; current?: string; currentAnon?: boolean; reload: () => void; isGuest?: boolean; onSelect?: (r: string) => void; hostName?: string }) {
   const api = useApi();
   // OPTIMISTIC: the tap flips the selection instantly - waiting on the POST
   // plus a full event refetch before showing the choice felt broken (Cloud Run
@@ -461,7 +483,7 @@ function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect }: { ev
       })
       .catch(() => { if (prev !== undefined) pick(prev); else setSel(undefined); });
   }
-  const opts: [string, string][] = [["going", "Going"], ["maybe", "Maybe"], ["declined", "Can't"]];
+  const opts: [string, string][] = [["going", "Going"], ["maybe", "Maybe"], ["declined", "Can't go"]];
   return (
     <div className="card stack">
       <h3>Are you in?</h3>
@@ -473,6 +495,7 @@ function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect }: { ev
           </button>
         ))}
       </div>
+      {hostName && <p className="rsvp-note">{hostName} gets a note when you answer.</p>}
       {showAnon ? (
         <label className="row muted small" style={{ gap: 6, cursor: "pointer" }}>
           <input type="checkbox" data-testid="rsvp-anon" checked={anon}
@@ -991,82 +1014,98 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
   }
 
   if (!editing) {
+    // Poster stamp line: venue/city if known, else nothing (there is no
+    // event-type field on the frontend Event model to fall back to - see
+    // the Phase 4/5 note in the House Lights doc).
+    const posterSub = e.location_mode === "host_place" && e.location_address
+      ? e.location_address
+      : e.city || undefined;
     return (
-      <div className="card stack">
-        {/* Cover slot: a real photo/GIF only. Photo-less events lead with the title. */}
-        {e.photo_url && <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />}
-        {/* Title left, status + Edit right on desktop; stacked on a phone (the
-            title gets the full width instead of being squeezed to a sliver). */}
-        <div className="card-header">
-          <div style={{ minWidth: 0 }}>
-            <h1><span data-testid="event-title">{e.title}</span></h1>
-            {data.host_name && (
-              <span className="row" style={{ gap: 6, marginTop: 4 }} data-testid="hosted-by">
-                <Avatar url={data.host_avatar || null} name={data.host_name} size={20} />
-                <span className="muted small">Hosted by <strong>{data.host_name}</strong></span>
-                {/* Follow the HOST (asymmetric - their listed events land in your
-                    feed). Hidden for the host themselves and for guests, who have
-                    no account to hang a follow on (same gate as "+ Add friend"). */}
-                {data.role !== "host" && !data.viewer_id.startsWith("guest_") && (
-                  <FollowButton kind="host" value={e.host_id} following={data.following_host}
-                    source="event_page" testid="follow-host" />
-                )}
-              </span>
-            )}
-          </div>
-          <span className="row card-actions" style={{ gap: 6, alignItems: "center" }}>
-            {e.status === "cancelled" ? <Pill kind="declined">Cancelled</Pill>
-              : e.status === "draft" ? <Pill kind="">Draft</Pill>
-              : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
-              : <Pill kind="scheduled">Confirmed</Pill>}
-            {canEdit && (
-              <button className="btn ghost sm" data-testid="edit-event-open" onClick={openEdit}>Edit</button>
-            )}
-          </span>
-        </div>
-        {e.description && <p style={{ overflowWrap: "anywhere" }}><Linkify text={e.description} /></p>}
-        {/* One date line, even for a series - the full date list lives in the
-            Repeats card (listing every date here twice read as clutter). */}
-        {(
-          <div className="muted small" style={{ display: "flex", gap: "0.35rem", alignItems: "flex-start" }}>
-            <span style={{ display: "flex", marginTop: "0.15rem" }}>{Ic.calendar(14)}</span>
-            <span>
-              {e.status === "polling"
-              ? (e.poll_deadline
-                ? (pollClosed(e) ? "Poll closed - time coming soon" : `Time being decided · poll closes ${fmtDateTime(e.poll_deadline, e.timezone)}`)
-                : "Time being decided")
-              : fmtDate(e.starts_at, e.timezone)}
-              {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
-              {e.status !== "polling" && e.ends_at ? ` – ${fmtDateTime(e.ends_at, e.timezone).split(", ").pop()}` : ""}
-            </span>
-          </div>
-        )}
-        <div className="muted small">
-          {e.location_mode === "virtual" ? (
-            <span className="row" style={{ gap: 8, alignItems: "center" }}>
-              <span style={{ display: "flex" }}>{Ic.link(14)}</span>
-              <a href={e.location_address} target="_blank" rel="noopener noreferrer" className="accent"
-                style={{ textDecoration: "underline", overflowWrap: "anywhere" }} data-testid="join-link">
-                Join online{(() => { try { return ` (${new URL(e.location_address).host})`; } catch { return ""; } })()}
-              </a>
-            </span>
-          ) : e.location_mode === "find_venue" ? (
-            <span style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
-              <span style={{ display: "flex" }}>{Ic.place(14)}</span>Location to be decided
-            </span>
-          ) : e.location_address ? (
-            <span className="stack" style={{ gap: 2 }}>
-              <span style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
-                <span style={{ display: "flex" }}>{Ic.place(14)}</span>{e.location_address}</span>
-                <span className="row" style={{ gap: 12 }}>
-                  <a href={mapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
-                    onClick={(ev) => openGoogleMaps(ev, e.location_address)}
-                    className="accent" data-testid="directions-link">Google Maps</a>
-                  <a href={appleMapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
-                    className="accent" data-testid="directions-apple">Apple Maps</a>
+      <div className="card event-hero">
+        {/* Cover slot: a real photo/GIF, or the TitlePoster playbill fallback
+            when there's none - never an emoji tile, never nothing. */}
+        {e.photo_url
+          ? <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />
+          : <TitlePoster title={e.title} sub={posterSub} scale="hero" />}
+        <div className="hero-body stack">
+          {/* Title left, Edit right on desktop; stacked on a phone (the title
+              gets the full width instead of being squeezed to a sliver). */}
+          <div className="card-header">
+            <div style={{ minWidth: 0 }}>
+              <h1><span data-testid="event-title">{e.title}</span></h1>
+              {data.host_name && (
+                <span className="row" style={{ gap: 6, marginTop: 4 }} data-testid="hosted-by">
+                  <Avatar url={data.host_avatar || null} name={data.host_name} size={20} />
+                  <span className="muted small">Hosted by <strong>{data.host_name}</strong></span>
+                  {/* Follow the HOST (asymmetric - their listed events land in your
+                      feed). Hidden for the host themselves and for guests, who have
+                      no account to hang a follow on (same gate as "+ Add friend"). */}
+                  {data.role !== "host" && !data.viewer_id.startsWith("guest_") && (
+                    <FollowButton kind="host" value={e.host_id} following={data.following_host}
+                      source="event_page" testid="follow-host" />
+                  )}
                 </span>
+              )}
+            </div>
+            {canEdit && (
+              <span className="row card-actions" style={{ gap: 6, alignItems: "center" }}>
+                <button className="btn ghost sm" data-testid="edit-event-open" onClick={openEdit}>Edit</button>
               </span>
-            ) : "Address to come"}
+            )}
+          </div>
+          {/* Status pill sits under the title/host row, not beside it. */}
+          <div>
+            {e.status === "cancelled" ? <Pill kind="cancelled">Cancelled</Pill>
+              : e.status === "draft" ? <Pill kind="draft">Draft</Pill>
+              : e.status === "polling" ? <Pill kind="deciding">Deciding</Pill>
+              : <Pill kind="locked">Locked in</Pill>}
+          </div>
+          {e.description && <p style={{ overflowWrap: "anywhere" }}><Linkify text={e.description} /></p>}
+          {/* One date line, even for a series - the full date list lives in the
+              Repeats card (listing every date here twice read as clutter). */}
+          <div className="meta">
+            {e.status === "polling" ? Ic.clock() : Ic.calendar()}
+            <div>
+              <span className="stamp time">
+                {e.status === "polling"
+                  ? (pollClosed(e) ? "Poll closed" : "Time being decided")
+                  : fmtDate(e.starts_at, e.timezone)}
+                {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
+                {e.status !== "polling" && e.ends_at ? ` – ${fmtDateTime(e.ends_at, e.timezone).split(", ").pop()}` : ""}
+              </span>
+              {e.status === "polling" && (
+                pollClosed(e)
+                  ? <div className="sub">Time coming soon</div>
+                  : e.poll_deadline
+                    ? <div className="sub">Poll closes {fmtDateTime(e.poll_deadline, e.timezone)}</div>
+                    : null
+              )}
+            </div>
+          </div>
+          <div className="meta">
+            {e.location_mode === "virtual" ? Ic.link() : Ic.place()}
+            <div>
+              {e.location_mode === "virtual" ? (
+                <a href={e.location_address} target="_blank" rel="noopener noreferrer" className="accent"
+                  style={{ textDecoration: "underline", overflowWrap: "anywhere" }} data-testid="join-link">
+                  Join online{(() => { try { return ` (${new URL(e.location_address).host})`; } catch { return ""; } })()}
+                </a>
+              ) : e.location_mode === "find_venue" ? (
+                "Location to be decided"
+              ) : e.location_address ? (
+                <>
+                  <span style={{ overflowWrap: "anywhere" }}>{e.location_address}</span>
+                  <div className="sub row" style={{ gap: 12 }}>
+                    <a href={mapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
+                      onClick={(ev) => openGoogleMaps(ev, e.location_address)}
+                      className="accent" data-testid="directions-link">Google Maps</a>
+                    <a href={appleMapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
+                      className="accent" data-testid="directions-apple">Apple Maps</a>
+                  </div>
+                </>
+              ) : "Address to come"}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1217,7 +1256,11 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
             {EVENT_THEMES.map((t) => (
               <button key={t.value} type="button" className={`chip sm ${theme === t.value ? "on" : ""}`}
                 data-testid={`theme-${t.value || "none"}`}
-                onClick={() => { setTheme(t.value); onPreviewTheme(t.value || null); }}>{t.label}</button>
+                onClick={() => { setTheme(t.value); onPreviewTheme(t.value || null); }}>
+                {/* swatch + name, no emoji - the theme itself is the swatch color */}
+                {t.value && <span className="theme-swatch" style={{ background: THEME_SWATCH[t.value] }} aria-hidden />}
+                {t.label}
+              </button>
             ))}
           </div>
         </div>
@@ -1351,8 +1394,8 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
   // (no `open` prop) keeps the user's toggle across background refetches.
   return (
     <details className="card stack" data-testid="comments">
-      <summary style={{ cursor: "pointer", fontWeight: 600 }} data-testid="comments-summary">
-        {n > 0 ? `${n} comment${n === 1 ? "" : "s"}` : "Add a comment"}
+      <summary className="section-h" style={{ cursor: "pointer", margin: 0 }} data-testid="comments-summary">
+        {n > 0 ? `Comments · ${n}` : "Comments"}
       </summary>
       <div className="stack" style={{ marginTop: 10 }}>
       {data.comments.length === 0 && <p className="muted small">Nothing here yet - start the thread</p>}
@@ -1547,8 +1590,16 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
       .forEach((v) => m.set(v.value, (m.get(v.value) ?? 0) + 1));
     return m;
   };
-  const heatStyle = (n: number, top: number): React.CSSProperties =>
-    n === 0 ? {} : { background: `rgba(238, 108, 77, ${0.18 + 0.82 * (n / top)})`, borderColor: "transparent", color: "#fff" };
+  // Results heatmap intensity: three discrete teal steps (.c1/.c2/.c3 in
+  // styles.css), not a continuous gradient - "how full is this cell" reads
+  // as tiers. Rendering only - togglePick/canPick/instCell below are
+  // untouched.
+  const heatClass = (n: number, top: number): string => {
+    if (n === 0) return "";
+    const frac = n / Math.max(1, top);
+    return frac >= 0.67 ? "c3" : frac >= 0.34 ? "c2" : "c1";
+  };
+  const bestClass = (n: number, top: number): string => (n > 0 && n === top ? "best" : "");
 
   // general scope: month ranking + weekday×daypart heatmap.
   const monthCounts = countBy("month");
@@ -1682,26 +1733,30 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
         <div>
           <div className="section-h" style={{ margin: "0 0 4px" }}>Best times this week</div>
           {dayslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
-            <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-week-heat">
-              <div />
-              {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
-              {weekDates.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
-                <Fragment key={d.value}>
-                  <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
-                  {DAYPARTS.map((dp) => {
-                    const key = `${d.value}:${dp.value}`;
-                    const n = dayslotCounts.get(key) ?? 0;
-                    return (
-                      <button key={dp.value} type="button" className="cell" data-testid={`grw-pick-${d.value}-${dp.value}`}
-                        onClick={() => togglePick(key, `${d.value}T${String(DAYPART_HOUR[dp.value]).padStart(2, "0")}:00`)}
-                        style={{ ...heatStyle(n, dayslotTop), ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
-                        {n > 0 ? n : ""}
-                      </button>
-                    );
-                  })}
-                </Fragment>
-              ))}
-            </div>
+            <>
+              <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-week-heat">
+                <div />
+                {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
+                {weekDates.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
+                  <Fragment key={d.value}>
+                    <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
+                    {DAYPARTS.map((dp) => {
+                      const key = `${d.value}:${dp.value}`;
+                      const n = dayslotCounts.get(key) ?? 0;
+                      return (
+                        <button key={dp.value} type="button"
+                          className={`cell ${heatClass(n, dayslotTop)} ${bestClass(n, dayslotTop)}`} data-testid={`grw-pick-${d.value}-${dp.value}`}
+                          onClick={() => togglePick(key, `${d.value}T${String(DAYPART_HOUR[dp.value]).padStart(2, "0")}:00`)}
+                          style={{ ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.72rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
+                          {n > 0 ? n : "·"}
+                        </button>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </div>
+              <p className="grid-legend">Darker = more people free</p>
+            </>
           )}
         </div>
       )}
@@ -1710,11 +1765,14 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
         <div>
           <div className="section-h" style={{ margin: "0 0 4px" }}>Best times{canPick ? " · tap a cell to lock it in" : ""}</div>
           {timeslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
-            <TimeGrid days={(data.poll_days || []).map(dayCol)} slots={gridSlots(grid.start_min, grid.end_min, grid.slot_min)}
-              free={new Set()} counts={timeslotCounts} top={timeslotTop} fmtSlot={fmtMinutes}
-              pick={new Set([...picked.keys()])} idPrefix="grt" testid="gr-time-heat"
-              onCellClick={canPick ? (day, m) => togglePick(`${day}:${m}`,
-                `${day}T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`) : undefined} />
+            <>
+              <TimeGrid days={(data.poll_days || []).map(dayCol)} slots={gridSlots(grid.start_min, grid.end_min, grid.slot_min)}
+                free={new Set()} counts={timeslotCounts} top={timeslotTop} fmtSlot={fmtMinutes}
+                pick={new Set([...picked.keys()])} idPrefix="grt" testid="gr-time-heat"
+                onCellClick={canPick ? (day, m) => togglePick(`${day}:${m}`,
+                  `${day}T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`) : undefined} />
+              <p className="grid-legend">Darker = more people free</p>
+            </>
           )}
         </div>
       )}
@@ -1733,26 +1791,30 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
               ))}
             </div>
           ) : dayslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
-            <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-month-heat">
-              <div />
-              {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
-              {monthDates28.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
-                <Fragment key={d.value}>
-                  <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
-                  {DAYPARTS.map((dp) => {
-                    const key = `${d.value}:${dp.value}`;
-                    const n = dayslotCounts.get(key) ?? 0;
-                    return (
-                      <button key={dp.value} type="button" className="cell" data-testid={`grm-pick-${d.value}-${dp.value}`}
-                        onClick={() => togglePick(key, `${d.value}T${String(DAYPART_HOUR[dp.value]).padStart(2, "0")}:00`)}
-                        style={{ ...heatStyle(n, dayslotTop), ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
-                        {n > 0 ? n : ""}
-                      </button>
-                    );
-                  })}
-                </Fragment>
-              ))}
-            </div>
+            <>
+              <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-month-heat">
+                <div />
+                {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
+                {monthDates28.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
+                  <Fragment key={d.value}>
+                    <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
+                    {DAYPARTS.map((dp) => {
+                      const key = `${d.value}:${dp.value}`;
+                      const n = dayslotCounts.get(key) ?? 0;
+                      return (
+                        <button key={dp.value} type="button"
+                          className={`cell ${heatClass(n, dayslotTop)} ${bestClass(n, dayslotTop)}`} data-testid={`grm-pick-${d.value}-${dp.value}`}
+                          onClick={() => togglePick(key, `${d.value}T${String(DAYPART_HOUR[dp.value]).padStart(2, "0")}:00`)}
+                          style={{ ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.72rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
+                          {n > 0 ? n : "·"}
+                        </button>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </div>
+              <p className="grid-legend">Darker = more people free</p>
+            </>
           )}
         </div>
       )}
@@ -1798,16 +1860,18 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
                     const open = instCell?.wd === wd && instCell?.dp === dp.value;
                     const hasPicks = cellHasInstPicks(wd, dp.value);
                     return (
-                      <button key={dp.value} type="button" className="cell" data-testid={`grg-pick-${wd}-${dp.value}`}
+                      <button key={dp.value} type="button"
+                        className={`cell ${heatClass(n, slotTop)} ${bestClass(n, slotTop)}`} data-testid={`grg-pick-${wd}-${dp.value}`}
                         onClick={() => { if (canPick) setInstCell(open ? null : { wd, dp: dp.value }); }}
-                        style={{ ...heatStyle(n, slotTop), ...pickedStyle(key), ...(hasPicks || open ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative", zIndex: 2, opacity: open ? 1 : undefined } : {}), display: "grid", placeItems: "center", fontSize: "0.8rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
-                        {n > 0 ? n : ""}
+                        style={{ ...pickedStyle(key), ...(hasPicks || open ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative", zIndex: 2, opacity: open ? 1 : undefined } : {}), display: "grid", placeItems: "center", fontSize: "0.72rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
+                        {n > 0 ? n : "·"}
                       </button>
                     );
                   })}
                 </Fragment>
               ))}
             </div>
+            {slotCounts.size > 0 && <p className="grid-legend">Darker = more people free</p>}
             {instCell && (() => {
               const dates = weekdayInstances(instCell.wd);
               const hour = String(DAYPART_HOUR[instCell.dp]).padStart(2, "0");

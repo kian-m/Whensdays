@@ -416,13 +416,37 @@ textarea.input { resize: vertical; min-height: 64px; }
 .label-stack > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .label-stack-sub { font-size: 0.68rem; font-weight: 600; color: var(--muted); }
 /* Availability cells are tri-state:
-   neutral (unselected) · green .on (free) · red .busy-mark (busy). */
+   neutral (unselected) · green .on (free) · red .busy-mark (busy).
+   Cells that show a count (poll-results heatmaps) always render it in mono,
+   tabular-nums - the stamp voice for numbers, never the default body font. */
 .cell {
+  position: relative;
   min-height: 44px; min-width: 44px; border: 1px solid var(--line); border-radius: 6px;
   background: var(--surface-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+  font-family: var(--font-data); font-variant-numeric: tabular-nums;
 }
 .cell.on { background: var(--go); border-color: var(--go); }
 .cell.busy-mark { background: var(--no); border-color: var(--no); }
+
+/* Results heatmaps (GeneralResults' week/month/general grids + TimeGrid's
+   counts-branch, 'dates' scope): three discrete teal alpha steps rather than
+   a continuous gradient, so "how full is this cell" reads as tiers, not a
+   slider. Rendering only - the interaction logic that drives which class a
+   cell gets (togglePick, canPick, onCellClick) lives in EventPage.tsx/ui.tsx
+   and is untouched here. */
+.cell.c1 { background: color-mix(in srgb, var(--go) 16%, transparent); color: var(--ink); }
+.cell.c2 { background: color-mix(in srgb, var(--go) 34%, transparent); color: var(--ink); }
+.cell.c3 { background: color-mix(in srgb, var(--go) 55%, transparent); color: var(--cream); }
+/* the best cell(s) - coral border + a tiny BEST tag, same idea as the comp. */
+.cell.best { border: 2px solid var(--accent); }
+.cell.best::after {
+  content: "BEST"; position: absolute; top: -7px; right: -2px;
+  font-family: var(--font-data); font-size: 0.5rem; letter-spacing: 0.08em; font-weight: 700;
+  background: var(--accent); color: var(--plum); padding: 1px 4px; border-radius: 3px;
+}
+/* mono legend line under a results heatmap. */
+.grid-legend { margin-top: 0.3rem; color: var(--muted); font-size: 0.72rem;
+  font-family: var(--font-data); letter-spacing: 0.08em; text-transform: uppercase; }
 /* MonthPicker is a dense 7-column day-of-month grid, not a tap-target-
    sensitive availability grid. It sits TWO cards deep (page > form > picker),
    so its real interior is only ~220px on a 375px phone - a fixed 40px+ cell
@@ -459,8 +483,64 @@ textarea.input { resize: vertical; min-height: 64px; }
   border-radius: var(--r); align-self: center; display: block; margin: 0 auto;
   box-shadow: var(--shadow);
 }
-/* Photo-less events have NO cover slot - the title leads, with a small
-   inline type emoji (the big emoji tile read as filler). */
+
+/* Hero card: the ONLY card that gets the candy stripe, along its top edge.
+   Padding lives on .hero-body instead of the card itself so the cover photo
+   or TitlePoster (photo-less fallback) can bleed edge-to-edge underneath the
+   stripe, exactly like the comp's phone mock. */
+.card.event-hero { position: relative; overflow: hidden; padding: 0; }
+.card.event-hero::before { content: ""; display: block; height: 3px; background: var(--stripe); }
+.card.event-hero > .event-cover {
+  width: 100%; max-width: 100%; max-height: 300px; object-fit: cover;
+  border-radius: 0; box-shadow: none; margin: 0; display: block;
+}
+.hero-body { padding: 1.1rem 1.2rem 1.2rem; }
+
+/* TitlePoster (hero scale): the no-photo cover fallback - a typographic
+   playbill, not an emoji tile. Plum + grain, the title in Fraunces at
+   poster scale, an amber .stamp line underneath, a faint radial cream light
+   from the top edge (see TitlePoster in ui.tsx). */
+.poster {
+  background: var(--plum) var(--grain);
+  padding: 1.9rem 1.2rem 1.4rem;
+  position: relative;
+  overflow: hidden;
+}
+.poster::after {
+  content: "";
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(90% 70% at 50% 0%, rgba(248, 227, 201, 0.10), transparent 65%);
+}
+.poster-title {
+  position: relative;
+  font-family: var(--font-display); font-weight: 900; font-size: 2.6rem;
+  line-height: 0.95; letter-spacing: -0.02em; color: var(--cream);
+  text-wrap: balance;
+}
+.poster-sub { position: relative; margin-top: 0.7rem; color: var(--time); }
+
+/* TitlePoster (thumb scale, 56px default): the same fallback shrunk to a
+   tile - first letter only, plum + grain, a 3px stripe along the bottom
+   edge instead of the stamp line. Reuses the photo-thumb footprint (.thumb)
+   so it drops into the same slot as a real cover image. */
+.thumb.poster-thumb {
+  background: var(--plum) var(--grain);
+  display: grid; place-items: center; position: relative; overflow: hidden;
+  box-shadow: none; color: var(--cream);
+  font-family: var(--font-display); font-weight: 900;
+}
+.thumb.poster-thumb::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--stripe);
+}
+
+/* Hero meta rows (when/where): icon + a stamp line (amber for anything
+   time-related) + an optional muted .sub line, hairline-divided. */
+.meta { display: flex; gap: 0.65rem; align-items: flex-start; padding: 0.45rem 0; border-top: 1px solid var(--line); }
+.meta:first-of-type { border-top: 0; }
+.meta svg { flex: none; width: 17px; height: 17px; margin-top: 2px; color: var(--muted); }
+.meta > div { min-width: 0; }
+.meta .sub { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
 /* Invite card: the link is the button - tap to copy. */
 .share-copy {
   font: inherit; color: var(--accent); font-weight: 700;
@@ -508,72 +588,64 @@ textarea.input { resize: vertical; min-height: 64px; }
 .gif-grid button { border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--r-sm); padding: 0; cursor: pointer; overflow: hidden; }
 .gif-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-/* Event page themes change the WHOLE page vibe, two ways at once:
-   1. a bold full-viewport backdrop wash (::before, fixed, over the stage), and
-   2. design-token overrides on the .event-theme wrapper so every button, chip,
-      selected state and accent inside the event page adopts the theme colour.
-   Pure CSS, one block per preset - extend by adding a .theme-x pair. These
-   washes sit on a non-interactive backdrop layer, the one gradient exception
-   besides --stripe and the skeleton shimmer. Full "quiet wash" restyle per
-   the House Lights comp lands in a later phase. */
+/* Event page themes are a QUIET wash, two ways at once:
+   1. one static radial tint of the theme's hue over the stage (::before,
+      fixed, non-interactive - the wash color rides var(--accent), set per
+      theme below, so this single rule covers every preset), and
+   2. the --accent override itself, so every button/chip/selected-state/
+      accent inside the event page adopts the theme colour.
+   Keys are unchanged (DB-stored eventThemes, gifs.go - §1.12). NO motion, NO
+   particle layers: an earlier version had a slow-flowing gradient (neon/
+   cozy) and simulated stars (night) - both proved unreliable on iOS Low
+   Power Mode (animation pauses/degrades, leaving frozen-looking artifacts)
+   and read as "busy" next to the rest of the calm, flat component language.
+   A quiet wash is quiet in both senses. */
 .event-theme { position: relative; }
 .event-theme::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120% 70% at 50% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 72%);
   transition: background 0.4s ease;
 }
 .theme-party  { --accent: #e0559b; }
-.theme-party::before  { background: linear-gradient(160deg, rgba(224,85,155,0.42), rgba(157,107,212,0.34) 55%, transparent 82%), radial-gradient(60% 45% at 82% 92%, rgba(255,193,90,0.22), transparent 70%); }
 .theme-beach  { --accent: #f0993a; }
-.theme-beach::before  { background: linear-gradient(180deg, rgba(61,157,177,0.42), rgba(120,200,210,0.18) 42%, transparent 68%), radial-gradient(85% 42% at 50% 100%, rgba(233,191,114,0.42), transparent 78%); }
 .theme-forest { --accent: #3f9d6f; }
-.theme-forest::before { background: linear-gradient(170deg, rgba(28,74,50,0.44), transparent 58%), radial-gradient(72% 55% at 14% 92%, rgba(63,157,111,0.42), transparent 72%); }
 .theme-night  { --accent: #8b83ff; }
-.theme-night::before  { background: linear-gradient(180deg, rgba(8,10,26,0.74), rgba(8,10,26,0.34) 68%), radial-gradient(2px 2px at 20% 18%, #fff, transparent 100%), radial-gradient(2px 2px at 64% 9%, rgba(255,255,255,0.85), transparent 100%), radial-gradient(2px 2px at 83% 26%, rgba(255,255,255,0.7), transparent 100%), radial-gradient(1.5px 1.5px at 42% 33%, #fff, transparent 100%), radial-gradient(1px 1px at 30% 62%, rgba(255,255,255,0.6), transparent 100%); }
 .theme-neon   { --accent: #ff2d94; }
-.theme-neon::before   {
-  background: linear-gradient(130deg, rgba(255,0,128,0.42), rgba(18,0,28,0.3) 34%, rgba(0,229,255,0.36) 64%, rgba(155,92,255,0.42));
-  background-size: 220% 220%;
-  animation: theme-flow 13s ease-in-out infinite alternate;
-}
 .theme-cozy   { --accent: #df8038; }
-.theme-cozy::before   {
-  background: linear-gradient(160deg, rgba(120,60,30,0.5), rgba(233,161,59,0.32) 38%, rgba(140,60,25,0.4) 66%, rgba(233,120,40,0.5));
-  background-size: 220% 220%;
-  animation: theme-flow 16s ease-in-out infinite alternate;
-}
 
-@keyframes theme-flow { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+/* theme picker chip: a color swatch + the name, no emoji (mirrors the hues
+   set on .theme-x above - keep in sync with THEME_SWATCH in EventPage.tsx). */
+.theme-swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
 
-/* Theme washes are static or slow-flowing gradients only - NO particle layers
-   or JS-driven moments: they proved unreliable on iOS (Low Power Mode pauses
-   or degrades animation), and a paused gradient is still just a gradient. */
-
-/* COZY keeps a static hearth glow at the foot of the page (no flicker loop -
-   a paused flicker is just a glow, but why leave a loop around to pause). */
-.event-theme.theme-cozy::after {
-  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(90% 55% at 50% 112%, rgba(233,120,40,0.55), transparent 70%);
-}
-
-/* who's-in social-pressure bar (invite page): committed vs invited.
-   Full respec (stripe fill) lands with the EventPage phase. */
-.whosin-bar { height: 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
-.whosin-bar span { display: block; height: 100%; border-radius: 999px; min-width: 4px;
-  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #ffb46b 30%));
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
+/* who's-in social-pressure bar: going vs invited, fill = the candy stripe
+   (radius from tokens, not a pill - §1.8). */
+.whosin-bar { height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.whosin-bar span { display: block; height: 100%; border-radius: 3px; min-width: 3px;
+  background: var(--stripe);
   transition: width 0.5s cubic-bezier(0.2, 0.9, 0.3, 1); }
 
-/* the lock-moment banner. Fully visible with NO entrance animation on purpose
-   (a paused CSS animation with fill:both would leave it invisible); the
-   celebration timeout unmounts it. Full stripe/teal respec + confetti removal
-   lands with the EventPage phase. */
+/* RSVP card's note line under the chips ("{Host} gets a note when you answer"). */
+.rsvp-note { color: var(--muted); font-size: 0.83rem; margin-top: 0.1rem; }
+
+/* the lock-moment banner: a one-shot celebration when polling -> scheduled.
+   Fully visible with NO entrance animation on purpose (a paused CSS
+   animation with fill:both would leave it invisible on iOS Low Power Mode -
+   see CLAUDE.md); the celebration timeout unmounts it. The stripe top rule
+   IS the celebration (no confetti) - a teal hairline + soft teal wash, no
+   gradient background (gradients are reserved for --stripe/skeleton/theme
+   washes - §1.2). */
 .fx-locked {
-  position: fixed; top: 28%; left: 50%; transform: translateX(-50%); z-index: 4; pointer-events: none;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 86%, #ffb46b 14%), color-mix(in srgb, var(--accent) 84%, #b03a7a 16%));
-  color: #fff; font-weight: 800; font-size: 1.15rem; letter-spacing: -0.01em;
-  padding: 0.85rem 1.7rem; border-radius: var(--r-sm);
-  box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 55%, transparent);
+  position: fixed; top: 16%; left: 50%; transform: translateX(-50%); z-index: 40;
+  pointer-events: none; width: min(90vw, 380px);
+  background: var(--surface); border: 1px solid var(--go); border-radius: var(--r);
+  overflow: hidden; box-shadow: var(--shadow);
 }
+.fx-locked::before { content: ""; display: block; height: 3px; background: var(--stripe); }
+.fx-locked-body { padding: 0.9rem 1.1rem; background: color-mix(in srgb, var(--go) 9%, transparent); }
+.fx-locked-body b {
+  display: block; font-family: var(--font-display); font-weight: 900; font-size: 1.15rem; letter-spacing: -0.01em;
+}
+.fx-locked-body span { color: var(--muted); font-size: 0.86rem; }
 
 /* used by .pill.polling's live dot */
 @keyframes fx-twinkle {
@@ -581,26 +653,19 @@ textarea.input { resize: vertical; min-height: 64px; }
   50%      { opacity: 1; transform: scale(1.3); }
 }
 
-/* Themed event TILES (Home/Discover/Groups): the same palette as the event-page
-   themes, scoped to the card so the WHOLE tile is unmistakably themed - a bold
-   diagonal wash, an accent-glow border, and the theme accent on every child
-   (the theme-x class also sets --accent above). Tiles carry .theme-tile
-   (never .event-theme), so the full-page ::before backdrop above never
-   applies here. */
-.theme-tile {
-  border: 1px solid var(--accent);
-  border-left-width: 5px !important;
-  box-shadow: 0 8px 26px -6px var(--accent);
-  position: relative;
-  overflow: hidden;
+/* Themed event TILES (Home/Discover/Groups): quiet like the page wash - a
+   3px accent-hued edge along the bottom (the same "stripe moment" language
+   as TitlePoster/EventThumb, just tinted per theme instead of the full
+   rainbow), no diagonal wash, no glow border. The theme-x class (shared
+   with .event-theme above) sets --accent, so this one rule covers every
+   preset. Tiles carry .theme-tile (never .event-theme), so the full-page
+   ::before backdrop above never applies here. */
+.theme-tile { position: relative; overflow: hidden; }
+.theme-tile::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--accent);
 }
 .theme-tile .title { color: var(--ink); font-weight: 700; }
-.theme-tile.theme-party  { background: linear-gradient(135deg, rgba(224,85,155,0.34), rgba(157,107,212,0.16) 62%), var(--surface); }
-.theme-tile.theme-beach  { background: linear-gradient(135deg, rgba(240,153,58,0.34), rgba(120,200,210,0.18) 62%), var(--surface); }
-.theme-tile.theme-forest { background: linear-gradient(135deg, rgba(63,157,111,0.36), rgba(28,74,50,0.20) 62%), var(--surface); }
-.theme-tile.theme-night  { background: linear-gradient(135deg, rgba(139,131,255,0.34), rgba(8,10,26,0.34) 62%), var(--surface); }
-.theme-tile.theme-neon   { background: linear-gradient(135deg, rgba(255,45,148,0.36), rgba(0,229,255,0.20) 62%), var(--surface); box-shadow: 0 0 22px -4px #ff2d94; }
-.theme-tile.theme-cozy   { background: linear-gradient(135deg, rgba(223,128,56,0.34), rgba(120,60,30,0.18) 62%), var(--surface); }
 
 /* Non-themed tiles glow with their TYPE color (--tile-accent, set inline) so
    every tile on the events lists reads as one family - same border/glow
@@ -620,8 +685,9 @@ textarea.input { resize: vertical; min-height: 64px; }
 .facepile .face:first-child { margin-left: 0; }
 /* ring separates overlapped faces from each other and the surface */
 .facepile .face .avatar { box-shadow: 0 0 0 2px var(--surface); }
-/* friends get the accent ring - they're why you'd tap in */
-.facepile .face-friend .avatar { box-shadow: 0 0 0 2px var(--accent); }
+/* friends get a teal ring OUTSIDE the surface separation ring - going/free is
+   teal's job everywhere else, and a friend showing up is good news too. */
+.facepile .face-friend .avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--go); }
 
 /* horizontally scrollable emoji picker strip */
 .emoji-strip {

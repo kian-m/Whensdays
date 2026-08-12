@@ -447,8 +447,15 @@ export function TimeGrid({
     },
     onPointerCancel: () => { drag.current = null; },
   } : {};
-  const heat = (n: number): React.CSSProperties =>
-    n === 0 ? {} : { background: `rgba(238, 108, 77, ${0.18 + 0.82 * (n / top)})`, borderColor: "transparent", color: "#fff" };
+  // Results-only heat coloring (only reachable when `counts` is passed, i.e.
+  // GeneralResults' 'dates' scope heatmap) - three discrete teal steps rather
+  // than a continuous gradient, so "how full is this cell" reads as tiers.
+  // The paint/voting path above (free/onPaint) never touches this.
+  const heatClass = (n: number): string => {
+    if (n === 0) return "";
+    const frac = n / Math.max(1, top);
+    return frac >= 0.67 ? "c3" : frac >= 0.34 ? "c2" : "c1";
+  };
   return (
     <div className="stack" style={{ gap: 6 }}>
       {pages > 1 && (
@@ -489,13 +496,14 @@ export function TimeGrid({
               const label = `${d.label}, ${fmtSlot(m)}: ${counts ? `${n} free` : free.has(k) ? "free" : "not set"}`;
               const picked = pick?.has(k)
                 ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative" as const, zIndex: 2 } : {};
+              const isBest = !!counts && n > 0 && n === top;
               const base: React.CSSProperties = counts
-                ? { ...heat(n), display: "grid", placeItems: "center", fontSize: "0.7rem", fontWeight: 700, cursor: onCellClick ? "pointer" : "default" }
+                ? { display: "grid", placeItems: "center", fontSize: "0.72rem", fontWeight: 700, cursor: onCellClick ? "pointer" : "default" }
                 : {};
               return (
                 <button key={d.value} type="button" data-testid={`${idPrefix}-cell-${d.value}-${m}`}
                   data-day={d.value} data-min={m}
-                  className={`cell ${!counts && free.has(k) ? "on" : ""}`} title={label}
+                  className={`cell ${!counts && free.has(k) ? "on" : ""} ${counts ? heatClass(n) : ""} ${isBest ? "best" : ""}`} title={label}
                   aria-label={label} aria-pressed={free.has(k)}
                   // min-width:0 lets 4 day columns pack into a narrow phone card
                   // (the shared .cell floors at 44px, which would overflow); the
@@ -507,7 +515,7 @@ export function TimeGrid({
                     ev.preventDefault();
                     onPaint(d.value, m, !(paintOn ?? free).has(k));
                   } : undefined}>
-                  {counts && n > 0 ? n : ""}
+                  {counts ? (n > 0 ? n : "·") : ""}
                 </button>
               );
             })}
@@ -925,18 +933,52 @@ export function Avatar({ url, name, size = 36 }: { url?: string | null; name?: s
   return <span className="avatar avatar-fallback" style={style} aria-hidden>{initial}</span>;
 }
 
+// TitlePoster - the no-photo cover fallback: a typographic playbill instead
+// of an emoji tile or gradient block. Plum + grain background, the event
+// title in Fraunces 900 cream at poster scale, an amber stamp line
+// underneath (venue/city if known), and a faint radial cream light from the
+// top (see .poster in styles.css). At "thumb" scale it shrinks to the same
+// language EventThumb uses for photo-less tiles: the first letter, centered,
+// with a 3px stripe along the bottom edge instead of the stamp line.
+export function TitlePoster({ title, sub, scale = "hero", size }: {
+  title: string;
+  sub?: string;
+  scale?: "hero" | "thumb";
+  size?: number;
+}) {
+  if (scale === "thumb") {
+    const s = size ?? 56;
+    const initial = (title || "?").trim().charAt(0).toUpperCase() || "?";
+    return (
+      <span className="thumb poster-thumb" data-testid="title-poster"
+        style={{ width: s, height: s, fontSize: s * 0.42 }} aria-hidden>
+        {initial}
+      </span>
+    );
+  }
+  // Poster title: the first ~2 words read as a marquee line; short titles
+  // (already ≤2 words) render in full rather than truncating oddly.
+  const words = title.trim().split(/\s+/).filter(Boolean);
+  const short = words.length <= 2 ? title.trim() : words.slice(0, 2).join(" ");
+  return (
+    <div className="poster" data-testid="title-poster">
+      <div className="poster-title">{short || "Untitled"}</div>
+      {sub && <div className="poster-sub stamp">{sub}</div>}
+    </div>
+  );
+}
+
 // Event tile thumbnail: the cover photo/GIF is the main visual when set.
-// Photo-less events render the title directly; no emoji fallback.
-// Shared by Home, Discover and Groups.
-export function EventThumb({ photo, emoji: _emoji = "", color: _color = "#8b8794", size = 46 }: {
-  photo?: string; emoji?: string; color?: string; size?: number;
+// Photo-less events fall back to a TitlePoster monogram (thumb scale) - never
+// an emoji or nothing. Shared by Home, Discover and Groups.
+export function EventThumb({ photo, title = "", size = 46 }: {
+  photo?: string; title?: string; size?: number;
 }) {
   if (photo) {
     return <img className="thumb" data-testid="event-thumb" src={photo} alt=""
       style={{ width: size, height: size }} loading="lazy" />;
   }
-  // Photo-less fallback: defer to Phase 3 TitlePoster. Render nothing for now.
-  return null;
+  return <TitlePoster title={title} scale="thumb" size={size} />;
 }
 
 // Klipy GIF picker (server-proxied - the API key never reaches the browser).
