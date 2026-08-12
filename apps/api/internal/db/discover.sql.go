@@ -65,6 +65,25 @@ func (q *Queries) ClaimEventReminder(ctx context.Context, id pgtype.UUID) (pgtyp
 	return id_2, err
 }
 
+const countFollowersOf = `-- name: CountFollowersOf :one
+SELECT count(*)::int FROM follows WHERE kind = $1 AND value = $2
+`
+
+type CountFollowersOfParams struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
+// The reverse of CountFollows: how many people follow ONE entity (kind+value),
+// not how many things one user follows. Public (the page's own follower count)
+// and the member view (so an owner watches their audience grow) both use this.
+func (q *Queries) CountFollowersOf(ctx context.Context, arg CountFollowersOfParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countFollowersOf, arg.Kind, arg.Value)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countFollows = `-- name: CountFollows :one
 SELECT count(*)::int FROM follows WHERE user_id = $1
 `

@@ -773,6 +773,85 @@ test.describe("scheduler", () => {
     }
   });
 
+  // V4 (page-quality pass): follower count on both the public page and the
+  // member view, the share-your-page card's copy/QR (clearly separate from the
+  // members-only invite card), and the bounded, listed-only "Past" section.
+  test("public page: follower count, share-your-page card, and the Past section", async ({ browser }) => {
+    test.skip(!DEV_AUTH, "two dev users in separate contexts");
+    const hostCtx = await browser.newContext();
+    const fanCtx = await browser.newContext();
+    const host = await hostCtx.newPage();
+    const fan = await fanCtx.newPage();
+    try {
+      await ensureUser(host, "pqhost", "PQ Host", "pqhost");
+      await ensureUser(fan, "pqfan", "PQ Fan", "pqfan");
+
+      const stamp = `${test.info().testId}-${Date.now()}`;
+      const gname = `Venue ${stamp}`;
+      await host.goto("/groups");
+      await host.getByTestId("group-name").fill(gname);
+      await host.getByTestId("group-create").click();
+      await host.getByTestId("group-row").filter({ hasText: gname }).first().click();
+      await expect(host.getByTestId("group-title")).toHaveText(gname);
+      const gid = host.url().split("/g/")[1];
+
+      // A past, LISTED event - dev mode is exempt from the past-date rejection
+      // (CLAUDE.md invariant), the same escape hermetic E2E always uses to
+      // simulate history.
+      const pastTitle = `Last Week's Show ${stamp}`;
+      await host.getByTestId("group-new-event").click();
+      await host.getByTestId("quick-title").fill(pastTitle);
+      await host.getByTestId("quick-mode-fixed").click();
+      await host.getByTestId("quick-when").fill(future(-3));
+      await expect(host.getByTestId("quick-listed")).toBeChecked();
+      await host.getByTestId("quick-create").click();
+      await expect(host.getByTestId("event-title")).toHaveText(pastTitle);
+
+      // Member view: zero followers so far, shown right on the header.
+      await host.goto(`/g/${gid}`);
+      await expect(host.getByTestId("group-follower-count")).toHaveText("0 FOLLOWERS");
+
+      // Share-your-page card (public link + QR) is a SEPARATE card from the
+      // members-only invite card, each with its own contrast copy.
+      await expect(host.getByTestId("group-share-page-card")).toContainText(
+        "Anyone with this link can see your events and follow you.");
+      await expect(host.getByTestId("group-share-qr")).toBeVisible();
+      await expect(host.getByTestId("group-invite-card")).toContainText(
+        "This link lets someone JOIN as a member.");
+
+      // Public page: follower/member counts stamp + a collapsed Past section
+      // carrying the listed, non-cancelled past event - closed by default, so
+      // open it before checking what's inside.
+      // Note: the group's owner is never inserted into group_members (only
+      // people who actually joined via an invite are), so a fresh, host-only
+      // group starts at 0 members - that's the real product behavior.
+      await fan.goto(`/g/${gid}`);
+      await expect(fan.getByTestId("group-public-card")).toBeVisible();
+      await expect(fan.getByTestId("group-public-counts")).toHaveText("0 FOLLOWERS · 0 MEMBERS");
+      await expect(fan.getByTestId("group-public-past")).toBeVisible();
+      await expect(fan.getByTestId("group-public-event").filter({ hasText: pastTitle })).toHaveCount(0);
+      await fan.getByTestId("group-public-past-toggle").click();
+      await expect(fan.getByTestId("group-public-past-event").filter({ hasText: pastTitle })).toBeVisible();
+
+      // The API itself: past_events is bounded/listed-only, never member data.
+      const pub = await fan.evaluate(async (id) => (await (await fetch(`/api/public/groups/${id}`)).json()), gid);
+      expect((pub.past_events as { title: string }[]).map((e) => e.title)).toContain(pastTitle);
+      expect(pub.members).toBeUndefined();
+
+      // Follow, and both views' counts move (member view checked after a
+      // reload - the count is server data, not part of the optimistic toggle).
+      await fan.getByTestId("group-follow").click();
+      await expect(fan.getByTestId("group-follow")).toContainText("Following");
+      await fan.reload();
+      await expect(fan.getByTestId("group-public-counts")).toHaveText("1 FOLLOWER · 0 MEMBERS");
+      await host.reload();
+      await expect(host.getByTestId("group-follower-count")).toHaveText("1 FOLLOWER");
+    } finally {
+      await hostCtx.close();
+      await fanCtx.close();
+    }
+  });
+
   // Following (phase 1) end to end. Following is ASYMMETRIC and is NOT Groups:
   // the fan never joins the club, they just follow it, and the group's `listed`
   // events ride their feed. Un-listing pulls the event straight back out.

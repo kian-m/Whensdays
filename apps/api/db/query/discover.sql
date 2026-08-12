@@ -95,6 +95,12 @@ SELECT EXISTS(
     SELECT 1 FROM follows WHERE user_id = $1 AND kind = $2 AND value = $3
 )::bool;
 
+-- name: CountFollowersOf :one
+-- The reverse of CountFollows: how many people follow ONE entity (kind+value),
+-- not how many things one user follows. Public (the page's own follower count)
+-- and the member view (so an owner watches their audience grow) both use this.
+SELECT count(*)::int FROM follows WHERE kind = $1 AND value = $2;
+
 -- name: ListFollowedEvents :many
 -- Following (phase 1): upcoming events from the hosts and GROUPS this user
 -- follows. Asymmetric and independent of Groups membership - following a club

@@ -433,6 +433,74 @@ func (q *Queries) ListGroupMembers(ctx context.Context, groupID pgtype.UUID) ([]
 	return items, nil
 }
 
+const listGroupPastListedEvents = `-- name: ListGroupPastListedEvents :many
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
+FROM events
+WHERE group_id = $1 AND listed = true
+  AND status <> 'cancelled' AND status <> 'draft'
+  AND starts_at IS NOT NULL AND starts_at < now() - interval '12 hours'
+ORDER BY starts_at DESC
+LIMIT 10
+`
+
+// The public page's bounded "Past" section (V4, social proof for venues):
+// listed + live (never draft/cancelled/unlisted) events that already happened,
+// most recent first, capped so the page never grows unbounded. The 12h grace
+// mirrors ListGroupListedEvents's cutoff so the two lists never overlap.
+func (q *Queries) ListGroupPastListedEvents(ctx context.Context, groupID pgtype.UUID) ([]Event, error) {
+	rows, err := q.db.Query(ctx, listGroupPastListedEvents, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Event{}
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.HostID,
+			&i.Title,
+			&i.EventType,
+			&i.Description,
+			&i.LocationMode,
+			&i.LocationAddress,
+			&i.SchedulingMode,
+			&i.StartsAt,
+			&i.Status,
+			&i.CreatedAt,
+			&i.CommentsEnabled,
+			&i.GroupID,
+			&i.SeriesID,
+			&i.Recurrence,
+			&i.ReminderSent,
+			&i.Visibility,
+			&i.Topic,
+			&i.City,
+			&i.CustomEmoji,
+			&i.CustomLabel,
+			&i.GeneralScope,
+			&i.PhotoUrl,
+			&i.Theme,
+			&i.Timezone,
+			&i.EndsAt,
+			&i.PollDeadline,
+			&i.PollReadySent,
+			&i.VoteReminderSent,
+			&i.QuorumSent,
+			&i.Capacity,
+			&i.Listed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMyGroups = `-- name: ListMyGroups :many
 SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url, g.description, g.invite_token_version
 FROM groups g
