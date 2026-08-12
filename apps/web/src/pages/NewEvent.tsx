@@ -147,18 +147,18 @@ export function NewEvent() {
   return (
     <div className="stack" style={{ maxWidth: 460, margin: "1rem auto" }}>
       <div className="row between">
-        <h1>New event</h1>
+        <h1>What's the plan?</h1>
         {groupName && <span className="muted small" data-testid="group-context">{groupName}</span>}
       </div>
       <p className="muted small">Name it, pick how you'll set the time - share the link, done.</p>
       <form className="card stack" onSubmit={go}>
-        <label className="field" htmlFor="t">What's the plan?</label>
+        <label className="field" htmlFor="t">Title</label>
         <input id="t" className="input" maxLength={140} data-testid="quick-title" value={title} autoFocus
           placeholder="Pizza night, study session, pickup game…" onChange={(e) => setTitle(e.target.value)} />
-        <div className="row" style={{ gap: 6 }}>
-          <button type="button" className={`chip sm ${mode === "fixed" ? "on" : ""}`}
+        <div className="segmented" role="group" aria-label="How will you set the time?">
+          <button type="button" className={mode === "fixed" ? "on" : ""}
             data-testid="quick-mode-fixed" onClick={() => setMode("fixed")}>I'll set the time</button>
-          <button type="button" className={`chip sm ${mode === "general" ? "on" : ""}`}
+          <button type="button" className={mode === "general" ? "on" : ""}
             data-testid="quick-mode-avail" onClick={() => setMode("general")}>Ask when people are free</button>
         </div>
         {mode === "fixed" ? (

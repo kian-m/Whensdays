@@ -24,12 +24,15 @@ type CalItem = {
   key: string;
   title: string;
   start: Date;
-  color: string; // brand accent for scheduler events, gray for imported
+  color: string; // CSS color value: SCHED_COLOR for scheduler events, IMPORTED_COLOR for imported
   eventId?: string; // navigable for scheduler events
   imported?: boolean;
 };
 
-const SCHED_COLOR = "#ee6c4d"; // brand coral accent for your own scheduler events
+// CSS custom properties (not literal hex) so both colors track the active
+// theme; color-mix() below blends them for tinted pill backgrounds.
+const SCHED_COLOR = "var(--accent)"; // brand coral accent for your own scheduler events
+const IMPORTED_COLOR = "var(--muted)"; // muted token for events from a connected calendar
 
 const dayKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -62,7 +65,7 @@ export function Calendars() {
       });
     }
     for (const [i, e] of (imported?.events ?? []).entries()) {
-      push({ key: `i-${i}`, title: e.title, start: new Date(e.starts_at), color: "#8a879a", imported: true });
+      push({ key: `i-${i}`, title: e.title, start: new Date(e.starts_at), color: IMPORTED_COLOR, imported: true });
     }
     for (const items of m.values()) items.sort((a, b) => a.start.getTime() - b.start.getTime());
     return m;
@@ -131,12 +134,12 @@ function MonthGrid({ cursor, today, byDay, onOpen, onPickDay }: {
             <span className={`cal-daynum ${sameDay(d, today) ? "cal-today" : ""}`}>{d.getDate()}</span>
             {items.slice(0, 3).map((it) => (
               <button key={it.key} type="button" className="cal-pill" title={it.title}
-                style={{ background: `${it.color}22`, color: it.color }}
+                style={{ background: `color-mix(in srgb, ${it.color} 18%, transparent)`, color: it.color }}
                 onClick={(ev) => { ev.stopPropagation(); if (it.eventId) onOpen(it.eventId); }}>
                 {it.title}
               </button>
             ))}
-            {items.length > 3 && <span className="muted" style={{ fontSize: "0.68rem" }}>+{items.length - 3} more</span>}
+            {items.length > 3 && <span className="stamp muted" style={{ fontSize: "0.62rem" }}>+{items.length - 3} more</span>}
           </div>
         );
       })}
@@ -153,13 +156,13 @@ function WeekGrid({ cursor, today, byDay, onOpen }: {
       {days.map((d) => (
         <div key={dayKey(d)} className="cal-week-col">
           <div className={`cal-week-head ${sameDay(d, today) ? "cal-week-today" : ""}`}>
-            <span className="muted small">{WEEKDAY_HEADS[d.getDay()]}</span>
-            <strong>{d.getDate()}</strong>
+            <span className="stamp muted" style={{ fontSize: "0.66rem" }}>{WEEKDAY_HEADS[d.getDay()]}</span>
+            <strong className="stamp" style={{ fontSize: "0.95rem" }}>{d.getDate()}</strong>
           </div>
           <div className="stack" style={{ gap: 4, padding: "4px 4px 8px" }}>
             {(byDay.get(dayKey(d)) ?? []).map((it) => (
               <button key={it.key} type="button" className="cal-pill cal-pill-lg" title={it.title}
-                style={{ background: `${it.color}22`, color: it.color, borderLeft: `3px solid ${it.color}` }}
+                style={{ background: `color-mix(in srgb, ${it.color} 18%, transparent)`, color: it.color, borderLeft: `3px solid ${it.color}` }}
                 onClick={() => it.eventId && onOpen(it.eventId)}>
                 <span className="cal-pill-time">{fmtTime(it.start)}</span>
                 {it.title}
@@ -182,7 +185,7 @@ function DayList({ cursor, byDay, onOpen }: {
       {items.map((it) => (
         <button key={it.key} type="button" className="row cal-day-row" onClick={() => it.eventId && onOpen(it.eventId)}
           style={{ cursor: it.eventId ? "pointer" : "default" }}>
-          <span className="muted small" style={{ width: 76, textAlign: "right" }}>{fmtTime(it.start)}</span>
+          <span className="stamp time" style={{ width: 84, textAlign: "right" }}>{fmtTime(it.start)}</span>
           <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: it.color }} />
           <span className="stack" style={{ gap: 0, alignItems: "flex-start" }}>
             <strong>{it.title}</strong>
@@ -223,7 +226,7 @@ function FeedCard() {
           {copied ? "Copied" : "Copy URL for Google"}
         </button>
       </div>
-      <p className="muted small" style={{ margin: 0 }}>Google Calendar: Other calendars → + → From URL → paste. Treat the URL like a password - anyone with it sees your events.</p>
+      <p className="muted small" style={{ margin: 0 }}>Google Calendar: Other calendars, then the + button, then From URL, then paste. Treat the URL like a password - anyone with it sees your events.</p>
     </div>
   );
 }
@@ -326,7 +329,7 @@ export function CalendarConnections() {
             <p className="muted small" style={{ margin: 0 }}>
               Private - no publishing. Generate an <strong>app-specific password</strong> at{" "}
               <a href="https://account.apple.com/account/manage" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "underline" }}>account.apple.com</a>{" "}
-              (Sign-In &amp; Security → App-Specific Passwords). We store it encrypted and only ever read.
+              (Sign-In &amp; Security, then App-Specific Passwords). We store it encrypted and only ever read.
             </p>
             <input className="input" maxLength={120} data-testid="apple-caldav-id" value={appleId} autoComplete="username"
               placeholder="Apple ID (email)" onChange={(e) => setAppleId(e.target.value)} />
@@ -346,7 +349,7 @@ export function CalendarConnections() {
         {openForm === "ical" && (
           <form className="stack" style={{ gap: 8 }} onSubmit={connectICal}>
             <p className="muted small" style={{ margin: 0 }}>
-              Fallback for any calendar that can publish a link. iCloud: share a calendar as <strong>Public</strong> (the URL is unguessable but anyone holding it can read that calendar). Outlook: Settings → Shared calendars → Publish.
+              Fallback for any calendar that can publish a link. iCloud: share a calendar as <strong>Public</strong> (the URL is unguessable but anyone holding it can read that calendar). Outlook: Settings, then Shared calendars, then Publish.
             </p>
             <div className="row">
               <input className="input" maxLength={500} data-testid="apple-url" value={icalUrl} onChange={(e) => setIcalUrl(e.target.value)}

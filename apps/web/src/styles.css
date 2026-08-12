@@ -309,7 +309,10 @@ a:hover { text-decoration: underline; }
 
 /* segmented control - joined single-choice buttons, visually distinct from
    chips (which are for optional multi-select). Used by the create flow's
-   scheduling mode. Labels wrap rather than overflow on a narrow phone. */
+   scheduling mode. Labels wrap rather than overflow on a narrow phone.
+   Selected = teal fill + plum text, same as .chip.on - picking a segment is a
+   SELECTION, not an instruction, so it stays out of coral (coral is reserved
+   for the one primary action per screen). */
 .segmented {
   display: flex; width: 100%; border: 1px solid var(--line);
   border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2);
@@ -321,7 +324,7 @@ a:hover { text-decoration: underline; }
   border-left: 1px solid var(--line); transition: background 0.12s ease, color 0.12s ease;
 }
 .segmented button:first-child { border-left: none; }
-.segmented button.on { background: var(--accent); color: var(--plum); }
+.segmented button.on { background: var(--go); color: var(--plum); }
 .segmented button:focus-visible { outline: 2px solid var(--time); outline-offset: -2px; }
 
 /* plain text link - for secondary/optional actions that must NOT read as a chip
@@ -394,8 +397,19 @@ textarea.input { resize: vertical; min-height: 64px; }
   display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 0.35rem; align-items: center;
   font-variant-numeric: tabular-nums;
 }
-.grid .hd { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.grid .day { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Grid headers/row labels are dates and dayparts - the stamp voice (mono,
+   uppercase, letterspaced) applies, just at a lighter letter-spacing than
+   .stamp proper so compact columns don't overflow. */
+.grid .hd {
+  font-family: var(--font-data); font-size: 0.72rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.03em;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.grid .day {
+  font-family: var(--font-data); font-size: 0.78rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 /* DayGrid's 6-daypart (.compact-cols) grids only need smaller cells on phones,
    where all 6 columns otherwise wouldn't fit one screen - on wider viewports
    there's room for the normal 44px .cell/.hd sizing above, so this stays
@@ -798,14 +812,21 @@ textarea.input { resize: vertical; min-height: 64px; }
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
   overflow: hidden; box-shadow: var(--shadow);
 }
-.cal-head { padding: 0.5rem 0.4rem; text-align: center; font-size: 0.72rem; font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--line); }
+.cal-head {
+  padding: 0.5rem 0.4rem; text-align: center; font-size: 0.72rem; font-weight: 700; color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-data); text-transform: uppercase; letter-spacing: 0.04em;
+}
 .cal-cell {
   min-height: 84px; padding: 4px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 2px; cursor: pointer; overflow: hidden;
 }
 .cal-cell:nth-child(7n) { border-right: none; }
 .cal-other { background: rgba(127, 127, 140, 0.08); color: var(--muted); }
-.cal-daynum { font-size: 0.72rem; font-weight: 700; width: 20px; height: 20px; display: inline-grid; place-items: center; border-radius: 50%; }
+.cal-daynum {
+  font-size: 0.72rem; font-weight: 700; width: 20px; height: 20px; display: inline-grid; place-items: center; border-radius: 50%;
+  font-family: var(--font-data); font-variant-numeric: tabular-nums;
+}
 .cal-today { background: var(--accent); color: var(--plum); }
 .cal-pill {
   border: none; font: inherit; text-align: left; cursor: pointer;
@@ -822,7 +843,11 @@ textarea.input { resize: vertical; min-height: 64px; }
 .cal-week-head { display: flex; flex-direction: column; align-items: center; padding: 0.5rem 0.2rem; border-bottom: 1px solid var(--line); }
 .cal-week-today { background: var(--surface-2); }
 .cal-pill-lg { font-size: 0.72rem; padding: 4px 6px; border-radius: 7px; display: flex; flex-direction: column; align-items: flex-start; white-space: normal; }
-.cal-pill-time { font-weight: 800; font-size: 0.62rem; opacity: 0.75; }
+.cal-pill-time {
+  font-family: var(--font-data); font-weight: 700; font-size: 0.6rem;
+  text-transform: uppercase; letter-spacing: 0.03em; font-variant-numeric: tabular-nums;
+  color: var(--time); opacity: 1;
+}
 .cal-day-row { background: none; border: none; font: inherit; text-align: left; padding: 4px 0; gap: 10px; display: flex; align-items: center; }
 
 /* avatars - plum fill, cream initials (matches the wordmark palette) */
