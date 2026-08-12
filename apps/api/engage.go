@@ -95,7 +95,7 @@ func (s *server) handleEmailRsvp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	other := "declined"
-	title, msg := "You're in 🎉", `You're marked as going to "`+ev.Title+`".`
+	title, msg := "You're in", `You're marked as going to "`+ev.Title+`".`
 	if answer == "declined" {
 		other = "going"
 		title, msg = "Sorry you'll miss it", `You're marked as can't-go for "`+ev.Title+`".`
@@ -142,10 +142,10 @@ func (s *server) handleNudge(w http.ResponseWriter, r *http.Request) {
 	for _, c := range contacts {
 		body := renderEmail(emailContent{
 			preheader: "Still deciding? One tap and you're done.",
-			heading:   fmt.Sprintf("%s is waiting on you 👀", host.DisplayName),
+			heading:   fmt.Sprintf("%s is waiting on you", host.DisplayName),
 			lines:     []string{fmt.Sprintf("Quick one - are you in for \"%s\"? One tap below and you're done.", ev.Title)},
 			meta:      eventMeta(ev),
-			ctaLabel:  "✅ I'm going",
+			ctaLabel:  "I'm going",
 			ctaURL:    s.rsvpLink(c.UserID, uuidStr(ev.ID), "going"),
 			cta2Label: "Can't make it",
 			cta2URL:   s.rsvpLink(c.UserID, uuidStr(ev.ID), "declined"),
