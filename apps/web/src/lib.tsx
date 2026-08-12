@@ -104,6 +104,10 @@ export type PublicEvent = {
   // when the event belongs to a group (a page IS a group - VENUE-PAGES.md).
   group_id: string | null;
   group_name: string | null;
+  // V7: set when this row surfaced (also/instead) via a confirmed performer
+  // the viewer follows - renders "with {performer_name}" instead of "via".
+  // Attribution precedence is group > performer > host.
+  performer_name: string | null;
 };
 
 export type Follow = { kind: "host" | "topic"; value: string };
@@ -307,6 +311,22 @@ export type Cohost = {
   avatar_url: string | null;
   created_at: string;
 };
+// V7: a real user attached to the event's lineup. status gates follower
+// distribution (see VENUE-PAGES.md) - display on the event page is immediate
+// regardless of status.
+export type Performer = {
+  event_id: string;
+  user_id: string;
+  status: "pending" | "confirmed";
+  added_by: string;
+  display_name: string | null;
+  handle: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  // Viewer's own follow state - kind='host' following a performer is the same
+  // primitive as following any other person (VENUE-PAGES.md V7).
+  following: boolean;
+};
 
 export type TimeOption = { id: string; event_id: string; starts_at: string };
 export type Vote = { id: string; option_id: string; user_id: string; response: "yes" | "no" | "maybe" };
@@ -340,6 +360,7 @@ export type EventDetail = {
   attendees: Attendee[];
   comments: Comment[];
   cohosts: Cohost[];
+  performers: Performer[];
   series: SeriesItem[] | null;
   invites: { user_id: string; inviter_id: string; seen: boolean; display_name: string | null }[];
 };

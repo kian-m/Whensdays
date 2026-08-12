@@ -33,9 +33,13 @@ RETURNING job;
 -- group_id/group_name ride here (and on ListFollowedEvents/ListFriendsEvents,
 -- column-for-column) so the web can attribute a followed-feed tile to the page
 -- ("via {group name}") instead of just the host - the whole point of a page
--- being a group. LEFT JOIN because most events have no group.
+-- being a group. LEFT JOIN because most events have no group. performer_name
+-- (V7) rides here too, column-for-column, purely so ListFollowedEventsRow
+-- keeps converting straight to ListPublicEventsRow (mergeCandidates/rankEvents)
+-- - public browse has no follow context, so it's always NULL here.
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
        p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme, e.group_id, g.name AS group_name,
+       NULL::text AS performer_name,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $3::text AND f.addressee_id = a.user_id)
@@ -113,8 +117,28 @@ SELECT count(*)::int FROM follows WHERE kind = $1 AND value = $2;
 -- feed query, so cancelled/draft/past never appear.
 -- Column list mirrors ListPublicEvents exactly so the rows convert to
 -- ListPublicEventsRow for the shared ranker.
+--
+-- V7 third arm: an event also surfaces if it has a CONFIRMED performer the
+-- recipient follows (kind='host') - "follow a person, see every event they're
+-- on", regardless of who hosts. Consent gates this: only 'confirmed' rows
+-- qualify (see the event_performers migration), never 'pending' - a host
+-- can't blast a followed performer's audience just by tagging them.
+-- performer_match picks ONE confirmed+followed performer's name per event
+-- (earliest added, if more than one) for the "with {performer}" attribution;
+-- the web prefers group > performer > host when several apply.
+WITH performer_match AS (
+    SELECT DISTINCT ON (ep.event_id)
+        ep.event_id, pp.display_name AS performer_name
+    FROM event_performers ep
+    JOIN profiles pp ON pp.user_id = ep.user_id
+    WHERE ep.status = 'confirmed'
+      AND EXISTS(SELECT 1 FROM follows fp
+                 WHERE fp.user_id = $1::text AND fp.kind = 'host' AND fp.value = ep.user_id)
+    ORDER BY ep.event_id, ep.created_at
+)
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
        p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme, e.group_id, g.name AS group_name,
+       pm.performer_name,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $1::text AND f.addressee_id = a.user_id)
@@ -127,6 +151,7 @@ SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
 FROM events e
 LEFT JOIN profiles p ON p.user_id = e.host_id
 LEFT JOIN groups g ON g.id = e.group_id
+LEFT JOIN performer_match pm ON pm.event_id = e.id
 WHERE e.status IN ('polling', 'scheduled')
   AND (e.starts_at IS NULL OR e.starts_at >= now())
   AND e.listed = true
@@ -134,7 +159,8 @@ WHERE e.status IN ('polling', 'scheduled')
               WHERE fh.user_id = $1::text AND fh.kind = 'host' AND fh.value = e.host_id)
     OR (e.group_id IS NOT NULL AND EXISTS(
               SELECT 1 FROM follows fg
-              WHERE fg.user_id = $1::text AND fg.kind = 'group' AND fg.value = e.group_id::text)))
+              WHERE fg.user_id = $1::text AND fg.kind = 'group' AND fg.value = e.group_id::text))
+    OR pm.event_id IS NOT NULL)
 ORDER BY e.starts_at NULLS LAST
 LIMIT 100;
 
@@ -170,10 +196,13 @@ WHERE e.visibility = 'public' AND e.status = 'scheduled' AND e.starts_at >= now(
 GROUP BY a.event_id;
 
 -- name: ListFriendsEvents :many
--- Column list mirrors ListPublicEvents (group_id/group_name included) so rows
--- convert to ListPublicEventsRow for the shared ranker, same as ListFollowedEvents.
+-- Column list mirrors ListPublicEvents (group_id/group_name/performer_name
+-- included) so rows convert to ListPublicEventsRow for the shared ranker, same
+-- as ListFollowedEvents. performer_name is always NULL here - friends-hosted
+-- events carry no follow-based performer attribution.
 SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
        p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme, e.group_id, g.name AS group_name,
+       NULL::text AS performer_name,
        (SELECT count(*)::int FROM event_attendees a
           JOIN friendships f ON f.status = 'accepted'
            AND ((f.requester_id = $1::text AND f.addressee_id = a.user_id)

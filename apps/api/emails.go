@@ -164,7 +164,8 @@ type emailBoardRow struct {
 type emailItem struct {
 	title, when, url, muteURL, cover string
 	whenIsStamp                      bool
-	page                             string // optional page attribution ("via {group/host}")
+	page                             string // optional page attribution ("via {group/host}" or "with {performer}")
+	pageIsPerformer                  bool   // V7: page is a performer's name -> renders "with" instead of "via"
 	rsvpGoingURL, rsvpDeclinedURL    string // optional one-tap RSVP links (rsvp| pattern)
 }
 
@@ -329,10 +330,16 @@ func renderEmail(c emailContent) string {
 		if it.cover != "" {
 			thumb = fmt.Sprintf(`<td style="width:68px;vertical-align:top;padding:10px 0 10px 12px"><img src="%s" width="56" height="56" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;display:block"></td>`, esc(it.cover))
 		}
-		// page attribution - only the follow digest sets this ("via {Page}").
+		// page attribution - only the follow digest sets this: "via {Page}"
+		// normally, or (V7) "with {performer}" when the match came through a
+		// confirmed performer follow rather than the host/group.
 		page := ""
 		if it.page != "" {
-			page = fmt.Sprintf(`<br><span style="font-size:12px;color:%s">via %s</span>`, emailMuted, esc(it.page))
+			prefix := "via"
+			if it.pageIsPerformer {
+				prefix = "with"
+			}
+			page = fmt.Sprintf(`<br><span style="font-size:12px;color:%s">%s %s</span>`, emailMuted, prefix, esc(it.page))
 		}
 		// one-tap RSVP links - only the follow digest sets these.
 		rsvp := ""

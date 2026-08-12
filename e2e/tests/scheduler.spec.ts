@@ -1008,6 +1008,114 @@ test.describe("scheduler", () => {
     }
   });
 
+  // Performers on events (V7): follow a person, see every event they're ON -
+  // gated by the performer's OWN consent. Pending never surfaces to the
+  // performer's followers; only after they confirm does it ride the follower's
+  // Home feed, attributed "with {performer}"; self-removing pulls it back out.
+  test("performers: a pending performer is hidden, confirming surfaces the event to their followers, self-remove pulls it back out", async ({ browser }) => {
+    test.skip(!DEV_AUTH, "three dev users in separate contexts");
+    const hostCtx = await browser.newContext();
+    const artistCtx = await browser.newContext();
+    const fanCtx = await browser.newContext();
+    const host = await hostCtx.newPage();
+    const artist = await artistCtx.newPage();
+    const fan = await fanCtx.newPage();
+    try {
+      await ensureUser(host, "perfhost", "Perf Host", "perfhost");
+      await ensureUser(artist, "perfartist", "Perf Artist", "perfartist");
+      await ensureUser(fan, "perffan", "Perf Fan", "perffan");
+      const artistHandle = "perfartist";
+
+      // Fixed dev users persist across local re-runs of this suite - start from
+      // a known-unfollowed state so the click-to-follow step below is
+      // deterministic regardless of what an earlier run left behind.
+      await fan.evaluate(() => fetch("/api/follows/host/perfartist", { method: "DELETE", headers: { "X-Dev-User": "perffan" } }));
+
+      // The fan reads their OWN "following" scope feed via the API (per-user).
+      const feedTitles = () => fan.evaluate(async () => {
+        const res = await fetch("/api/feed?scope=following", { headers: { "X-Dev-User": "perffan" } });
+        const b = await res.json();
+        return (b.events ?? []).map((e: { title: string }) => e.title) as string[];
+      });
+
+      const stamp = `${test.info().testId}-${Date.now()}`;
+
+      // Host creates a listed event and adds the artist to the lineup by handle
+      // - visible on the event page immediately, but starts pending.
+      const title = `Showcase ${stamp}`;
+      await host.getByTestId("new-event").click();
+      await host.getByTestId("quick-title").fill(title);
+      await host.getByTestId("quick-mode-fixed").click();
+      await host.getByTestId("quick-when").fill(future(24));
+      await expect(host.getByTestId("quick-listed")).toBeChecked();
+      await host.getByTestId("quick-create").click();
+      await expect(host.getByTestId("event-title")).toHaveText(title);
+      const url = host.url();
+
+      await host.getByTestId("performer-handle").fill(artistHandle);
+      await host.getByTestId("performer-add").click();
+      await expect(host.getByTestId("performer")).toBeVisible();
+      await expect(host.getByTestId("performer")).toContainText("Pending");
+
+      // The fan follows the artist straight from the Lineup card (kind='host' -
+      // the same "follow a person" primitive as following an event's host) -
+      // no need to join anything, and the artist need not host anything.
+      await fan.goto(url);
+      const fanRow = fan.getByTestId("performer").filter({ hasText: "Perf Artist" });
+      await expect(fanRow).toBeVisible();
+      await Promise.all([
+        fan.waitForResponse((r) => r.url().includes("/api/follows") && r.request().method() === "POST"),
+        fanRow.getByTestId(`follow-performer-${artistHandle}`).click(),
+      ]);
+      await expect(fanRow.getByTestId(`follow-performer-${artistHandle}`)).toContainText("Following", { timeout: 10000 });
+
+      // Pending: the event does NOT reach the fan's feed yet - consent gates
+      // distribution, not display.
+      await expect.poll(feedTitles, { timeout: 10000 }).not.toContain(title);
+
+      // The artist sees the pending banner and confirms - their own consent.
+      await artist.goto(url);
+      await expect(artist.getByTestId("pending-performer-banner")).toBeVisible();
+      await Promise.all([
+        artist.waitForResponse((r) => r.url().includes("/performers/confirm") && r.request().method() === "POST"),
+        artist.getByTestId("pending-performer-confirm").click(),
+      ]);
+      await expect(artist.getByTestId("pending-performer-banner")).toHaveCount(0);
+      await expect(artist.getByTestId("performer").filter({ hasText: "Pending" })).toHaveCount(0);
+
+      // Confirmed: the fan's followed feed now carries it, attributed "with
+      // {performer}" (no group on this event, so performer beats host).
+      await expect.poll(feedTitles, { timeout: 10000 }).toContain(title);
+
+      // The default view previews only the next 3 followed events - this fixed
+      // dev user accumulates more than that across local re-runs of this spec,
+      // so assert against the FULL "Following" chip list (unsliced) rather than
+      // the preview, same surface the "following on Home" test's "See all" uses.
+      await fan.goto("/");
+      await expect(fan.getByTestId("filter-following")).toBeVisible();
+      await fan.getByTestId("filter-following").click();
+      const tile = fan.getByTestId("following-tile").filter({ hasText: title });
+      await expect(tile).toBeVisible({ timeout: 10000 });
+      await expect(tile.getByTestId("following-attribution")).toHaveText("with Perf Artist");
+
+      // The artist removes themselves from the lineup (two-tap ConfirmButton) -
+      // gone from the event page AND back out of the fan's feed.
+      await artist.reload();
+      const removeBtn = artist.getByTestId(`performer-remove-${artistHandle}`);
+      await removeBtn.click();
+      await Promise.all([
+        artist.waitForResponse((r) => r.url().includes("/api/events/") && r.url().includes("/performers/") && r.request().method() === "DELETE"),
+        removeBtn.click(),
+      ]);
+      await expect(artist.getByTestId("performer")).toHaveCount(0);
+      await expect.poll(feedTitles, { timeout: 10000 }).not.toContain(title);
+    } finally {
+      await hostCtx.close();
+      await artistCtx.close();
+      await fanCtx.close();
+    }
+  });
+
   test("first event created suggests add-to-homescreen (phones, once)", async ({ page }) => {
     test.skip(!DEV_AUTH, "uses ?as for an isolated user");
     await page.setViewportSize({ width: 390, height: 844 }); // the prompt is phone-only

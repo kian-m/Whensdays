@@ -133,6 +133,14 @@ type EventNudge struct {
 	NudgedAt pgtype.Timestamptz `json:"nudged_at"`
 }
 
+type EventPerformer struct {
+	EventID   pgtype.UUID        `json:"event_id"`
+	UserID    string             `json:"user_id"`
+	Status    string             `json:"status"`
+	AddedBy   string             `json:"added_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type EventPollDay struct {
 	EventID pgtype.UUID `json:"event_id"`
 	Day     pgtype.Date `json:"day"`

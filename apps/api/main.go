@@ -216,6 +216,13 @@ func main() {
 	mux.Handle("PUT /api/events/{id}/listed", auth(http.HandlerFunc(s.handleSetEventListed)))
 	mux.Handle("POST /api/events/{id}/cohosts", auth(http.HandlerFunc(s.handleAddCohost)))
 	mux.Handle("DELETE /api/events/{id}/cohosts/{userId}", auth(http.HandlerFunc(s.handleRemoveCohost)))
+	// Performers on events (V7, see performers.go) - manager add/remove-by-handle
+	// like cohosts, plus a self-serve Confirm (consent gates follower
+	// distribution) and the unauthenticated one-tap email link (perf| token).
+	mux.Handle("POST /api/events/{id}/performers", auth(http.HandlerFunc(s.handleAddPerformer)))
+	mux.Handle("DELETE /api/events/{id}/performers/{userId}", auth(http.HandlerFunc(s.handleRemovePerformer)))
+	mux.Handle("POST /api/events/{id}/performers/confirm", auth(http.HandlerFunc(s.handleConfirmPerformer)))
+	mux.Handle("GET /api/events/{id}/performers/link", readLimit(http.HandlerFunc(s.handlePerformerLink)))
 	// Notification mute: signed-in toggle + the one-click email link (the latter
 	// is UNauthenticated - identity rides in a signed token; see mute.go).
 	mux.Handle("POST /api/events/{id}/mute", auth(http.HandlerFunc(s.handleMuteToggle)))
