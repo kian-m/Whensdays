@@ -11,6 +11,7 @@ import {
 } from "../lib";
 import { ConfirmButton, ListSkeleton, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
+import { Ic } from "../Icons";
 
 // ---------------------------------------------------------------------------
 // The Calendars page: an Outlook/Apple-style calendar of YOUR schedule - your
@@ -86,9 +87,9 @@ export function Calendars() {
       <div className="row between wrap">
         <h1 data-testid="cal-title">{title}</h1>
         <div className="row" style={{ gap: 4 }}>
-          <button type="button" className="btn ghost sm" data-testid="cal-prev" onClick={() => move(-1)}>←</button>
+          <button type="button" className="btn ghost sm" data-testid="cal-prev" onClick={() => move(-1)} title="Previous">{Ic.back(15)}</button>
           <button type="button" className="btn ghost sm" data-testid="cal-today" onClick={() => setCursor(new Date())}>Today</button>
-          <button type="button" className="btn ghost sm" data-testid="cal-next" onClick={() => move(1)}>→</button>
+          <button type="button" className="btn ghost sm" data-testid="cal-next" onClick={() => move(1)} title="Next" style={{ transform: "scaleX(-1)" }}>{Ic.back(15)}</button>
         </div>
       </div>
       <div className="row" style={{ gap: 4 }}>
@@ -230,7 +231,7 @@ function FeedCard() {
 // One connections row. The label side shrinks (long provider names / account
 // emails must never push the buttons off screen); buttons stay intrinsic.
 function ProviderRow({ icon, label, connectedLabel, connectTestid, disconnectTestid, onConnect, onDisconnect, children }: {
-  icon: string; label: string; connectedLabel?: string;
+  icon: string | React.ReactNode; label: string; connectedLabel?: string;
   connectTestid: string; disconnectTestid: string;
   onConnect: () => void; onDisconnect: () => void; children?: React.ReactNode;
 }) {
@@ -238,8 +239,8 @@ function ProviderRow({ icon, label, connectedLabel, connectTestid, disconnectTes
   return (
     <div className="stack" style={{ gap: 8 }}>
       <div className="row between">
-        <span className="row" style={{ gap: 8, flex: "1 1 auto", minWidth: 0 }}>
-          <span style={{ flex: "none" }}>{icon}</span>
+        <span className="row" style={{ gap: 8, flex: "1 1 auto", minWidth: 0, alignItems: "center" }}>
+          {typeof icon === "string" ? <span style={{ flex: "none" }}>{icon}</span> : <span style={{ flex: "none", display: "flex" }}>{icon}</span>}
           <span style={{ minWidth: 0 }}>{label}</span>
         </span>
         {connected ? (
@@ -313,10 +314,10 @@ export function CalendarConnections() {
         <h3>Connected calendars</h3>
         <p className="muted small">Read-only and private: your busy times grey out availability and flag conflicts. Nothing is shared or published.</p>
       </div>
-      <ProviderRow icon="📅" label={PROVIDER_LABEL.google} connectedLabel={labelOf("google")}
+      <ProviderRow icon={Ic.calendar(16)} label={PROVIDER_LABEL.google} connectedLabel={labelOf("google")}
         connectTestid="connect-google" disconnectTestid="disconnect-google"
         onConnect={() => oauthConnect("google")} onDisconnect={() => disconnect("google")} />
-      <ProviderRow icon="🍎" label={PROVIDER_LABEL.apple_caldav} connectedLabel={labelOf("apple_caldav")}
+      <ProviderRow icon={Ic.calendar(16)} label={PROVIDER_LABEL.apple_caldav} connectedLabel={labelOf("apple_caldav")}
         connectTestid="connect-apple-caldav-open" disconnectTestid="disconnect-apple-caldav"
         onConnect={() => { setErr(null); setOpenForm(openForm === "caldav" ? "" : "caldav"); }}
         onDisconnect={() => disconnect("apple_caldav")}>
@@ -338,7 +339,7 @@ export function CalendarConnections() {
           </form>
         )}
       </ProviderRow>
-      <ProviderRow icon="🔗" label={PROVIDER_LABEL.apple_ical} connectedLabel={labelOf("apple_ical")}
+      <ProviderRow icon={Ic.link(16)} label={PROVIDER_LABEL.apple_ical} connectedLabel={labelOf("apple_ical")}
         connectTestid="connect-apple-open" disconnectTestid="disconnect-apple"
         onConnect={() => { setErr(null); setOpenForm(openForm === "ical" ? "" : "ical"); }}
         onDisconnect={() => disconnect("apple_ical")}>

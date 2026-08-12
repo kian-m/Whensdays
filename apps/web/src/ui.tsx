@@ -4,6 +4,7 @@ import qrcode from "qrcode-generator";
 import { Link } from "react-router-dom";
 import { ApiFn, DAYPARTS, deferredInstall, getJSON, isIOS, useApi } from "./lib";
 import { EVENTS, analytics } from "./analytics";
+import { Ic } from "./Icons";
 
 // Small data-loading hook with STALE-WHILE-REVALIDATE: the last successful
 // result for each call site is kept in a session-lived cache, so returning to a
@@ -116,8 +117,8 @@ export function EventSkeleton() {
 
 export function BackLink() {
   return (
-    <Link to="/" className="muted small" style={{ display: "inline-block", marginBottom: "0.6rem" }}>
-      ← All events
+    <Link to="/" className="row" style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center", marginBottom: "0.6rem", color: "var(--muted)", fontSize: "0.85rem" }}>
+      {Ic.back(15)}All events
     </Link>
   );
 }
@@ -193,7 +194,7 @@ export function FollowButton({ kind, value, following, onChange, source, testid 
   return (
     <button type="button" className={cls} data-testid={testid} disabled={busy}
       aria-pressed={on} onClick={toggle}>
-      {on ? "Following ✓" : "+ Follow"}
+      {on ? <span className="row" style={{ gap: "0.35rem", alignItems: "center" }}>{Ic.check(15)}Following</span> : "+ Follow"}
     </button>
   );
 }
@@ -386,7 +387,7 @@ export function TimeGrid({
   top?: number;
   pick?: Set<string>;
   fmtSlot: (m: number) => string;
-  // Days are COLUMNS; more than this many paginate (← Earlier / Later →) rather
+  // Days are COLUMNS; more than this many paginate (Earlier / Later buttons) rather
   // than scrolling off-screen, which reads as "the grid just ends".
   daysPerPage?: number;
   onPaint?: (day: string, min: number, on: boolean) => void;
@@ -453,12 +454,12 @@ export function TimeGrid({
       {pages > 1 && (
         <div className="row between" data-testid={`${idPrefix}-pager`}>
           <button type="button" className="btn ghost sm" data-testid={`${idPrefix}-earlier`}
-            disabled={p === 0} onClick={() => setPage(p - 1)}>← Earlier</button>
+            disabled={p === 0} onClick={() => setPage(p - 1)}>Earlier</button>
           <span className="muted small" data-testid={`${idPrefix}-range`}>
             {pageDays[0]?.label} – {pageDays[pageDays.length - 1]?.label}
           </span>
           <button type="button" className="btn ghost sm" data-testid={`${idPrefix}-later`}
-            disabled={p >= pages - 1} onClick={() => setPage(p + 1)}>Later →</button>
+            disabled={p >= pages - 1} onClick={() => setPage(p + 1)}>Later</button>
         </div>
       )}
       <div className={`grid ${onPaint && !readOnly ? "paintable" : ""}`}
@@ -697,15 +698,14 @@ export function HomescreenPrompt({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div className="crop-overlay" data-testid="a2hs-modal">
       <div className="card stack crop-card">
-        <div style={{ fontSize: "2rem" }}>📲</div>
-        <strong>Keep Whensdays one tap away</strong>
+        <strong>Add to home screen</strong>
         <p className="muted small" style={{ margin: 0 }}>
           Your plans, RSVPs, and polls on your home screen - it opens like an app.
         </p>
         {!native && inAppBrowser() && (
           <p className="small" style={{ margin: 0 }}>
             This in-app browser can't install it - open <strong>whensdays.com</strong> in
-            {isIOS() ? " Safari" : " your browser"} first (menu → open in browser).
+            {isIOS() ? " Safari" : " your browser"} first (menu, then open in browser).
           </p>
         )}
         {!native && !inAppBrowser() && isIOS() && (
@@ -925,20 +925,18 @@ export function Avatar({ url, name, size = 36 }: { url?: string | null; name?: s
   return <span className="avatar avatar-fallback" style={style} aria-hidden>{initial}</span>;
 }
 
-// Event tile thumbnail: the cover photo/GIF is the main visual when set;
-// otherwise the type-colored emoji square. Shared by Home, Discover and Groups.
-export function EventThumb({ photo, emoji = "📅", color = "#8b8794", size = 46 }: {
+// Event tile thumbnail: the cover photo/GIF is the main visual when set.
+// Photo-less events render the title directly; no emoji fallback.
+// Shared by Home, Discover and Groups.
+export function EventThumb({ photo, emoji: _emoji = "", color: _color = "#8b8794", size = 46 }: {
   photo?: string; emoji?: string; color?: string; size?: number;
 }) {
   if (photo) {
     return <img className="thumb" data-testid="event-thumb" src={photo} alt=""
       style={{ width: size, height: size }} loading="lazy" />;
   }
-  return (
-    <div className="emoji" style={{ width: size, height: size, fontSize: size * 0.52, display: "grid", placeItems: "center", background: `${color}22`, flex: "none" }}>
-      {emoji}
-    </div>
-  );
+  // Photo-less fallback: defer to Phase 3 TitlePoster. Render nothing for now.
+  return null;
 }
 
 // Klipy GIF picker (server-proxied - the API key never reaches the browser).

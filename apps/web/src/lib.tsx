@@ -57,7 +57,7 @@ export function collapseSeries(events: Event[], pick: "earliest" | "latest" | "n
   return out;
 }
 
-// Count of occurrences per series_id across a list (for a "🔁 N dates" badge).
+// Count of occurrences per series_id across a list (for a series date badge).
 export function seriesCounts(events: Event[]): Record<string, number> {
   const c: Record<string, number> = {};
   for (const e of events) if (e.series_id) c[e.series_id] = (c[e.series_id] || 0) + 1;
@@ -77,12 +77,12 @@ export function eventIsPast(e: Event): boolean {
 // Preset event-page backdrop themes (server-validated; see eventThemes in gifs.go).
 export const EVENT_THEMES: { value: string; label: string }[] = [
   { value: "", label: "None" },
-  { value: "party", label: "🎉 Party" },
-  { value: "beach", label: "🏖️ Beach" },
-  { value: "forest", label: "🌲 Forest" },
-  { value: "night", label: "🌙 Night" },
-  { value: "neon", label: "🪩 Neon" },
-  { value: "cozy", label: "🕯️ Cozy" },
+  { value: "party", label: "Party" },
+  { value: "beach", label: "Beach" },
+  { value: "forest", label: "Forest" },
+  { value: "night", label: "Night" },
+  { value: "neon", label: "Neon" },
+  { value: "cozy", label: "Cozy" },
 ];
 
 // A public event as shown on Discover/Feed (only host-published fields).
@@ -105,6 +105,7 @@ export type PublicEvent = {
 export type Follow = { kind: "host" | "topic"; value: string };
 
 // Discovery categories - the ONLY topics allowed (server-enforced, ranking.go).
+// Labels render without emoji; the emoji field is kept for server data compatibility.
 export const CATEGORIES: { slug: string; label: string; emoji: string }[] = [
   { slug: "gaming", label: "Gaming", emoji: "🎮" },
   { slug: "streams", label: "Streams & shows", emoji: "📺" },

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { CATEGORIES, CITY_OPTIONS, Follow, PublicEvent, fmtDateTime, sendJSON, useApi, useProfile } from "../lib";
 import { Avatar, EventThumb } from "../ui";
 import { EVENTS, analytics } from "../analytics";
+import { Ic } from "../Icons";
 
 // Discover: browse upcoming PUBLIC events by topic or city, and (signed in)
 // follow hosts/topics to build a feed. The browse API is unauthenticated, so
@@ -83,7 +84,7 @@ export function Discover() {
         {CATEGORIES.filter((c) => activeTopics.includes(c.slug) || topic === c.slug).map((c) => (
           <button key={c.slug} type="button" className={`chip sm ${topic === c.slug ? "on" : ""}`}
             data-testid={`disc-cat-${c.slug}`}
-            onClick={() => setTopic(topic === c.slug ? "" : c.slug)}>{c.emoji} {c.label}</button>
+            onClick={() => setTopic(topic === c.slug ? "" : c.slug)}>{c.label}</button>
         ))}
       </div>
       <div className="row">
@@ -92,7 +93,7 @@ export function Discover() {
         <datalist id="disc-city-list">
           {CITY_OPTIONS.map((c) => <option key={c} value={c} />)}
         </datalist>
-        {city && <button type="button" className="btn ghost sm" data-testid="disc-city-clear" onClick={() => setCity("")}>✕</button>}
+        {city && <button type="button" className="btn ghost sm" data-testid="disc-city-clear" onClick={() => setCity("")} title="Clear">{Ic.x()}</button>}
       </div>
 
       {profile && !topic && !city.trim() && (
@@ -101,9 +102,9 @@ export function Discover() {
             <div className="section-h" style={{ margin: 0 }}>For you</div>
             <div className="row" style={{ gap: 4 }}>
               <button type="button" className={`chip sm ${scope === "public" ? "on" : ""}`}
-                data-testid="scope-public" onClick={() => setScope("public")}>🌎 Public</button>
+                data-testid="scope-public" onClick={() => setScope("public")}>Public</button>
               <button type="button" className={`chip sm ${scope === "friends" ? "on" : ""}`}
-                data-testid="scope-friends" onClick={() => setScope("friends")}>🤝 Friends</button>
+                data-testid="scope-friends" onClick={() => setScope("friends")}>Friends</button>
             </div>
           </div>
           {feed.length === 0 && (
@@ -162,7 +163,7 @@ function PublicEventRow({ e, onOpen, canFollow, following, toggleFollow, viewerI
           // A plain category label (not interactive) - filtering by category
           // is done with the chips at the top of the page.
           <span className="cat-tag" data-testid={`cat-tag-${e.topic}`}>
-            {CATEGORIES.find((c) => c.slug === e.topic)?.emoji ?? "#"} {CATEGORIES.find((c) => c.slug === e.topic)?.label ?? e.topic}
+            {CATEGORIES.find((c) => c.slug === e.topic)?.label ?? e.topic}
           </span>
         )}
       </div>
@@ -172,14 +173,14 @@ function PublicEventRow({ e, onOpen, canFollow, following, toggleFollow, viewerI
           <span className="muted">{e.host_name || "A host"}</span>
           {e.friends_going > 0 && (
             <span className="friends-going" data-testid="friends-going" title="Friends going">
-              👥 {e.friends_going} friend{e.friends_going > 1 ? "s" : ""} going
+              {e.friends_going} friend{e.friends_going > 1 ? "s" : ""} going
             </span>
           )}
         </span>
         {canFollow && e.host_id !== viewerId && (
           <button type="button" className="btn ghost sm" data-testid="follow-host"
             onClick={() => toggleFollow("host", e.host_id)}>
-            {following("host", e.host_id) ? "Following ✓" : "Follow host"}
+            {following("host", e.host_id) ? <span className="row" style={{ gap: "0.35rem", alignItems: "center" }}>{Ic.check(15)}Following</span> : "Follow host"}
           </button>
         )}
       </div>

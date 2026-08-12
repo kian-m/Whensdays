@@ -47,7 +47,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
   useEffect(() => {
     const connected = sp.get("connected");
     if (!connected) return;
-    setSavedMsg(sp.get("status") ? "Calendar connection failed - try again." : "Calendar connected ✓");
+    setSavedMsg(sp.get("status") ? "Calendar connection failed - try again." : "Calendar connected");
     sp.delete("connected");
     sp.delete("status");
     setSp(sp, { replace: true });
@@ -194,7 +194,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
     const p: Profile = await res.json();
     setAvatar(p.avatar_url);
     onUpdated(p);
-    setSavedMsg("Photo updated ✓");
+    setSavedMsg("Photo updated");
   }
 
   async function saveProfile(e: React.FormEvent) {
@@ -206,7 +206,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
       return setError(b.error || "could not save");
     }
     onUpdated(await res.json());
-    setSavedMsg("Profile saved ✓");
+    setSavedMsg("Profile saved");
     setEditing(false);
   }
 
@@ -216,7 +216,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
       ...[...dayBusy].map((k) => { const [day, daypart] = k.split(":"); return { day, daypart, status: "busy" }; }),
     ];
     await sendJSON(api, "PUT", "/api/availability/days", { days: payload });
-    setSavedMsg("Availability saved ✓");
+    setSavedMsg("Availability saved");
     setEditingAvail(false);
   }
 
@@ -226,7 +226,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
       ...[...weekBusy].map((k) => { const [wd, part_of_day] = k.split(":"); return { weekday: Number(wd), part_of_day, status: "busy" }; }),
     ];
     await sendJSON(api, "PUT", "/api/availability", { slots: slotsPayload });
-    setSavedMsg("Availability saved ✓");
+    setSavedMsg("Availability saved");
     setEditingAvail(false);
   }
 
@@ -314,9 +314,9 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
           <h3 style={{ margin: 0 }}>Appearance</h3>
           <div className="row" style={{ gap: 6 }}>
             <button type="button" className={`chip sm ${theme === "dark" ? "on" : ""}`}
-              data-testid="theme-dark" onClick={() => { setTheme("dark"); applyTheme("dark"); }}>🌙 Dark</button>
+              data-testid="theme-dark" onClick={() => { setTheme("dark"); applyTheme("dark"); }}>Dark</button>
             <button type="button" className={`chip sm ${theme === "light" ? "on" : ""}`}
-              data-testid="theme-light" onClick={() => { setTheme("light"); applyTheme("light"); }}>☀️ Light</button>
+              data-testid="theme-light" onClick={() => { setTheme("light"); applyTheme("light"); }}>Light</button>
           </div>
         </div>
       </div>
@@ -349,9 +349,9 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
           <div className="row" style={{ gap: 8, alignItems: "center" }} data-testid="paint-toggle">
             <span className="muted small">Tap to mark cells as:</span>
             <button type="button" className={`chip sm ${paintMode === "free" ? "on" : ""}`}
-              data-testid="paint-free" onClick={() => setPaintMode("free")}>🟩 Free</button>
+              data-testid="paint-free" onClick={() => setPaintMode("free")}>Free</button>
             <button type="button" className={`chip sm ${paintMode === "busy" ? "on" : ""}`}
-              data-testid="paint-busy" onClick={() => setPaintMode("busy")}>🟥 Busy</button>
+              data-testid="paint-busy" onClick={() => setPaintMode("busy")}>Busy</button>
           </div>
         )}
 
@@ -370,10 +370,10 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
             <p className="muted small">Tap or slide across cells to mark them {paintMode}; tap a marked cell to clear it. A date/column header fills the whole line.</p>
             <div className="row between" style={{ alignItems: "center" }}>
               <button type="button" className="btn ghost sm" data-testid="avail-earlier"
-                disabled={pageOffset === 0} onClick={() => setPageOffset((o) => Math.max(0, o - PAGE))}>← Earlier</button>
+                disabled={pageOffset === 0} onClick={() => setPageOffset((o) => Math.max(0, o - PAGE))}>Earlier</button>
               <span className="muted small" data-testid="avail-range">{dates[0].label} – {dates[dates.length - 1].label}</span>
               <button type="button" className="btn ghost sm" data-testid="avail-later"
-                disabled={pageOffset >= MAX_OFFSET} onClick={() => setPageOffset((o) => Math.min(MAX_OFFSET, o + PAGE))}>Later →</button>
+                disabled={pageOffset >= MAX_OFFSET} onClick={() => setPageOffset((o) => Math.min(MAX_OFFSET, o + PAGE))}>Later</button>
             </div>
             <DayGrid dates={dates} free={free} busy={dayBusy} locked={busyCells}
               onToggle={toggleCell} onToggleRow={toggleRow} onToggleCol={toggleCol} testid="availability-grid"

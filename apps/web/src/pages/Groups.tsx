@@ -21,11 +21,14 @@ function groupStreak(events: Event[]): number {
   return n;
 }
 import { Avatar, BackLink, ConfirmButton, FollowButton, GifPicker, ListSkeleton, QRButton, fileToAvatar, useAsync, EventThumb } from "../ui";
+import { Ic } from "../Icons";
 
-// Group icon: uploaded photo wins over emoji.
+// Group icon: uploaded photo wins over monogram fallback.
 function GroupIcon({ group, size = 44 }: { group: Group; size?: number }) {
   if (group.icon_url) return <Avatar url={group.icon_url} name={group.name} size={size} />;
-  return <span style={{ fontSize: size * 0.72 }}>{group.emoji || "👥"}</span>;
+  // Monogram: first letter of group name, or empty placeholder (Phase 3: TitlePoster).
+  const initial = group.name.charAt(0).toUpperCase() || "·";
+  return <span style={{ fontSize: size * 0.5, fontWeight: 700, display: "grid", placeItems: "center", width: size, height: size, background: "var(--plum)", color: "var(--cream)", borderRadius: "var(--r-xs)" }}>{initial}</span>;
 }
 
 type GroupsResp = { groups: Group[] };
@@ -137,7 +140,7 @@ export function GroupPublicView({ id, signedOut, onJoined }: { id: string; signe
   return (
     <div className="stack">
       <div className="card stack" style={{ alignItems: "center", textAlign: "center" }} data-testid="group-public-card">
-        {entity.icon_url ? <Avatar url={entity.icon_url} name={entity.name} size={72} /> : <span style={{ fontSize: "3rem" }}>{entity.emoji || "👥"}</span>}
+        {entity.icon_url ? <Avatar url={entity.icon_url} name={entity.name} size={72} /> : (() => { const initial = entity.name.charAt(0).toUpperCase() || "·"; return <span style={{ fontSize: "2rem", fontWeight: 700, width: 72, height: 72, display: "grid", placeItems: "center", background: "var(--plum)", color: "var(--cream)", borderRadius: "var(--r-sm)" }}>{initial}</span>; })()}
         <h1 data-testid="group-public-title">{entity.name}</h1>
         <p className="muted small">{entity.member_count} {entity.member_count === 1 ? "member" : "members"}</p>
         {entity.description && <p className="muted small" style={{ maxWidth: 420 }}>{entity.description}</p>}
@@ -253,7 +256,7 @@ export function GroupPage() {
               <h1 data-testid="group-title">{group.name}</h1>
               {groupStreak(events) >= 2 && (
                 <span className="pill polling" data-testid="group-streak" style={{ alignSelf: "flex-start" }}>
-                  🔥 {groupStreak(events)}-month streak
+                  {groupStreak(events)}-month streak
                 </span>
               )}
             </span>
@@ -270,7 +273,7 @@ export function GroupPage() {
               {canManage && (
                 <>
                   <button type="button" className="btn ghost sm" data-testid="group-edit"
-                    onClick={() => { setEditName(group.name); setEditDesc(group.description); setEditing(true); }}>✎ Edit</button>
+                    onClick={() => { setEditName(group.name); setEditDesc(group.description); setEditing(true); }}>Edit</button>
                   <button className="btn sm" data-testid="group-new-event"
                     onClick={() => nav(`/new?group=${group.id}`)}>+ New event</button>
                 </>
@@ -338,7 +341,7 @@ export function GroupPage() {
               Heads up: links you shared before now open the <b>public page</b> only. To add someone as a member, send the <b>Invite to join</b> link below.
             </span>
             <button type="button" className="btn ghost sm" data-testid="group-link-hint-dismiss"
-              aria-label="Dismiss" onClick={() => { localStorage.setItem(LINK_HINT_KEY, "1"); setLinkHintSeen(true); }}>✕</button>
+              aria-label="Dismiss" onClick={() => { localStorage.setItem(LINK_HINT_KEY, "1"); setLinkHintSeen(true); }}>{Ic.x()}</button>
           </div>
         )}
 
@@ -351,7 +354,7 @@ export function GroupPage() {
             Anyone can open it: what the group is and what's coming up. They can follow, <b>not</b> join.
           </p>
           <button type="button" className="share-copy" data-testid="group-share-copy" title="Tap to copy"
-            onClick={() => { navigator.clipboard?.writeText(shareURL); setCopyMsg("Public page link copied ✓"); }}>
+            onClick={() => { navigator.clipboard?.writeText(shareURL); setCopyMsg("Public page link copied"); }}>
             {shareURL.replace(/^https?:\/\//, "")}
           </button>
         </div>
@@ -365,8 +368,8 @@ export function GroupPage() {
             Grants membership: they'll see every event and the member list. Send it to people you actually want in.
           </p>
           <button type="button" className="share-copy" data-testid="group-invite-copy" title="Tap to copy"
-            onClick={() => { navigator.clipboard?.writeText(inviteURL); setCopyMsg("Invite link copied ✓"); }}>
-            {copyMsg === "Invite link copied ✓" ? "Copied ✓" : "🔗 Copy the invite link"}
+            onClick={() => { navigator.clipboard?.writeText(inviteURL); setCopyMsg("Invite link copied"); }}>
+            {copyMsg === "Invite link copied" ? "Copied" : "Copy the invite link"}
           </button>
           <div className="row wrap" style={{ gap: 6 }}>
             {/* QR belongs to the JOIN link - it's the in-person "scan this to
@@ -487,7 +490,7 @@ export function GroupMembersPage() {
   return (
     <div className="stack">
       <Link to={`/g/${group.id}`} className="muted small" style={{ display: "inline-block", marginBottom: "0.6rem" }}>
-        ← {group.name}
+        
       </Link>
 
       <div className="section-h">Members</div>
@@ -556,7 +559,7 @@ function GroupEventRow({ event, onClick, seriesN, testid = "group-event" }: { ev
         <div className="title">{event.title}</div>
         <div className="muted small">
           {event.status === "polling" ? "Finding a time" : fmtDateTime(event.starts_at)}
-          {seriesN && seriesN > 1 ? <span data-testid="series-badge"> · 🔁 {seriesN} dates</span> : null}
+          {seriesN && seriesN > 1 ? <span data-testid="series-badge"> · {seriesN} dates</span> : null}
         </div>
       </div>
     </div>

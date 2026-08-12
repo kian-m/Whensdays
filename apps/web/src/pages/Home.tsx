@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Event, collapseSeries, eventIsPast, fetchDashboard, seriesCounts, fmtDateTime, useProfile } from "../lib";
 import { Avatar, EventThumb, ListSkeleton, Pill, useAsync } from "../ui";
+import { Ic } from "../Icons";
 
 // Avatar-stack preview: the API sends ≤6 prioritized faces (friends → people
 // with photos → initials-only) + the total going count per event.
@@ -133,7 +134,6 @@ export function Home() {
         <ListSkeleton rows={4} />
       ) : union.length === 0 ? (
         <div className="card empty stack" data-testid="events-empty">
-          <div style={{ fontSize: "2.4rem" }}>🗓️</div>
           <h3>No plans yet</h3>
           <p className="muted">Host a dinner, movie night or camping trip - or wait for an invite.</p>
           {/* No Discover link here - the public surface is out of the product
@@ -197,10 +197,16 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe,
         </div>
         <div className="muted small">
           {e.status === "polling" ? "Finding a time" : fmtDateTime(e.starts_at)}
-          {seriesN && seriesN > 1 ? <span data-testid="series-badge"> · 🔁 {seriesN} dates</span> : null}
+          {seriesN && seriesN > 1 ? <span className="stamp" data-testid="series-badge"> · SERIES · {seriesN} DATES</span> : null}
         </div>
-        <div className="muted small">
-          {e.location_mode === "virtual" ? "💻 Online" : e.location_mode === "find_venue" ? "📍 Location TBD" : `📍 ${e.location_address || "Host's place"}`}
+        <div className="muted small" style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
+          {e.location_mode === "virtual" ? (
+            <><span style={{ display: "flex" }}>{Ic.link(14)}</span>Online</>
+          ) : e.location_mode === "find_venue" ? (
+            <><span style={{ display: "flex" }}>{Ic.place(14)}</span>Location TBD</>
+          ) : (
+            <><span style={{ display: "flex" }}>{Ic.place(14)}</span>{e.location_address || "Host's place"}</>
+          )}
         </div>
         {faces.length > 0 && (
           <div className="facepile" data-testid="facepile">

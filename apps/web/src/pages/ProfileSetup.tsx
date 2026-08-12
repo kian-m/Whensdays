@@ -27,7 +27,7 @@ export function ProfileSetup({ onDone, prefillName }: { onDone: (p: Profile) => 
 
   return (
     <div className="stack" style={{ maxWidth: 420, margin: "2rem auto" }}>
-      <h1>Welcome 👋</h1>
+      <h1>Set up your profile</h1>
       <p className="muted">Just your name and you're in.</p>
       <form className="card stack" onSubmit={save}>
         <div>

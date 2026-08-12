@@ -818,11 +818,11 @@ test.describe("scheduler", () => {
       await expect(fan.getByTestId("group-public-card")).toBeVisible();
       await expect(fan.getByTestId("group-follow")).toHaveText("+ Follow");
       await fan.getByTestId("group-follow").click();
-      await expect(fan.getByTestId("group-follow")).toHaveText("Following ✓");
+      await expect(fan.getByTestId("group-follow")).toContainText("Following");
       // Still a non-member - following didn't join them in.
       await fan.reload();
       await expect(fan.getByTestId("group-public-card")).toBeVisible();
-      await expect(fan.getByTestId("group-follow")).toHaveText("Following ✓");
+      await expect(fan.getByTestId("group-follow")).toContainText("Following");
 
       // The club's listed event is now in their feed - both the dedicated
       // "following" scope and the default public∪followed mix.
@@ -833,9 +833,9 @@ test.describe("scheduler", () => {
       await fan.goto(`/e/${eid}`);
       await expect(fan.getByTestId("hosted-by")).toBeVisible();
       await fan.getByTestId("follow-host").click();
-      await expect(fan.getByTestId("follow-host")).toHaveText("Following ✓");
+      await expect(fan.getByTestId("follow-host")).toHaveText("Following");
       await fan.reload();
-      await expect(fan.getByTestId("follow-host")).toHaveText("Following ✓");
+      await expect(fan.getByTestId("follow-host")).toHaveText("Following");
 
       // The host un-lists the event: it leaves every follower's feed, even
       // though the fan follows BOTH the group and the host.
@@ -1123,7 +1123,7 @@ test.describe("scheduler", () => {
         await fitCell.click(); // idempotent across gate passes (shared DB)
       }
       await g.getByTestId("save-availability").click();
-      await expect(g.getByText("Availability saved ✓")).toBeVisible();
+      await expect(g.getByText("Availability saved")).toBeVisible();
       await g.goto(`/e/${id}`);
       const rsvpDone = g.waitForResponse((r) => r.url().includes("/rsvp") && r.ok());
       await g.getByTestId("rsvp-going").click();
@@ -2137,7 +2137,7 @@ test.describe("scheduler", () => {
       await other.goto("/friends");
       await other.getByTestId("friend-handle").fill("deleter");
       await other.getByTestId("add-friend").click();
-      await expect(other.getByText("Request sent ✓")).toBeVisible();
+      await expect(other.getByText("Request sent")).toBeVisible();
       await page.goto("/friends");
       await page.getByTestId("friend-handle").waitFor();
       await page.getByTestId("decline-delfriend").click(); // arm
@@ -2433,7 +2433,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("gpw-cell-2-noon").click();
     await page.getByTestId("gpw-cell-1-evening").click();
     await page.getByTestId("save-general").click();
-    await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
+    await expect(page.getByTestId("save-general")).toHaveText("Saved");
     // Saved picks survive a reload (persisted, not just local state).
     await page.reload();
     await page.getByTestId("preview-toggle").click();
@@ -2458,7 +2458,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("gpm-cell-12-noon").click();
     await page.getByTestId("gpm-cell-5-evening").click();
     await page.getByTestId("save-general").click();
-    await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
+    await expect(page.getByTestId("save-general")).toHaveText("Saved");
     await page.getByTestId("preview-toggle").click();
     // Host sees the heatmap and schedules straight from a cell: tap the winning
     // cell → it lands in the picks → schedule.
@@ -2510,7 +2510,7 @@ test.describe("scheduler", () => {
     await page.getByTestId("gp-month-1").click();
     await page.getByTestId("gp-cell-1-evening").click();
     await page.getByTestId("save-general").click();
-    await expect(page.getByTestId("save-general")).toHaveText("Saved ✓");
+    await expect(page.getByTestId("save-general")).toHaveText("Saved");
     await page.getByTestId("preview-toggle").click();
 
     // The manually-typed time can be CLEARED again (the old bug: with a cell
@@ -3043,7 +3043,7 @@ test.describe("scheduler", () => {
     await expect(page.getByTestId("crop-modal")).toBeVisible();
     await expect(page.locator(".crop-circle")).toBeVisible();
     await page.getByTestId("crop-save").click();
-    await expect(page.getByText("Photo updated ✓")).toBeVisible();
+    await expect(page.getByText("Photo updated")).toBeVisible();
     await expect(page.getByTestId("avatar-img").first()).toHaveAttribute("src", /^data:image\//);
   });
 
@@ -3065,7 +3065,7 @@ test.describe("scheduler", () => {
       await amy.goto("/friends");
       await amy.getByTestId("friend-handle").fill("ben");
       await amy.getByTestId("add-friend").click();
-      await expect(amy.getByText("Request sent ✓")).toBeVisible(); // request persisted
+      await expect(amy.getByText("Request sent")).toBeVisible(); // request persisted
 
       // Ben accepts (only if a request is pending - keeps the run idempotent),
       // then wait until Amy shows as an accepted friend so the round-trip is done.

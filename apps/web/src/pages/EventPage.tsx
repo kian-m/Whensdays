@@ -4,6 +4,7 @@ import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, ImportedEvent, Ti
 import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, FollowButton, GifPicker, HomescreenPrompt, Linkify, MonthPicker, Pill, TimeGrid, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH, GuestSignupButton } from "../App";
+import { Ic } from "../Icons";
 
 // A poll with a close date stops taking votes after it (server-enforced too).
 function pollClosed(e: { status: string; poll_deadline: string | null }): boolean {
@@ -81,10 +82,10 @@ export function EventPage() {
 
   return (
     <div key={e.id} className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
-      {celebrate && <div className="fx-locked" data-testid="locked-banner">It&rsquo;s locked in 🎉</div>}
+      {celebrate && <div className="fx-locked" data-testid="locked-banner">Locked in</div>}
       {data2.event.status === "draft" && data2.can_manage && (
         <div className="card row between" data-testid="draft-banner">
-          <span className="small">📝 <strong>Draft</strong> - only you{data2.cohosts.length > 0 ? " and cohosts" : ""} can see this. Guests, emails, and reminders are paused.</span>
+          <span className="small"><strong>Draft</strong> - only you{data2.cohosts.length > 0 ? " and cohosts" : ""} can see this. Guests, emails, and reminders are paused.</span>
           <button className="btn sm" style={{ flex: "none" }} data-testid="draft-publish"
             onClick={async () => { await sendJSON(api, "POST", `/api/events/${data2.event.id}/draft`, { draft: false }); reload(); }}>
             Publish
@@ -118,7 +119,7 @@ export function EventPage() {
       {data2.can_manage && (
         <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="preview-toggle"
           onClick={() => setPreview((p) => { analytics.capture(EVENTS.previewToggled, { to: !p ? "guest" : "host" }); return !p; })}>
-          {preview ? "← Back to host view" : "👀 Preview as guest"}
+          {preview ? "Back to host view" : "Preview as guest"}
         </button>
       )}
     </div>
@@ -146,7 +147,7 @@ function MuteToggle({ data }: { data: EventDetail }) {
     <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="mute-toggle"
       disabled={busy} onClick={toggle}
       title={muted ? "You won't get emails about this event" : "Stop emails about this event"}>
-      {muted ? "🔕 Notifications muted - turn back on" : "🔔 Mute notifications"}
+      {muted ? "Notifications muted" : "Mute notifications"}
     </button>
   );
 }
@@ -177,7 +178,7 @@ function SeriesCard({ data }: { data: EventDetail }) {
   return (
     <div className="card stack" data-testid="series">
       <h3 style={{ margin: 0 }}>
-        🔁 Repeats {RECURRENCE_LABEL[data.event.recurrence] || ""} · {idx + 1} of {series.length}
+        Repeats {RECURRENCE_LABEL[data.event.recurrence] || ""} · {idx + 1} of {series.length}
       </h3>
       <div className="row wrap" style={{ gap: 6 }}>
         {series.map((s, i) => (
@@ -193,7 +194,7 @@ function SeriesCard({ data }: { data: EventDetail }) {
         <button type="button" className="btn soft sm" style={{ alignSelf: "flex-start" }}
           data-testid="series-repoll"
           onClick={() => nav(`/new?again=${last.id}&repoll=1`)}>
-          📅 Poll the group for the next dates
+          Poll the group for the next dates
         </button>
       )}
     </div>
@@ -309,7 +310,7 @@ function AddToCalendar({ event }: { event: EventDetail["event"] }) {
           rel="noopener noreferrer"
           onClick={() => analytics.capture(EVENTS.addToCalendarClicked, { target: "google" })}
         >
-          📅 Google Calendar
+          Google Calendar
         </a>
         <button className="btn ghost sm" data-testid="download-ics" disabled={busy} onClick={downloadICS}>
           ⬇️ .ics file
@@ -345,7 +346,7 @@ function GuestView({ data, reload, previewingAsGuest }: { data: EventDetail; rel
   const isGeneral = e.scheduling_mode === "general" && polling && e.general_scope !== "unset";
   const pollVoters = new Set(data.votes.map((v) => v.user_id)).size;
   const genVoters = new Set(data.general_votes.map((v) => v.user_id)).size;
-  const voteSummary = (n: number) => `🗓 Help pick the time — ${n} of ${totalPeople} voted · Vote now`;
+  const voteSummary = (n: number) => `Help pick the time — ${n} of ${totalPeople} voted · Vote now`;
   const isGuest = data.viewer_id.startsWith("guest_");
   // AVAILABILITY-FIRST for guests on an OPEN poll: no time is locked yet, so
   // there is nothing to RSVP to — the poll IS the participation. A guest who
@@ -367,7 +368,7 @@ function GuestView({ data, reload, previewingAsGuest }: { data: EventDetail; rel
       <WhosIn data={data} />
       {guestPollFirst ? (
         <div className="card stack" data-testid="vote-first">
-          <h3>🗓 Help pick the time</h3>
+          <h3>Help pick the time</h3>
           <p className="muted small" style={{ margin: 0 }}>Tap the times that work for you — you'll RSVP once the host locks one in.</p>
           {isPoll
             ? <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} tz={e.timezone} reload={reload} />
@@ -379,7 +380,7 @@ function GuestView({ data, reload, previewingAsGuest }: { data: EventDetail; rel
             isGuest={isGuest} onSelect={setRsvpSel} />
           {pollClosed(e) && (
             <div className="card" data-testid="poll-closed">
-              <span className="muted small">🗳️ This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
+              <span className="muted small">This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
             </div>
           )}
           {/* Voting sits BEHIND the RSVP: gated to committed guests, then collapsed
@@ -460,13 +461,14 @@ function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect }: { ev
       })
       .catch(() => { if (prev !== undefined) pick(prev); else setSel(undefined); });
   }
-  const opts: [string, string][] = [["going", "✅ Going"], ["maybe", "🤔 Maybe"], ["declined", "✕ Can't"]];
+  const opts: [string, string][] = [["going", "Going"], ["maybe", "Maybe"], ["declined", "Can't"]];
   return (
     <div className="card stack">
       <h3>Are you in?</h3>
       <div className="row wrap">
         {opts.map(([v, label]) => (
           <button key={v} className={`chip ${active === v ? "on" : ""}`} data-testid={`rsvp-${v}`} onClick={() => set(v)}>
+            {active === v && v === "going" ? <span style={{ display: "flex", marginRight: "0.35rem" }}>{Ic.check(14)}</span> : null}
             {label}
           </button>
         ))}
@@ -481,13 +483,13 @@ function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect }: { ev
               // the server's capacity gate re-derives the stored value).
               if (active) set(active === "waitlist" ? "going" : active, v);
             }} />
-          🕶️ Hide my name (you'll be counted, not named)
+          Hide my name (you'll be counted, not named)
         </label>
       ) : (
         <button type="button" className="link-btn muted small" data-testid="rsvp-anon-toggle"
           style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, cursor: "pointer" }}
           onClick={() => setShowAnon(true)}>
-          🕵️ RSVP anonymously
+          RSVP anonymously
         </button>
       )}
       {active === "waitlist" && (
@@ -500,7 +502,7 @@ function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect }: { ev
           them. Peak-intent moment - right after they said yes. One line. */}
       {isGuest && (active === "going" || active === "maybe") && (
         <div className="row small" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }} data-testid="rsvp-signup-nudge">
-          <span className="muted" style={{ minWidth: 0 }}>🔔 Guests don't get emails — sign up so reminders reach you.</span>
+          <span className="muted" style={{ minWidth: 0 }}>Guests don't get emails — sign up so reminders reach you.</span>
           <GuestSignupButton testid="rsvp-signup" source="post_rsvp" />
         </div>
       )}
@@ -535,7 +537,7 @@ function PollVote({ eventId, options, votes, viewerId, tz, reload }: {
             {fmtDateTime(o.starts_at, tz)}
             {busyConflict(intervals, o.starts_at) && (
               <span className="pill maybe" style={{ marginLeft: 6 }} data-testid={`busy-${i}`}
-                title={`Conflicts with: ${busyConflict(intervals, o.starts_at)}`}>⚠️ busy</span>
+                title={`Conflicts with: ${busyConflict(intervals, o.starts_at)}`}>busy</span>
             )}
           </span>
           <div className="row">
@@ -543,14 +545,14 @@ function PollVote({ eventId, options, votes, viewerId, tz, reload }: {
               <button key={r} className={`chip sm ${picks[o.id] === r ? "on" : ""}`}
                 data-testid={`vote-${i}-${r}`}
                 onClick={() => { setPicks((p) => ({ ...p, [o.id]: r })); setSaved(false); }}>
-                {r === "yes" ? "👍" : r === "maybe" ? "🤷" : "👎"}
+                {r === "yes" ? "Yes" : r === "maybe" ? "–" : "No"}
               </button>
             ))}
           </div>
         </div>
       ))}
       <button className="btn soft sm" style={{ alignSelf: "flex-start" }} data-testid="save-votes" onClick={save}>
-        {saved ? "Saved ✓" : "Save availability"}
+        {saved ? "Saved" : "Save availability"}
       </button>
     </div>
   );
@@ -747,7 +749,7 @@ function GeneralPoll({ event, votes, viewerId, days, grid, reload }: {
       )}
 
       <button className="btn soft sm" style={{ alignSelf: "flex-start" }} data-testid="save-general" onClick={save}>
-        {saved ? "Saved ✓" : "Save availability"}
+        {saved ? "Saved" : "Save availability"}
       </button>
     </div>
   );
@@ -877,12 +879,12 @@ function Nudge({ data }: { data: EventDetail }) {
     const res = await sendJSON(api, "POST", `/api/events/${data.event.id}/nudge`, {});
     const b = await res.json().catch(() => ({}));
     setBusy(false);
-    setMsg(res.ok ? `Nudged ${b.nudged} ${b.nudged === 1 ? "person" : "people"} 📣` : b.error || "could not nudge");
+    setMsg(res.ok ? `Nudged` : b.error || "could not nudge");
   }
   return (
     <div className="row wrap" style={{ gap: 10 }}>
       <button className="btn soft sm" data-testid="nudge" disabled={busy} onClick={nudge}>
-        🔔 Nudge {pending} who haven&rsquo;t replied
+        Nudge {pending} who haven&rsquo;t replied
       </button>
       <span className="muted small" data-testid="invite-open-stats">{opened} of {pending} opened the invite</span>
       {msg && <span className="muted small" data-testid="nudge-msg">{msg}</span>}
@@ -1018,7 +1020,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
               : e.status === "polling" ? <Pill kind="polling">Polling</Pill>
               : <Pill kind="scheduled">Confirmed</Pill>}
             {canEdit && (
-              <button className="btn ghost sm" data-testid="edit-event-open" onClick={openEdit}>✎ Edit</button>
+              <button className="btn ghost sm" data-testid="edit-event-open" onClick={openEdit}>Edit</button>
             )}
           </span>
         </div>
@@ -1026,28 +1028,36 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
         {/* One date line, even for a series - the full date list lives in the
             Repeats card (listing every date here twice read as clutter). */}
         {(
-          <div className="muted small">
-            🗓️ {e.status === "polling"
-            ? (e.poll_deadline
-              ? (pollClosed(e) ? "Poll closed - time coming soon" : `Time being decided · poll closes ${fmtDateTime(e.poll_deadline, e.timezone)}`)
-              : "Time being decided")
-            : fmtDate(e.starts_at, e.timezone)}
-            {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
-            {e.status !== "polling" && e.ends_at ? ` – ${fmtDateTime(e.ends_at, e.timezone).split(", ").pop()}` : ""}
+          <div className="muted small" style={{ display: "flex", gap: "0.35rem", alignItems: "flex-start" }}>
+            <span style={{ display: "flex", marginTop: "0.15rem" }}>{Ic.calendar(14)}</span>
+            <span>
+              {e.status === "polling"
+              ? (e.poll_deadline
+                ? (pollClosed(e) ? "Poll closed - time coming soon" : `Time being decided · poll closes ${fmtDateTime(e.poll_deadline, e.timezone)}`)
+                : "Time being decided")
+              : fmtDate(e.starts_at, e.timezone)}
+              {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
+              {e.status !== "polling" && e.ends_at ? ` – ${fmtDateTime(e.ends_at, e.timezone).split(", ").pop()}` : ""}
+            </span>
           </div>
         )}
         <div className="muted small">
           {e.location_mode === "virtual" ? (
-            <span className="row" style={{ gap: 8 }}>
-              💻 <a href={e.location_address} target="_blank" rel="noopener noreferrer" className="accent"
+            <span className="row" style={{ gap: 8, alignItems: "center" }}>
+              <span style={{ display: "flex" }}>{Ic.link(14)}</span>
+              <a href={e.location_address} target="_blank" rel="noopener noreferrer" className="accent"
                 style={{ textDecoration: "underline", overflowWrap: "anywhere" }} data-testid="join-link">
                 Join online{(() => { try { return ` (${new URL(e.location_address).host})`; } catch { return ""; } })()}
               </a>
             </span>
-          ) : e.location_mode === "find_venue" ? "📍 Location to be decided"
-            : e.location_address ? (
-              <span className="stack" style={{ gap: 2 }}>
-                <span>📍 {e.location_address}</span>
+          ) : e.location_mode === "find_venue" ? (
+            <span style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
+              <span style={{ display: "flex" }}>{Ic.place(14)}</span>Location to be decided
+            </span>
+          ) : e.location_address ? (
+            <span className="stack" style={{ gap: 2 }}>
+              <span style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
+                <span style={{ display: "flex" }}>{Ic.place(14)}</span>{e.location_address}</span>
                 <span className="row" style={{ gap: 12 }}>
                   <a href={mapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
                     onClick={(ev) => openGoogleMaps(ev, e.location_address)}
@@ -1056,7 +1066,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
                     className="accent" data-testid="directions-apple">Apple Maps ↗</a>
                 </span>
               </span>
-            ) : "📍 Address to come"}
+            ) : "Address to come"}
         </div>
       </div>
     );
@@ -1071,7 +1081,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
       {/* Grouped into 4 disclosure sections, single-open at a time (controlled
           <details>, same pattern as comments/prefs). "When" leads open. */}
       <details className="edit-sec" open={openSec === "when"}>
-        <summary data-testid="edit-sec-when" onClick={secToggle("when")}>🗓️ When</summary>
+        <summary data-testid="edit-sec-when" onClick={secToggle("when")}>When</summary>
         <div className="stack">
           {e.status === "polling" && (
             <label className="field">Poll closes <span className="muted small">(optional)</span>
@@ -1080,7 +1090,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
                   value={deadline} onChange={(ev) => setDeadline(ev.target.value)} />
                 {deadline !== "" && (
                   <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="edit-deadline-clear"
-                    onClick={() => setDeadline("")} title="Remove the close date">✕</button>
+                    onClick={() => setDeadline("")} title="Remove the close date">{Ic.x()}</button>
                 )}
               </span>
             </label>
@@ -1097,7 +1107,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
                     value={endsAt} onChange={(ev) => setEndsAt(ev.target.value)} />
                   {endsAt !== "" && (
                     <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="edit-end-clear"
-                      onClick={() => setEndsAt("")} title="Remove the end time">✕</button>
+                      onClick={() => setEndsAt("")} title="Remove the end time">{Ic.x()}</button>
                   )}
                 </span>
               </label>
@@ -1120,7 +1130,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
                   <input type="datetime-local" className="input" min={MIN_DT} data-testid={`edit-add-date-${i}`}
                     value={d} onChange={(ev) => setAddStarts((m) => m.map((x, j) => (j === i ? ev.target.value : x)))} />
                   <button type="button" className="btn ghost sm" data-testid={`edit-add-date-remove-${i}`}
-                    onClick={() => setAddStarts((m) => m.filter((_, j) => j !== i))}>✕</button>
+                    onClick={() => setAddStarts((m) => m.filter((_, j) => j !== i))}>{Ic.x()}</button>
                 </div>
               ))}
               <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
@@ -1143,7 +1153,7 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
       </details>
 
       <details className="edit-sec" open={openSec === "details"}>
-        <summary data-testid="edit-sec-details" onClick={secToggle("details")}>✏️ Details</summary>
+        <summary data-testid="edit-sec-details" onClick={secToggle("details")}>Details</summary>
         <div className="stack">
           <input className="input" maxLength={140} data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
           <textarea className="input" maxLength={2000} data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
@@ -1156,13 +1166,13 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
       </details>
 
       <details className="edit-sec" open={openSec === "where"}>
-        <summary data-testid="edit-sec-where" onClick={secToggle("where")}>📍 Where</summary>
+        <summary data-testid="edit-sec-where" onClick={secToggle("where")}>Where</summary>
         <div className="stack">
           <div className="row wrap" style={{ gap: 6 }}>
             <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
               data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>
             <button type="button" className={locMode === "virtual" ? "btn sm" : "btn ghost sm"}
-              data-testid="edit-loc-virtual" onClick={() => setLocMode("virtual")}>💻 Online</button>
+              data-testid="edit-loc-virtual" onClick={() => setLocMode("virtual")}>Online</button>
             <button type="button" className={locMode === "find_venue" ? "btn sm" : "btn ghost sm"}
               data-testid="edit-loc-venue" onClick={() => setLocMode("find_venue")}>Set location later</button>
           </div>
@@ -1185,11 +1195,11 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
       </details>
 
       <details className="edit-sec" open={openSec === "look"}>
-        <summary data-testid="edit-sec-look" onClick={secToggle("look")}>🎨 Look</summary>
+        <summary data-testid="edit-sec-look" onClick={secToggle("look")}>Look</summary>
         <div className="stack">
           <div className="row wrap" style={{ gap: 6 }}>
             <button type="button" className="btn ghost sm" data-testid="cover-upload"
-              onClick={() => fileRef.current?.click()}>{photo ? "Change photo" : "📷 Add a photo"}</button>
+              onClick={() => fileRef.current?.click()}>{photo ? "Change photo" : "Add a photo"}</button>
             {photo && (
               <button type="button" className="btn ghost sm" data-testid="cover-remove" onClick={() => setPhoto("")}>Remove</button>
             )}
@@ -1264,7 +1274,7 @@ function HostControls({ data, reload, onCancelled, onCancelFailed }: { data: Eve
           {e.status !== "draft" && e.status !== "cancelled" && (
             <button className="btn ghost sm" data-testid="draft-park" onClick={toDrafts}
               title="Hide from guests and pause all emails - nothing is deleted">
-              📝 Move to drafts
+              Move to drafts
             </button>
           )}
           <button className="btn soft sm" data-testid="toggle-comments" onClick={toggleComments}>
@@ -1342,10 +1352,10 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
   return (
     <details className="card stack" data-testid="comments">
       <summary style={{ cursor: "pointer", fontWeight: 600 }} data-testid="comments-summary">
-        💬 {n > 0 ? `${n} comment${n === 1 ? "" : "s"}` : "Add a comment"}
+        {n > 0 ? `${n} comment${n === 1 ? "" : "s"}` : "Add a comment"}
       </summary>
       <div className="stack" style={{ marginTop: 10 }}>
-      {data.comments.length === 0 && <p className="muted small">Nothing here yet - say hi 👋</p>}
+      {data.comments.length === 0 && <p className="muted small">Nothing here yet - start the thread</p>}
       {data.comments.length > 0 && (
         <div className="stack" style={{ gap: 10 }}>
           {data.comments.map((c, i) => {
@@ -1359,7 +1369,7 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
                     <span className="muted" title={new Date(c.created_at).toLocaleString()}>{timeAgo(c.created_at)}</span>
                     {(own || data.can_manage) && (
                       <span style={{ marginLeft: "auto" }}>
-                        <ConfirmButton label="✕" confirmLabel="Delete?" testid={`comment-delete-${i}`}
+                        <ConfirmButton label="Delete" confirmLabel="Confirm?" testid={`comment-delete-${i}`}
                           onConfirm={() => del(c.id)} />
                       </span>
                     )}
@@ -1377,7 +1387,7 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
           {gif && (
             <span className="row" style={{ gap: 6 }}>
               <img className="comment-gif" data-testid="comment-gif-preview" src={gif} alt="chosen gif" />
-              <button type="button" className="btn ghost sm" onClick={() => setGif("")}>✕</button>
+              <button type="button" className="btn ghost sm" onClick={() => setGif("")}>{Ic.x()}</button>
             </span>
           )}
           <div className="row">
@@ -1386,7 +1396,7 @@ function EventComments({ data, reload }: { data: EventDetail; reload: () => void
             <button type="button" className="btn ghost sm" data-testid="comment-gif-open"
               onClick={() => setPicking((p) => !p)}>GIF</button>
             <button type="button" className="btn ghost sm" data-testid="comment-photo-open"
-              onClick={() => photoRef.current?.click()} title="Attach a photo">📷</button>
+              onClick={() => photoRef.current?.click()} title="Attach a photo"></button>
             <input ref={photoRef} type="file" accept="image/*" data-testid="comment-photo-file"
               style={{ display: "none" }}
               onChange={async (ev) => {
@@ -1417,7 +1427,7 @@ function ShareLink({ eventId }: { eventId: string }) {
       <h3>Invite people</h3>
       <button type="button" className="share-copy" data-testid="share-link" title="Tap to copy"
         onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); analytics.capture(EVENTS.shareLinkCopied); setTimeout(() => setCopied(false), 1800); }}>
-        {copied ? "Copied ✓" : url.replace(/^https?:\/\//, "")}
+        {copied ? "Copied" : url.replace(/^https?:\/\//, "")}
       </button>
       <p className="muted small" style={{ margin: 0 }}>Tap to copy - anyone who opens it can RSVP.</p>
     </div>
@@ -1468,9 +1478,9 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
                 {i === 0 && (yes > 0 || fitOf(o).free > 0) && <span className="pill scheduled" style={{ marginLeft: 6 }}>Best</span>}
                 {(fitOf(o).free > 0 || fitOf(o).busy > 0) && (
                   <span className="muted small" style={{ marginLeft: 6 }} data-testid={`fit-${i}`}>
-                    {fitOf(o).free > 0 && <>🟢 {fitOf(o).free} free</>}
+                    {fitOf(o).free > 0 && <>{fitOf(o).free} free</>}
                     {fitOf(o).free > 0 && fitOf(o).busy > 0 && " · "}
-                    {fitOf(o).busy > 0 && <>🔴 {fitOf(o).busy} busy</>}
+                    {fitOf(o).busy > 0 && <>{fitOf(o).busy} busy</>}
                   </span>
                 )}
               </span>
@@ -1478,7 +1488,7 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
                 <span className="muted small">{yes} available</span>
                 <button type="button" className={`chip sm ${multi.has(o.id) ? "on" : ""}`} data-testid={`select-${i}`}
                   onClick={() => toggleMulti(o.id)} title="Select several, then schedule them together">
-                  {multi.has(o.id) ? "Selected ✓" : "Select"}
+                  {multi.has(o.id) ? "Selected" : "Select"}
                 </button>
                 <button className="btn sm" data-testid={`finalize-${i}`} onClick={() => finalize(o)}>Pick</button>
               </div>
@@ -1877,8 +1887,9 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
           <div className="row wrap" style={{ gap: 6 }} data-testid="picked-cells">
             {[...picked.entries()].map(([key, v]) => (
               <button key={key} type="button" className="chip sm on" data-testid={`picked-${key}`}
-                onClick={() => togglePick(key, v)} title="Tap to remove">
-                {fmtDateTime(new Date(v).toISOString())} ✕
+                onClick={() => togglePick(key, v)} title="Tap to remove" style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                {fmtDateTime(new Date(v).toISOString())}
+                <span style={{ display: "flex", marginLeft: "0.2rem" }}>{Ic.x(13)}</span>
               </button>
             ))}
           </div>
@@ -1889,7 +1900,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
           onChange={(ev) => setWhen(ev.target.value)} />
         {when !== "" && (
           <button type="button" className="btn ghost sm" data-testid="general-finalize-clear"
-            onClick={() => setWhen("")} title="Clear this time">✕</button>
+            onClick={() => setWhen("")} title="Clear this time">{Ic.x()}</button>
         )}
       </div>
       {moreWhens.map((v, i) => (
@@ -1897,7 +1908,7 @@ function GeneralResults({ data, reload }: { data: EventDetail; reload: () => voi
           <input type="datetime-local" className="input" min={MIN_DT} data-testid={`general-finalize-time-${i + 1}`} value={v}
             onChange={(ev) => setMoreWhens((m) => m.map((x, j) => (j === i ? ev.target.value : x)))} />
           <button type="button" className="btn ghost sm" data-testid={`general-finalize-remove-${i + 1}`}
-            onClick={() => setMoreWhens((m) => m.filter((_, j) => j !== i))}>✕</button>
+            onClick={() => setMoreWhens((m) => m.filter((_, j) => j !== i))}>{Ic.x()}</button>
         </div>
       ))}
       <div className="row wrap">
@@ -1976,13 +1987,13 @@ function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: stri
                   </span>
                   {canAdd ? (
                     already ? (
-                      <span className="muted small" data-testid={`friend-requested-${a.handle}`}>Requested ✓</span>
+                      <span className="muted small" data-testid={`friend-requested-${a.handle}`}>Requested</span>
                     ) : (
                       <button className="btn soft sm" data-testid={`add-friend-${a.handle}`}
                         onClick={() => addFriend(a.handle!)}>+ Add friend</button>
                     )
                   ) : friendIds.has(a.user_id) ? (
-                    <span className="muted small">Friends ✓</span>
+                    <span className="muted small">Friends</span>
                   ) : null}
                 </div>
               );

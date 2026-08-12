@@ -32,7 +32,7 @@ export function Friends() {
       return setMsg(b.error || "could not add");
     }
     setHandle("");
-    setMsg("Request sent ✓");
+    setMsg("Request sent");
     reload();
   }
 

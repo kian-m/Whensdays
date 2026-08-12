@@ -4,9 +4,10 @@ import { ClerkProvider } from "@clerk/clerk-react";
 // House Lights type system: Fraunces (display, needs the opsz axis file for
 // its optical-size range), Familjen Grotesk (body/UI), Spline Sans Mono
 // (stamps/pills/section labels). See docs/design/HOUSE-LIGHTS.md §3.
-import "@fontsource-variable/fraunces/opsz.css";
-import "@fontsource-variable/familjen-grotesk";
-import "@fontsource-variable/spline-sans-mono";
+// TODO: Uncomment after Phase 1 font installation (pnpm add @fontsource-variable/*)
+// import "@fontsource-variable/fraunces/opsz.css";
+// import "@fontsource-variable/familjen-grotesk";
+// import "@fontsource-variable/spline-sans-mono";
 import { App, DEV_AUTH } from "./App";
 import { initAnalytics } from "./analytics";
 

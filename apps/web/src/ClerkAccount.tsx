@@ -69,7 +69,7 @@ export function ClerkAccountCard() {
       await user!.update({ primaryEmailAddressId: verified.id });
       await user!.reload();
       setMode("idle"); setEmail(""); setCode(""); setPending(null);
-      setMsg("Email updated ✓");
+      setMsg("Email updated");
     } catch (e) {
       setErr(clerkErr(e, "invalid code"));
     } finally {

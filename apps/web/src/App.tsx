@@ -129,7 +129,7 @@ function ConsentBanner() {
   return (
     <div className="consent-bar" data-testid="consent-banner" role="dialog" aria-label="Cookie consent">
       <span className="small" style={{ minWidth: 0 }}>
-        🍪 We use analytics cookies (PostHog) to understand what to improve - no ads, nothing sold.{" "}
+        Cookies: We use analytics cookies (PostHog) to understand what to improve - no ads, nothing sold.{" "}
         <a href="/cookies/" style={{ textDecoration: "underline" }}>Cookie policy</a>
       </span>
       <span className="row" style={{ gap: 6, flex: "none" }}>
@@ -340,7 +340,7 @@ function GuestJoin({ eventId, onJoined }: { eventId: string | null; onJoined: (a
         <div className="brand" aria-label="Whensdays">
           <span className="dot" /><span className="word" />
         </div>
-        <h1>{eventId ? "You're invited 🎉" : "Let's make a plan ⚡"}</h1>
+        <h1>{eventId ? "You're invited" : "Start the plan"}</h1>
         <p className="muted" style={{ maxWidth: 420 }}>
           {eventId
             ? "Tell us your name and you can RSVP, vote on times, and chat - no account needed."
@@ -402,7 +402,7 @@ function Landing() {
   useEffect(() => {
     analytics.reset();
   }, []);
-  const showcase = ["📚 Book club", "🎲 D&D night", "🏃 Run club", "🎤 Karaoke night", "🎮 Game night", "🍽️ Dinner parties"];
+  const showcase = ["Book club", "D&D night", "Run club", "Karaoke night", "Game night", "Dinner parties"];
   return (
     <div className="app">
       {/* Quiet top bar: brand left, sign-in right - the hero carries the page. */}
