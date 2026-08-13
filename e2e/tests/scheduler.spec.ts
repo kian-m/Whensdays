@@ -2603,13 +2603,15 @@ test.describe("scheduler", () => {
     }
   });
 
-  test("landing: hero and start CTA", async ({ page }) => {
+  test("landing: hero and create-page CTA", async ({ page }) => {
     // /landing is the dev-only alias (no signed-out state exists in the
     // hermetic stack, so the landing is otherwise unreachable here).
     await page.goto("/landing");
-    // Pages/following leads the hero; friend-group planning is the secondary
-    // path just under the primary CTA.
+    // Pages/following leads the whole landing now - performer/venue pitch,
+    // top to bottom. The friend-scheduling pitch moved to the static
+    // /free-scheduler page, so it carries no CTA here anymore.
     await expect(page.locator(".land-title")).toContainText("Fill the room");
+    await expect(page.locator(".land-sub")).toContainText("performer");
     if (DEV_AUTH) {
       // Dev mode has no real sign-up round trip, so the CTA is a button that
       // simulates conversion (see the "sign-up carries intent" test below).
@@ -2620,9 +2622,10 @@ test.describe("scheduler", () => {
       await expect(page.getByTestId("create-page")).toHaveAttribute(
         "href", `/sign-up?redirect_url=${encodeURIComponent("/groups?purpose=page")}`);
     }
-    await expect(page.getByTestId("start-plan")).toBeVisible();
-    await expect(page.getByTestId("start-plan")).toHaveAttribute("href", "/start");
-    await expect(page.locator(".land-points")).toContainText("whole series");
+    // The "Start a plan" guest-scheduling CTA no longer lives on the main
+    // landing (it moved to /free-scheduler, a static page outside the SPA) -
+    // the /start route and its guest flow are untouched, just unlinked here.
+    await expect(page.getByTestId("start-plan")).toHaveCount(0);
     // Support contact in the footer.
     await expect(page.locator('a[href^="mailto:support@whensdays.com"]')).toBeVisible();
   });
