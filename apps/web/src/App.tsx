@@ -413,7 +413,6 @@ function Landing() {
   useEffect(() => {
     analytics.reset();
   }, []);
-  const showcase = ["Book club", "D&D night", "Run club", "Karaoke night", "Game night", "Dinner parties"];
   return (
     <div className="app">
       {/* Quiet top bar: brand left, sign-in right - the hero carries the page. */}
@@ -425,8 +424,7 @@ function Landing() {
         <span className="land-eyebrow">Whensdays</span>
         {/* Pages/following leads (venues, comedians, bands building an
             audience); friend-group planning is the secondary path right
-            below the CTA - it still gets the product shots and the chips,
-            just not top billing. */}
+            below the CTA, just not top billing. */}
         <h1 className="land-title">Build a following.<br />Fill the room.</h1>
         <p className="land-sub">
           Make a page for your venue, band, or comedy night. Fans follow it
@@ -465,19 +463,6 @@ function Landing() {
           Planning with friends instead?{" "}
           <a href="/start" data-testid="start-plan">Start a plan</a> - one link, no accounts needed.
         </p>
-        <div className="land-showcase" aria-hidden>
-          {showcase.map((s) => <span key={s} className="chip">{s}</span>)}
-        </div>
-        {/* The product is the pitch, told in three phones: the invite → find
-            the one best time → or spread a recurring series across weeks. */}
-        <div className="land-shots">
-          <img className="land-shot" src="/landing-shot.jpg" width={553} height={1200}
-            alt="A Whensdays event: 9 of 9 friends in, one-tap RSVP" />
-          <img className="land-shot land-shot-b" src="/landing-shot-2.jpg" width={553} height={1200}
-            alt="A week of everyone's availability with the one best time picked" />
-          <img className="land-shot land-shot-c" src="/landing-shot-3.jpg" width={553} height={1200}
-            alt="A month of availability with three dates scheduled as a recurring series" />
-        </div>
         <div className="land-points">
           <span><b>No app</b> to download</span>
           <span><b>No account</b> for the group to RSVP</span>
