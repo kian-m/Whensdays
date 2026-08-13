@@ -727,33 +727,6 @@ textarea.input { resize: vertical; min-height: 64px; }
    primary CTA, not its own section. */
 .land-micro { color: var(--muted); font-size: 0.9rem; margin-top: 1rem; }
 .land-micro a { font-weight: 700; }
-/* The product shots ARE the pitch: three phones, gently fanned - invite ->
-   pick the one best time -> spread a recurring series. Side by side on
-   desktop; on a phone the third would be too small, so the trio scrolls
-   horizontally (snap) instead of shrinking into unreadability. One shadow
-   per screen (§1.9): only the center shot floats, the outer two are flat
-   with a hairline border like everything else. */
-.land-shots {
-  display: flex; justify-content: center; align-items: flex-start;
-  gap: clamp(0.5rem, 2.4vw, 1.6rem); margin: 3rem auto 0.6rem;
-}
-.land-shot {
-  width: min(240px, 30vw); height: auto; display: block; flex: none;
-  border-radius: 26px; border: 1px solid var(--line);
-  transform: rotate(-2deg);
-}
-.land-shot-b { transform: rotate(1.5deg) translateY(20px); box-shadow: var(--shadow); }
-.land-shot-c { transform: rotate(-1.5deg) translateY(6px); }
-@media (max-width: 640px) {
-  /* Horizontal scroll-snap: full-size phones you swipe through, centered. */
-  .land-shots {
-    justify-content: flex-start; gap: 1rem;
-    overflow-x: auto; scroll-snap-type: x mandatory;
-    padding: 0.5rem calc(50vw - 34vw); -webkit-overflow-scrolling: touch;
-  }
-  .land-shot { width: 68vw; scroll-snap-align: center; transform: none; }
-  .land-shot-b, .land-shot-c { transform: none; }
-}
 .land-title {
   font-family: var(--font-display);
   font-size: clamp(2.9rem, 9vw, 5rem);
@@ -762,9 +735,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 .land-sub { color: var(--muted); max-width: 460px; margin: 1rem auto 1.6rem; font-size: 1.05rem; }
 .land-cta { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
-.land-showcase { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 2rem auto 0; max-width: 520px; }
-.land-showcase .chip { cursor: default; }
-.land-points { display: flex; gap: 0.6rem 1.4rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; color: var(--muted); font-size: 0.9rem; }
+.land-points { display: flex; gap: 0.6rem 1.4rem; justify-content: center; flex-wrap: wrap; margin-top: 2.6rem; color: var(--muted); font-size: 0.9rem; }
 .land-points b { color: var(--ink); }
 
 /* filter chip row - scrolls horizontally on mobile */
