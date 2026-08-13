@@ -1,0 +1,2185 @@
+import { Fragment, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, ImportedEvent, TimeOption, Vote, WEEKDAYS, EVENT_THEMES, busyConflict, daysFromDate, dayLabel as dayCol, fmtDate, fmtDateTime, fmtMinutes, gridSlots, toDatetimeLocal, getJSON, guessCity, importedBusy, mapsUrl, appleMapsUrl, openGoogleMaps, isStandalone, nextMonths, sendJSON, timeAgo, useApi } from "../lib";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, FollowButton, GifPicker, HomescreenPrompt, Linkify, MonthPicker, Pill, TimeGrid, TitlePoster, fileToPhoto, useAsync } from "../ui";
+import { EVENTS, analytics } from "../analytics";
+import { DEV_AUTH, GuestSignupButton } from "../App";
+import { Ic } from "../Icons";
+
+// A poll with a close date stops taking votes after it (server-enforced too).
+function pollClosed(e: { status: string; poll_deadline: string | null }): boolean {
+  return e.status === "polling" && !!e.poll_deadline && new Date(e.poll_deadline).getTime() < Date.now();
+}
+
+// Native min-validation would block dev/E2E backdating - server enforces the
+// same rule with the same dev exemption.
+const MIN_DT = DEV_AUTH ? undefined : toDatetimeLocal(new Date().toISOString());
+
+
+export function EventPage() {
+  const { id } = useParams();
+  const api = useApi();
+  const { data, loading, reload } = useAsync<EventDetail>((a) => getJSON(a, `/api/events/${id}`), [id]);
+  const [preview, setPreview] = useState(false);
+  // Live theme preview while editing the hero card - reflects the whole page
+  // before the edit is saved. null = show the saved theme.
+  const [themePreview, setThemePreview] = useState<string | null>(null);
+  // The lock moment: when this session watches the status flip polling →
+  // scheduled, celebrate - a one-shot confetti burst + banner. Catching the
+  // transition here (rather than in each finalize button) covers every path.
+  const prevStatus = useRef<{ id: string; status: string } | null>(null);
+  const [celebrate, setCelebrate] = useState(false);
+  // Navigating between series occurrences reuses this mounted page (only the
+  // :id param changes), so per-event UI state must reset by hand here - the
+  // rendered children below are keyed by event id instead (remount wholesale).
+  // Host "management mode" = the hero's Edit is open: controls (cancel/draft/
+  // comments/cohosts/nudge/friend-invites) appear ONLY then - the default host
+  // page stays as calm as the guest view.
+  const [heroEditing, setHeroEditing] = useState(false);
+  // Cancelling is OPTIMISTIC like RSVP: the confirm tap flips the page into
+  // "cancelled" immediately (DELETE + reload happen in the background) rather
+  // than sitting there looking like nothing happened for a network round trip.
+  // A failed DELETE reverts it.
+  const [optimisticCancelled, setOptimisticCancelled] = useState(false);
+  useEffect(() => { setThemePreview(null); setPreview(false); setHeroEditing(false); setOptimisticCancelled(false); }, [id]);
+  // One-time add-to-homescreen prompt: fires on the event page right after
+  // this device's FIRST event creation (see the create flows), phones only.
+  const [showA2HS, setShowA2HS] = useState(false);
+  useEffect(() => {
+    try {
+      if (
+        sessionStorage.getItem("whensdays.a2hs-pending") &&
+        !localStorage.getItem("whensdays.a2hs") &&
+        window.matchMedia("(max-width: 640px)").matches &&
+        !isStandalone()
+      ) setShowA2HS(true);
+    } catch { /* private mode */ }
+  }, []);
+  useEffect(() => {
+    if (!data) return;
+    const prev = prevStatus.current;
+    prevStatus.current = { id: data.event.id, status: data.event.status };
+    // Same event only - arriving at a scheduled occurrence from a polling
+    // sibling is navigation, not a lock moment.
+    if (prev?.id === data.event.id && prev.status === "polling" && data.event.status === "scheduled") {
+      setCelebrate(true);
+      const t = setTimeout(() => setCelebrate(false), 3400);
+      return () => clearTimeout(t);
+    }
+  }, [data]);
+
+  if (loading && !data) return <EventSkeleton />;
+  if (!data) return <div className="stack"><BackLink /><p className="muted">Event not found.</p></div>;
+
+  // Overlay the optimistic cancel onto the fetched event so every child below
+  // (which all just read data.event.status) flips together on one state change,
+  // with no per-component wiring - reload() overwrites this with the real
+  // server data once it lands, or a failed DELETE reverts the flag above.
+  const data2 = optimisticCancelled ? { ...data, event: { ...data.event, status: "cancelled" as const } } : data;
+  const showManage = data2.can_manage && !preview;
+  const e = data2.event;
+  const effTheme = themePreview ?? e.theme;
+
+  return (
+    <div key={e.id} className={`stack ${effTheme ? `event-theme theme-${effTheme}` : ""}`}>
+      {celebrate && (
+        <div className="fx-locked" data-testid="locked-banner">
+          <div className="fx-locked-body">
+            <b>Locked in — {fmtDate(e.starts_at, e.timezone)}</b>
+            <span>Everyone going gets the details by email.</span>
+          </div>
+        </div>
+      )}
+      {data2.event.status === "draft" && data2.can_manage && (
+        <div className="card row between" data-testid="draft-banner">
+          <span className="small"><strong>Draft</strong> - only you{data2.cohosts.length > 0 ? " and cohosts" : ""} can see this. Guests, emails, and reminders are paused.</span>
+          <button className="btn sm" style={{ flex: "none" }} data-testid="draft-publish"
+            onClick={async () => { await sendJSON(api, "POST", `/api/events/${data2.event.id}/draft`, { draft: false }); reload(); }}>
+            Publish
+          </button>
+        </div>
+      )}
+      {showA2HS && <HomescreenPrompt onClose={() => { setShowA2HS(false); try { localStorage.setItem("whensdays.a2hs", "1"); sessionStorage.removeItem("whensdays.a2hs-pending"); } catch { /* private mode */ } }} />}
+      {/* Pending-performer banner: shown to the viewer when THEY are a pending
+          performer on this event - their own confirmation is what lets it
+          reach their followers (VENUE-PAGES.md V7). */}
+      {e.status !== "cancelled" && data2.performers.some((p) => p.user_id === data2.viewer_id && p.status === "pending") && (
+        <PendingPerformerBanner data={data2} reload={reload} />
+      )}
+      <BackLink />
+      <HeroCard data={data2} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} onEditing={setHeroEditing} />
+
+      {e.status === "cancelled" && (
+        <div className="card empty" data-testid="cancelled-note">
+          <p className="muted">This get-together was cancelled by the host.</p>
+        </div>
+      )}
+
+      {data2.series && data2.series.length > 1 && <SeriesCard data={data2} />}
+
+      {e.status === "scheduled" && e.starts_at && <AddToCalendar event={e} />}
+
+      {/* Lineup: visible to EVERYONE incl. guests - a page's performers are part
+          of what the event IS, not a management detail (VENUE-PAGES.md V7). */}
+      <Lineup data={data2} canManage={showManage} reload={reload} />
+
+      {e.status !== "cancelled" && (showManage ? <HostView data={data2} reload={reload} editing={heroEditing} onCancelled={() => setOptimisticCancelled(true)} onCancelFailed={() => setOptimisticCancelled(false)} /> : <GuestView data={data2} reload={reload} previewingAsGuest={preview} />)}
+
+      {/* Friend-by-friend invites are management, not the default view - hosts
+          see them while editing; guests (no edit mode) keep them. */}
+      {e.status !== "cancelled" && (!showManage || heroEditing) && <InviteFriends data={data2} reload={reload} />}
+
+      <EventComments data={data2} reload={reload} />
+
+      {!preview && e.status !== "cancelled" && <MuteToggle data={data2} />}
+
+      {data2.can_manage && (
+        <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="preview-toggle"
+          onClick={() => setPreview((p) => { analytics.capture(EVENTS.previewToggled, { to: !p ? "guest" : "host" }); return !p; })}>
+          {preview ? "Back to host view" : "Preview as guest"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Per-event notification mute - available to anyone on the event (host or
+// attendee). Hosts use it to stop the RSVP/comment stream; attendees to stop
+// finalize/reminder mail. Also toggleable one-click from any email.
+function MuteToggle({ data }: { data: EventDetail }) {
+  const api = useApi();
+  const [muted, setMuted] = useState(data.muted);
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    setBusy(true);
+    const next = !muted;
+    const res = await sendJSON(api, "POST", `/api/events/${data.event.id}/mute`, { muted: next });
+    setBusy(false);
+    if (res.ok) {
+      setMuted(next);
+      analytics.capture(EVENTS.notificationsMuted, { muted: next });
+    }
+  }
+  return (
+    <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} data-testid="mute-toggle"
+      disabled={busy} onClick={toggle}
+      title={muted ? "You won't get emails about this event" : "Stop emails about this event"}>
+      {muted ? "Notifications muted" : "Mute notifications"}
+    </button>
+  );
+}
+
+// ---------------- lineup (performers, V7) ----------------
+//
+// Follow a person, see every event they're on - regardless of who hosts it.
+// Display here is immediate (the host's own claim about their lineup); a
+// pending row only reaches the PERFORMER's followers once they confirm (see
+// VENUE-PAGES.md V7 and performers.go). The card itself is visible to
+// everyone including guests - a page's lineup is part of what the event IS.
+
+// Shown to the viewer when they themselves are a pending performer - the
+// consent step that gates their followers ever seeing this event.
+function PendingPerformerBanner({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+  async function confirm() {
+    setBusy(true);
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/performers/confirm`, {});
+    setBusy(false);
+    reload();
+  }
+  async function remove() {
+    await api(`/api/events/${data.event.id}/performers/${data.viewer_id}`, { method: "DELETE" });
+    reload();
+  }
+  return (
+    <div className="card row between" data-testid="pending-performer-banner">
+      <span className="small">You're on the lineup for this event, pending. Confirm to let your followers see it.</span>
+      <span className="row" style={{ gap: 6, flex: "none" }}>
+        <ConfirmButton label="Remove" confirmLabel="Tap again to remove" testid="pending-performer-remove" onConfirm={remove} />
+        <button className="btn sm" data-testid="pending-performer-confirm" disabled={busy} onClick={confirm}>Confirm</button>
+      </span>
+    </div>
+  );
+}
+
+// The Lineup card: avatar/name for every performer (pending or confirmed),
+// a FollowButton per performer (source="lineup" - the same follow primitive
+// as following the host), a pending pill visible to managers and the
+// performer themselves (nobody else should read "pending" as a public label -
+// it's the host's claim, not yet the performer's), manager add-by-handle
+// (mirrors HostControls' cohost form), and remove (managers can remove
+// anyone, a performer can always remove themselves) via the two-tap
+// ConfirmButton destructive pattern.
+function Lineup({ data, canManage, reload }: { data: EventDetail; canManage: boolean; reload: () => void }) {
+  const api = useApi();
+  const [handle, setHandle] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const viewerId = data.viewer_id;
+
+  if (data.performers.length === 0 && !canManage) return null;
+
+  async function addPerformer(ev: React.FormEvent) {
+    ev.preventDefault();
+    setMsg(null);
+    const res = await sendJSON(api, "POST", `/api/events/${data.event.id}/performers`, { handle });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setMsg(b.error || "could not add");
+    }
+    setHandle("");
+    reload();
+  }
+  async function removePerformer(uid: string) {
+    await api(`/api/events/${data.event.id}/performers/${uid}`, { method: "DELETE" });
+    reload();
+  }
+
+  return (
+    <div className="card stack" data-testid="lineup">
+      <h3 style={{ margin: 0 }}>Lineup</h3>
+      {data.performers.map((p) => {
+        const self = p.user_id === viewerId;
+        return (
+          <div key={p.user_id} className="row between" data-testid="performer">
+            <span className="row" style={{ gap: 8, alignItems: "center" }}>
+              <Avatar url={p.avatar_url} name={p.display_name || p.handle || "?"} size={28} />
+              <span>{p.display_name || p.handle}</span>
+              {p.status === "pending" && (canManage || self) && <Pill kind="deciding">Pending</Pill>}
+            </span>
+            <span className="row" style={{ gap: 6, flex: "none" }}>
+              {!self && (
+                <FollowButton kind="host" value={p.user_id} following={p.following} source="lineup"
+                  testid={`follow-performer-${p.handle || p.user_id}`} />
+              )}
+              {(canManage || self) && (
+                <ConfirmButton label="Remove" confirmLabel="Tap again to remove"
+                  testid={`performer-remove-${p.handle || p.user_id}`}
+                  onConfirm={() => removePerformer(p.user_id)} />
+              )}
+            </span>
+          </div>
+        );
+      })}
+      {canManage && (
+        <form className="row" onSubmit={addPerformer}>
+          <input className="input" maxLength={40} data-testid="performer-handle" value={handle}
+            onChange={(ev) => setHandle(ev.target.value)} placeholder="performer's handle" />
+          <button className="btn sm" data-testid="performer-add">Add to lineup</button>
+        </form>
+      )}
+      {msg && <p className="muted small">{msg}</p>}
+    </div>
+  );
+}
+
+// ---------------- recurring series ----------------
+
+// Representative start hour per daypart - used when the host schedules straight
+// from a heat cell (they can fine-tune afterwards; the time stays editable).
+const DAYPART_HOUR: Record<string, number> = {
+  early_morning: 8, morning: 10, noon: 12, afternoon: 15, evening: 19, night: 21,
+};
+
+const RECURRENCE_LABEL: Record<string, string> = {
+  weekly: "weekly", biweekly: "every 2 weeks", monthly: "monthly", custom: "on picked dates",
+};
+
+// Theme picker swatch colors - mirrors the --accent values set per .theme-x
+// in styles.css. Keep in sync (same idiom as the Go themeAccent map).
+const THEME_SWATCH: Record<string, string> = {
+  party: "#e0559b", beach: "#f0993a", forest: "#3f9d6f",
+  night: "#8b83ff", neon: "#ff2d94", cozy: "#df8038",
+};
+
+// Sibling occurrences of a recurring event; the one being viewed is highlighted.
+// When the series is running dry (last occurrence within ~3 weeks or already
+// past), the host gets a one-tap "poll for next dates" that re-invites everyone.
+function SeriesCard({ data }: { data: EventDetail }) {
+  const nav = useNavigate();
+  const series = data.series!;
+  const idx = series.findIndex((s) => s.id === data.event.id);
+  const last = series[series.length - 1];
+  const endingSoon = last?.starts_at
+    ? new Date(last.starts_at).getTime() < Date.now() + 21 * 24 * 3600_000
+    : false;
+  return (
+    <div className="card stack" data-testid="series">
+      <h3 style={{ margin: 0 }}>
+        Repeats {RECURRENCE_LABEL[data.event.recurrence] || ""} · {idx + 1} of {series.length}
+      </h3>
+      <div className="row wrap" style={{ gap: 6 }}>
+        {series.map((s, i) => (
+          <button key={s.id} type="button"
+            className={`chip sm ${s.id === data.event.id ? "on" : ""}`}
+            data-testid={`series-occ-${i}`}
+            onClick={() => s.id !== data.event.id && nav(`/e/${s.id}`)}>
+            {fmtDate(s.starts_at, data.event.timezone)}
+          </button>
+        ))}
+      </div>
+      {data.can_manage && endingSoon && (
+        <button type="button" className="btn soft sm" style={{ alignSelf: "flex-start" }}
+          data-testid="series-repoll"
+          onClick={() => nav(`/new?again=${last.id}&repoll=1`)}>
+          Poll the group for the next dates
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------- invite friends ----------------
+
+// Anyone on the event can invite THEIR friends (friendship = the permission,
+// enforced server-side). Already-attending/invited friends are filtered out.
+function InviteFriends({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const { data: fr } = useAsync<{ friends: { id: string; friend_id: string; display_name: string; handle: string; avatar_url: string }[] }>(
+    (a) => getJSON(a, "/api/friends"),
+  );
+  const there = new Set([
+    ...data.attendees.map((a) => a.user_id),
+    ...data.invites.map((i) => i.user_id),
+    ...data.cohosts.map((c) => c.user_id),
+    data.event.host_id,
+  ]);
+  const invitable = (fr?.friends ?? []).filter((f) => !there.has(f.friend_id));
+  const invitedNames = data.invites.filter((i) => i.display_name).map((i) => i.display_name);
+  if (invitable.length === 0 && invitedNames.length === 0) return null;
+
+  async function invite(friendId: string) {
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/invites`, { friend_id: friendId });
+    reload();
+  }
+
+  return (
+    <div className="card stack" data-testid="invite-friends">
+      <h3 style={{ margin: 0 }}>Invite friends</h3>
+      {invitable.map((f) => (
+        <div key={f.friend_id} className="row between">
+          <span className="row" style={{ gap: 8 }}>
+            <Avatar url={f.avatar_url} name={f.display_name} size={28} />
+            <span>{f.display_name} <span className="muted small">@{f.handle}</span></span>
+          </span>
+          <button className="btn soft sm" data-testid={`invite-${f.handle}`} onClick={() => invite(f.friend_id)}>Invite</button>
+        </div>
+      ))}
+      {invitedNames.length > 0 && (
+        <p className="muted small">Invited: {invitedNames.join(", ")}</p>
+      )}
+    </div>
+  );
+}
+
+// ---------------- add to calendar (export) ----------------
+
+// Compact iCal/Google UTC stamp, e.g. 20260715T190000Z.
+function gcalStamp(d: Date): string {
+  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+// Builds an "Add to Google Calendar" template URL entirely client-side - no API
+// call or account needed. Matches the API's 2h default export duration.
+function googleCalendarUrl(e: EventDetail["event"]): string {
+  const start = new Date(e.starts_at!);
+  const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+  const location = e.location_mode === "find_venue" ? "Location to be decided" : e.location_address || "Address to come";
+  const link = `${window.location.origin}/e/${e.id}`;
+  const p = new URLSearchParams({
+    action: "TEMPLATE",
+    text: e.title,
+    dates: `${gcalStamp(start)}/${gcalStamp(end)}`,
+    details: `${e.description ? e.description + "\n\n" : ""}RSVP & details: ${link}`,
+    location,
+  });
+  return `https://calendar.google.com/calendar/render?${p.toString()}`;
+}
+
+function AddToCalendar({ event }: { event: EventDetail["event"] }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+
+  async function downloadICS() {
+    setBusy(true);
+    try {
+      const res = await api(`/api/events/${event.id}/calendar.ics`);
+      if (!res.ok) throw new Error(`ics ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${event.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "event"}.ics`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      analytics.capture(EVENTS.addToCalendarClicked, { target: "ics" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card stack" data-testid="add-to-calendar">
+      <h3 style={{ margin: 0 }}>Add to your calendar</h3>
+      <p className="muted small" style={{ margin: 0 }}>One tap - title, time and a link back to this page ride along.</p>
+      <div className="row" style={{ gap: "0.6rem", flexWrap: "wrap" }}>
+        {/* Plain link (no fetch): iPhone/Mac open the .ics straight in Calendar. */}
+        <a className="btn sm" data-testid="add-apple" href={`/api/events/${event.id}/calendar.ics`}
+          onClick={() => analytics.capture(EVENTS.addToCalendarClicked, { target: "apple" })}>
+           Apple Calendar
+        </a>
+        <a
+          className="btn ghost sm"
+          data-testid="add-google"
+          href={googleCalendarUrl(event)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => analytics.capture(EVENTS.addToCalendarClicked, { target: "google" })}
+        >
+          Google Calendar
+        </a>
+        <button className="btn ghost sm" data-testid="download-ics" disabled={busy} onClick={downloadICS}>
+          ⬇️ .ics file
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- guest / invitee experience ----------------
+
+function GuestView({ data, reload, previewingAsGuest }: { data: EventDetail; reload: () => void; previewingAsGuest?: boolean }) {
+  const e = data.event;
+  const me = data.attendees.find((a) => a.user_id === data.viewer_id);
+  const myRsvp = me?.rsvp;
+  // RSVP is the ONE first action. We mirror the optimistic pick up here (not only
+  // inside <Rsvp>) so the voting grid gates on the guest's commitment the instant
+  // they tap, before the background refetch of `data` lands.
+  const [rsvpSel, setRsvpSel] = useState<string | undefined>(undefined);
+  const effRsvp = rsvpSel ?? myRsvp;
+  // Only committed guests (going/maybe, or waitlisted = they said yes) get asked
+  // to help pick the time. A "Can't go" or an undecided invitee never sees it.
+  const canVote = effRsvp === "going" || effRsvp === "maybe" || effRsvp === "waitlist";
+
+  // "N of M voted" for the collapsed poll summary - derived from the vote arrays
+  // already on the detail response, so no extra API call.
+  const responded = new Set(data.attendees.map((a) => a.user_id));
+  const pending = data.invites.filter((i) => !responded.has(i.user_id)).length;
+  const totalPeople = data.attendees.length + pending;
+  const polling = e.status === "polling" && !pollClosed(e);
+  const isPoll = e.scheduling_mode === "poll" && polling;
+  // An unset general poll (host hasn't finished setup) has nothing to vote on yet.
+  const isGeneral = e.scheduling_mode === "general" && polling && e.general_scope !== "unset";
+  const pollVoters = new Set(data.votes.map((v) => v.user_id)).size;
+  const genVoters = new Set(data.general_votes.map((v) => v.user_id)).size;
+  const voteSummary = (n: number) => `Help pick the time — ${n} of ${totalPeople} voted · Vote now`;
+  const isGuest = data.viewer_id.startsWith("guest_");
+  // AVAILABILITY-FIRST for guests on an OPEN poll: no time is locked yet, so
+  // there is nothing to RSVP to — the poll IS the participation. A guest who
+  // just typed their name is asked to paint their availability / vote as the ONE
+  // clear first action (prominent, expanded, ungated), and the RSVP card is
+  // hidden until a time is scheduled. Applying it to every guest+polling visit
+  // (not only the literal first render) keeps it consistent AND avoids a bug
+  // where a guest who voted but never RSVP'd could no longer see their vote
+  // (the RSVP-gated <details> below would collapse it away). The authed
+  // (non-guest) RSVP-first flow is left untouched. `previewingAsGuest` ONLY
+  // feeds this branch decision so a host's "Preview as guest" accurately shows
+  // the poll-first card (their real viewer_id is non-guest); it must NOT flow
+  // into `isGuest` elsewhere (sign-up nudge, guest copy) — a previewing host
+  // still sees host-appropriate chrome there.
+  const guestPollFirst = (isGuest || !!previewingAsGuest) && (isPoll || isGeneral);
+
+  return (
+    <div className="stack">
+      <WhosIn data={data} />
+      {guestPollFirst ? (
+        <div className="card stack" data-testid="vote-first">
+          <h3>Help pick the time</h3>
+          <p className="muted small" style={{ margin: 0 }}>Tap the times that work for you — you'll RSVP once the host locks one in.</p>
+          {isPoll
+            ? <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} tz={e.timezone} reload={reload} />
+            : <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id} days={data.poll_days} grid={data.time_grid} reload={reload} />}
+        </div>
+      ) : (
+        <>
+          <Rsvp eventId={e.id} current={myRsvp} currentAnon={!!me?.anonymous} reload={reload}
+            isGuest={isGuest} onSelect={setRsvpSel} hostName={data.host_name} />
+          {pollClosed(e) && (
+            <div className="card" data-testid="poll-closed">
+              <span className="muted small">This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
+            </div>
+          )}
+          {/* Voting sits BEHIND the RSVP: gated to committed guests, then collapsed
+              so RSVP stays the one clear first action. Opens by default if you've
+              already voted (mirrors the preferences pattern). */}
+          {canVote && isPoll && (
+            <details className="card stack" data-testid="vote-details">
+              <summary style={{ cursor: "pointer", fontWeight: 600 }} data-testid="vote-summary">{voteSummary(pollVoters)}</summary>
+              <PollVote eventId={e.id} options={data.time_options} votes={data.votes} viewerId={data.viewer_id} tz={e.timezone} reload={reload} />
+            </details>
+          )}
+          {canVote && isGeneral && (
+            <details className="card stack" data-testid="vote-details">
+              <summary style={{ cursor: "pointer", fontWeight: 600 }} data-testid="vote-summary">{voteSummary(genVoters)}</summary>
+              <GeneralPoll event={e} votes={data.general_votes} viewerId={data.viewer_id}
+                days={data.poll_days} grid={data.time_grid} reload={reload} />
+            </details>
+          )}
+        </>
+      )}
+      <Guests attendees={data.attendees} viewerId={data.viewer_id} />
+    </div>
+  );
+}
+
+// WhosIn - a lightweight social-proof lead-in that sits directly above the RSVP
+// card (NOT its own competing card): the going facepile + an "N of M in" line.
+function WhosIn({ data }: { data: EventDetail }) {
+  const going = data.attendees.filter((a) => a.rsvp === "going");
+  const responded = new Set(data.attendees.map((a) => a.user_id));
+  const pending = data.invites.filter((i) => !responded.has(i.user_id)).length;
+  const total = data.attendees.length + pending;
+  if (total < 2) return null; // nothing social to show yet
+  const pct = Math.max(3, Math.min(100, (going.length / total) * 100));
+  return (
+    <div className="stack" style={{ gap: 6, padding: "2px 4px" }} data-testid="whos-in">
+      <div className="row between">
+        <span className="section-h" style={{ margin: 0 }}>Who&rsquo;s in</span>
+        <span className="stamp">{going.length} / {total}</span>
+      </div>
+      <div className="whosin-bar" aria-hidden><span style={{ width: `${pct}%` }} /></div>
+      <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        {going.length > 0 && (
+          <div className="facepile" style={{ flex: "none" }}>
+            {going.slice(0, 5).map((a) => (
+              <span className="face" key={a.user_id}><Avatar url={a.avatar_url ?? ""} name={a.display_name ?? "?"} size={24} /></span>
+            ))}
+          </div>
+        )}
+        <span className="muted small" data-testid="whos-in-count">
+          <b>{going.length}</b> of {total} in
+          {going.length > 5 && <> · +{going.length - 5} more</>}
+          {data.event.capacity > 0 && <> · {Math.max(0, data.event.capacity - going.length)} of {data.event.capacity} spots left</>}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect, hostName }: { eventId: string; current?: string; currentAnon?: boolean; reload: () => void; isGuest?: boolean; onSelect?: (r: string) => void; hostName?: string }) {
+  const api = useApi();
+  // OPTIMISTIC: the tap flips the selection instantly - waiting on the POST
+  // plus a full event refetch before showing the choice felt broken (Cloud Run
+  // + Neon round-trips add up). Server sync + reload happen in the background;
+  // a failed POST reverts the flip. `onSelect` mirrors the pick to GuestView so
+  // the voting grid can gate on it before the refetch lands.
+  const [sel, setSel] = useState<string | undefined>(undefined);
+  // Anonymity: counted, not named. Rides every RSVP POST; flipping it after
+  // an RSVP re-posts the current answer with the new flag. It's a rare choice,
+  // so it lives behind a one-tap text toggle instead of a full-weight checkbox.
+  const [anon, setAnon] = useState(!!currentAnon);
+  const [showAnon, setShowAnon] = useState(!!currentAnon);
+  const active = sel ?? current;
+  function pick(r: string) { setSel(r); onSelect?.(r); }
+  function set(rsvp: string, anonymous = anon) {
+    const prev = active;
+    pick(rsvp);
+    sendJSON(api, "POST", `/api/events/${eventId}/rsvp`, { rsvp, anonymous })
+      .then(async (res) => {
+        if (!res.ok) return prev !== undefined ? pick(prev) : setSel(undefined);
+        // The server may convert a "going" on a full event into a waitlist
+        // spot - land on what it actually stored.
+        const a = await res.json().catch(() => null);
+        if (a?.rsvp) pick(a.rsvp);
+        reload();
+      })
+      .catch(() => { if (prev !== undefined) pick(prev); else setSel(undefined); });
+  }
+  const opts: [string, string][] = [["going", "Going"], ["maybe", "Maybe"], ["declined", "Can't go"]];
+  return (
+    <div className="card stack">
+      <h3>Are you in?</h3>
+      <div className="row wrap">
+        {opts.map(([v, label]) => (
+          <button key={v} className={`chip ${active === v ? "on" : ""}`} data-testid={`rsvp-${v}`} onClick={() => set(v)}>
+            {active === v && v === "going" ? <span style={{ display: "flex", marginRight: "0.35rem" }}>{Ic.check(14)}</span> : null}
+            {label}
+          </button>
+        ))}
+      </div>
+      {hostName && <p className="rsvp-note">{hostName} gets a note when you answer.</p>}
+      {showAnon ? (
+        <label className="row muted small" style={{ gap: 6, cursor: "pointer" }}>
+          <input type="checkbox" data-testid="rsvp-anon" checked={anon}
+            onChange={(e) => {
+              const v = e.target.checked;
+              setAnon(v);
+              // Already answered? Sync the flag now (waitlist re-posts as going -
+              // the server's capacity gate re-derives the stored value).
+              if (active) set(active === "waitlist" ? "going" : active, v);
+            }} />
+          Hide my name (you'll be counted, not named)
+        </label>
+      ) : (
+        <button type="button" className="link-btn muted small" data-testid="rsvp-anon-toggle"
+          style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+          onClick={() => setShowAnon(true)}>
+          RSVP anonymously
+        </button>
+      )}
+      {active === "waitlist" && (
+        <p className="muted small" style={{ margin: 0 }} data-testid="waitlist-note">
+          ⏳ The event is full - you're on the waitlist. If a spot opens you're bumped in automatically (and emailed).
+        </p>
+      )}
+      {/* The honest post-commit nudge: guests have no email on file, so
+          without an account the reminder and any time change never reach
+          them. Peak-intent moment - right after they said yes. One line. */}
+      {isGuest && (active === "going" || active === "maybe") && (
+        <div className="row small" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }} data-testid="rsvp-signup-nudge">
+          <span className="muted" style={{ minWidth: 0 }}>Guests don't get emails — sign up so reminders reach you.</span>
+          <GuestSignupButton testid="rsvp-signup" source="post_rsvp" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PollVote({ eventId, options, votes, viewerId, tz, reload }: {
+  eventId: string; options: TimeOption[]; votes: Vote[]; viewerId: string; tz?: string; reload: () => void;
+}) {
+  const api = useApi();
+  const initial: Record<string, string> = {};
+  votes.filter((v) => v.user_id === viewerId).forEach((v) => (initial[v.option_id] = v.response));
+  const [picks, setPicks] = useState<Record<string, string>>(initial);
+  const [saved, setSaved] = useState(false);
+  // Your imported calendar (if connected) flags options you're already busy for.
+  const { data: cal } = useAsync<{ events: ImportedEvent[] }>((a) => getJSON(a, "/api/calendar/events"));
+  const intervals = importedBusy(cal?.events ?? []).intervals;
+
+  async function save() {
+    const payload = Object.entries(picks).map(([option_id, response]) => ({ option_id, response }));
+    await sendJSON(api, "POST", `/api/events/${eventId}/votes`, { votes: payload });
+    setSaved(true);
+    reload();
+  }
+
+  return (
+    <div className="stack" style={{ marginTop: 10 }}>
+      {options.map((o, i) => (
+        <div key={o.id} className="row between">
+          <span className="small">
+            {fmtDateTime(o.starts_at, tz)}
+            {busyConflict(intervals, o.starts_at) && (
+              <span className="pill maybe" style={{ marginLeft: 6 }} data-testid={`busy-${i}`}
+                title={`Conflicts with: ${busyConflict(intervals, o.starts_at)}`}>busy</span>
+            )}
+          </span>
+          <div className="row">
+            {(["yes", "maybe", "no"] as const).map((r) => (
+              <button key={r} className={`chip sm ${picks[o.id] === r ? "on" : ""}`}
+                data-testid={`vote-${i}-${r}`}
+                onClick={() => { setPicks((p) => ({ ...p, [o.id]: r })); setSaved(false); }}>
+                {r === "yes" ? "Yes" : r === "maybe" ? "–" : "No"}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <button className="btn soft sm" style={{ alignSelf: "flex-start" }} data-testid="save-votes" onClick={save}>
+        {saved ? "Saved" : "Save availability"}
+      </button>
+    </div>
+  );
+}
+
+// General-availability poll: the guest picks ideal months, plus a per-day grid of
+// times of day (tap a cell, a day header for the whole column, or a time label for
+// the whole row). The whole set is saved at once (replace semantics on the API).
+const slotKey = (wd: number, dp: string) => `${wd}:${dp}`;
+
+// The attendee's side of a general poll. The event's scope decides the question:
+//   week    → "which days & times work this week?"  (7 concrete dates × dayparts)
+//   month   → "which days work this month?"          (28 concrete date chips)
+//   general → "when do things usually work?"         (months + weekday × daypart)
+// The date windows are anchored at the event's created_at so every attendee
+// answers about the same days.
+function GeneralPoll({ event, votes, viewerId, days, grid, reload }: {
+  event: EventDetail["event"]; votes: GeneralVote[]; viewerId: string;
+  days: string[] | null; grid: EventDetail["time_grid"]; reload: () => void;
+}) {
+  const api = useApi();
+  const scope = event.general_scope;
+  const months = nextMonths(6);
+  const mine = votes.filter((v) => v.user_id === viewerId);
+
+  const [selMonths, setSelMonths] = useState<Set<string>>(
+    new Set(mine.filter((v) => v.dimension === "month").map((v) => v.value)),
+  );
+  const [cells, setCells] = useState<Set<string>>(
+    new Set(mine.filter((v) => v.dimension === "slot").map((v) => v.value)),
+  );
+  const [dayCells, setDayCells] = useState<Set<string>>(
+    new Set(mine.filter((v) => v.dimension === "dayslot").map((v) => v.value)),
+  );
+  // 'dates' scope: "YYYY-MM-DD:<minutes>" cells on the host's chosen days.
+  const [timeCells, setTimeCells] = useState<Set<string>>(
+    new Set(mine.filter((v) => v.dimension === "timeslot").map((v) => v.value)),
+  );
+  const [saved, setSaved] = useState(false);
+
+  const mutate = <T,>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, fn: (s: Set<T>) => void) => {
+    setSaved(false);
+    setter((prev) => {
+      const next = new Set(prev);
+      fn(next);
+      return next;
+    });
+  };
+  const toggleMonth = (m: string) => mutate(setSelMonths, (s) => (s.has(m) ? s.delete(m) : s.add(m)));
+  const toggleCell = (k: string) => mutate(setCells, (s) => (s.has(k) ? s.delete(k) : s.add(k)));
+  // Toggle a whole column (a day) or row (a daypart): fill unless already full.
+  const toggleColumn = (wd: number) => mutate(setCells, (s) => {
+    const keys = DAYPARTS.map((dp) => slotKey(wd, dp.value));
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
+  const toggleRow = (dp: string) => mutate(setCells, (s) => {
+    const keys = WEEKDAYS.map((_, wd) => slotKey(wd, dp));
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
+
+  // Week scope: 7 concrete dates × dayparts (same DayGrid as availability).
+  const weekDates = daysFromDate(event.created_at, 7);
+  const toggleDayCell = (day: string, dp: string) => mutate(setDayCells, (s) => (s.has(`${day}:${dp}`) ? s.delete(`${day}:${dp}`) : s.add(`${day}:${dp}`)));
+  const toggleDayRow = (day: string) => mutate(setDayCells, (s) => {
+    const keys = DAYPARTS.map((dp) => `${day}:${dp.value}`);
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
+  const toggleDayCol = (dp: string) => mutate(setDayCells, (s) => {
+    const keys = weekDates.map((d) => `${d.value}:${dp}`);
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
+
+  // Month scope: 28 concrete dates × dayparts - same grid as week, longer window.
+  const monthDates = daysFromDate(event.created_at, 28);
+  const toggleMonthCol = (dp: string) => mutate(setDayCells, (s) => {
+    const keys = monthDates.map((d) => `${d.value}:${dp}`);
+    const full = keys.every((k) => s.has(k));
+    keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+  });
+
+  async function save() {
+    const body: Record<string, unknown> = {};
+    if (scope === "week") {
+      body.day_slots = [...dayCells].map((k) => {
+        const [day, dp] = k.split(":");
+        return { day, daypart: dp };
+      });
+    } else if (scope === "month") {
+      body.day_slots = [...dayCells].map((k) => {
+        const [day, dp] = k.split(":");
+        return { day, daypart: dp };
+      });
+    } else if (scope === "dates") {
+      body.time_slots = [...timeCells].map((k) => {
+        const [day, min] = k.split(":");
+        return { day, minutes: Number(min) };
+      });
+    } else {
+      body.months = [...selMonths];
+      body.slots = [...cells].map((k) => {
+        const [wd, dp] = k.split(":");
+        return { weekday: Number(wd), daypart: dp };
+      });
+    }
+    await sendJSON(api, "POST", `/api/events/${event.id}/general-votes`, body);
+    setSaved(true);
+    reload();
+  }
+
+  return (
+    <div className="stack" style={{ marginTop: 10 }}>
+      {scope === "week" && (
+        <div>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <span className="muted small">Tap or slide across the times that work (a date or column header fills the line)</span>
+            <button type="button" className="btn ghost sm" data-testid="gpw-clear"
+              disabled={dayCells.size === 0} onClick={() => mutate(setDayCells, (s) => s.clear())}>Clear</button>
+          </div>
+          <DayGrid dates={weekDates} free={dayCells} idPrefix="gpw" testid="gp-week-grid"
+            onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleDayCol}
+            paintOn={dayCells}
+            onPaint={(day, dp, on) => mutate(setDayCells, (s) => (on ? s.add(`${day}:${dp}`) : s.delete(`${day}:${dp}`)))} />
+        </div>
+      )}
+
+      {scope === "month" && (
+        <div>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <span className="muted small">Tap or slide across the times that work over the next 4 weeks (a date or column header fills the line)</span>
+            <button type="button" className="btn ghost sm" data-testid="gp-days-clear"
+              disabled={dayCells.size === 0} onClick={() => mutate(setDayCells, (s) => s.clear())}>Clear</button>
+          </div>
+          <DayGrid dates={monthDates} free={dayCells} idPrefix="gpm" testid="gp-month-grid"
+            onToggle={toggleDayCell} onToggleRow={toggleDayRow} onToggleCol={toggleMonthCol}
+            paintOn={dayCells}
+            onPaint={(day, dp, on) => mutate(setDayCells, (s) => (on ? s.add(`${day}:${dp}`) : s.delete(`${day}:${dp}`)))} />
+        </div>
+      )}
+
+      {scope === "dates" && grid && (
+        <div>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <span className="muted small">Tap or slide across the times that work (tap a day or time label to fill the whole line)</span>
+            <button type="button" className="btn ghost sm" data-testid="gp-times-clear"
+              disabled={timeCells.size === 0} onClick={() => mutate(setTimeCells, (s) => s.clear())}>Clear</button>
+          </div>
+          <TimeGrid days={(days || []).map(dayCol)} slots={gridSlots(grid.start_min, grid.end_min, grid.slot_min)}
+            free={timeCells} fmtSlot={fmtMinutes} idPrefix="gpt" testid="gp-time-grid"
+            onToggleCol={(day) => mutate(setTimeCells, (s) => {
+              const keys = gridSlots(grid.start_min, grid.end_min, grid.slot_min).map((m) => `${day}:${m}`);
+              const full = keys.every((k) => s.has(k));
+              keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+            })}
+            onToggleRow={(m) => mutate(setTimeCells, (s) => {
+              const keys = (days || []).map((d) => `${d}:${m}`);
+              const full = keys.every((k) => s.has(k));
+              keys.forEach((k) => (full ? s.delete(k) : s.add(k)));
+            })}
+            paintOn={timeCells}
+            onPaint={(day, min, on) => mutate(setTimeCells, (s) => (on ? s.add(`${day}:${min}`) : s.delete(`${day}:${min}`)))} />
+        </div>
+      )}
+
+      {scope === "general" && (
+        <>
+          <div>
+            <div className="muted small" style={{ marginBottom: 6 }}>Ideal months</div>
+            <div className="row wrap">
+              {months.map((m, i) => (
+                <button key={m.value} className={`chip sm ${selMonths.has(m.value) ? "on" : ""}`}
+                  data-testid={`gp-month-${i}`} onClick={() => toggleMonth(m.value)}>{m.label}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="muted small" style={{ marginBottom: 6 }}>Times that work - tap or slide across cells (a day or column header fills the line)</div>
+            {/* The shared DayGrid (weekday rows × dayparts) so slide-to-paint
+                works here exactly like every other availability grid. Row
+                index = weekday, so gp-cell-<wd>-<part> testids are preserved. */}
+            <DayGrid
+              dates={WEEKDAYS.map((d, wd) => ({ value: String(wd), label: d }))}
+              free={cells} idPrefix="gp" testid="gp-general-grid"
+              onToggle={(day, dp) => toggleCell(`${day}:${dp}`)}
+              onToggleRow={(day) => toggleColumn(Number(day))}
+              onToggleCol={(dp) => toggleRow(dp)}
+              paintOn={cells}
+              onPaint={(day, dp, on) => mutate(setCells, (m) => (on ? m.add(`${day}:${dp}`) : m.delete(`${day}:${dp}`)))} />
+          </div>
+        </>
+      )}
+
+      <button className="btn soft sm" style={{ alignSelf: "flex-start" }} data-testid="save-general" onClick={save}>
+        {saved ? "Saved" : "Save availability"}
+      </button>
+    </div>
+  );
+}
+
+// 30-min time choices for the 'dates'-poll grid window (12:00 AM → 11:30 PM).
+const GRID_TIME_CHOICES = gridSlots(0, 1440, 30);
+
+// Post-create general-poll setup. The create flow was slimmed and no longer asks
+// "what does this poll ask?" (that scope picker + calendar + time window was a
+// heavy creation step), so a fresh general poll lands general_scope='unset' and
+// the host completes this ONE step here - the same scope picker, relocated out
+// of the wizard onto the event page. Once set, guests can vote.
+function GeneralSetup({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const [scope, setScope] = useState<"week" | "month" | "general" | "dates">("general");
+  const [pollDays, setPollDays] = useState<Set<string>>(new Set());
+  const [gridStart, setGridStart] = useState(540); // 9:00 AM
+  const [gridEnd, setGridEnd] = useState(1260); // 9:00 PM
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setError(null);
+    setSaving(true);
+    const body: Record<string, unknown> = { general_scope: scope };
+    if (scope === "dates") {
+      body.poll_days = [...pollDays].sort();
+      body.grid_start = gridStart;
+      body.grid_end = gridEnd;
+    }
+    const res = await sendJSON(api, "POST", `/api/events/${data.event.id}/poll-setup`, body);
+    setSaving(false);
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setError(b.error || "could not set up the poll");
+    }
+    analytics.capture(EVENTS.pollSetup, { scope });
+    reload();
+  }
+
+  return (
+    <div className="card stack" data-testid="general-setup">
+      <div>
+        <h3 style={{ margin: 0 }}>Finish setting up your poll</h3>
+        <p className="muted small" style={{ margin: "4px 0 0" }}>What should the group weigh in on? You'll lock in a time from the results.</p>
+      </div>
+      <div className="row wrap" style={{ gap: 6 }}>
+        {([["week", "This week"], ["month", "This month"], ["general", "Generally"], ["dates", "Pick days"]] as const).map(([v, l]) => (
+          <button key={v} type="button" className={`chip sm ${scope === v ? "on" : ""}`}
+            data-testid={`scope-${v}`} onClick={() => setScope(v)}>{l}</button>
+        ))}
+      </div>
+      <p className="muted small" style={{ margin: 0 }}>
+        {scope === "week" && "Guests mark which days and times work over the next 7 days."}
+        {scope === "month" && "Guests tap the days that work over the next 4 weeks."}
+        {scope === "general" && "Guests pick their ideal months, days of the week, and times of day."}
+        {scope === "dates" && "Pick the exact days you're considering, then guests paint the actual times that work on each."}
+      </p>
+      {scope === "dates" && (
+        <div className="stack" style={{ gap: 8 }}>
+          <MonthPicker selected={pollDays} onToggle={(d) => setPollDays((s) => {
+            const n = new Set(s); n.has(d) ? n.delete(d) : n.add(d); return n;
+          })} />
+          <div className="row wrap" style={{ gap: 8, alignItems: "center" }}>
+            <span className="muted small">Between</span>
+            <select className="input" style={{ maxWidth: 130 }} data-testid="grid-start" value={gridStart}
+              onChange={(e) => setGridStart(Number(e.target.value))}>
+              {GRID_TIME_CHOICES.filter((m) => m < gridEnd).map((m) => <option key={m} value={m}>{fmtMinutes(m)}</option>)}
+            </select>
+            <span className="muted small">and</span>
+            <select className="input" style={{ maxWidth: 130 }} data-testid="grid-end" value={gridEnd}
+              onChange={(e) => setGridEnd(Number(e.target.value))}>
+              {GRID_TIME_CHOICES.filter((m) => m > gridStart).map((m) => <option key={m} value={m}>{fmtMinutes(m)}</option>)}
+            </select>
+          </div>
+          {pollDays.size === 0 && <p className="muted small" style={{ margin: 0 }} data-testid="dates-hint">Tap at least one day above.</p>}
+        </div>
+      )}
+      {error && <p className="err">{error}</p>}
+      <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} data-testid="poll-setup-save"
+        disabled={saving || (scope === "dates" && pollDays.size === 0)} onClick={save}>
+        {saving ? "Saving…" : "Start the poll"}
+      </button>
+    </div>
+  );
+}
+
+// ---------------- host management view ----------------
+
+function HostView({ data, reload, editing, onCancelled, onCancelFailed }: { data: EventDetail; reload: () => void; editing?: boolean; onCancelled?: () => void; onCancelFailed?: () => void }) {
+  const e = data.event;
+  // A general poll created through the slimmed wizard has no scope yet - the
+  // host finishes that one setup step here before the poll is useful.
+  const needsSetup = e.scheduling_mode === "general" && e.general_scope === "unset";
+  return (
+    <div className="stack">
+      {needsSetup && <GeneralSetup data={data} reload={reload} />}
+      <ShareLink eventId={e.id} />
+      {editing && <Nudge data={data} />}
+      {/* Results earn their card: nothing renders until someone has voted. */}
+      {e.scheduling_mode === "poll" && e.status === "polling" && data.votes.length > 0 && (
+        <PollResults data={data} reload={reload} />
+      )}
+      {e.scheduling_mode === "general" && e.status === "polling" && data.general_votes.length > 0 && (
+        <GeneralResults data={data} reload={reload} />
+      )}
+      <Guests attendees={data.attendees} viewerId={data.viewer_id} />
+      {editing && data.role === "host" && <HostControls data={data} reload={reload} onCancelled={onCancelled} onCancelFailed={onCancelFailed} />}
+    </div>
+  );
+}
+
+// Nudge - the host's lever for "nobody replied": one tap re-emails only the
+// invited people who haven't responded (server rate-limits to once a day).
+function Nudge({ data }: { data: EventDetail }) {
+  const api = useApi();
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const responded = new Set(data.attendees.map((a) => a.user_id));
+  const pendingInvites = data.invites.filter((i) => !responded.has(i.user_id));
+  const pending = pendingInvites.length;
+  const opened = pendingInvites.filter((i) => i.seen).length;
+  if (pending === 0 || data.event.status === "cancelled") return null;
+  async function nudge() {
+    setBusy(true);
+    const res = await sendJSON(api, "POST", `/api/events/${data.event.id}/nudge`, {});
+    const b = await res.json().catch(() => ({}));
+    setBusy(false);
+    setMsg(res.ok ? `Nudged` : b.error || "could not nudge");
+  }
+  return (
+    <div className="row wrap" style={{ gap: 10 }}>
+      <button className="btn soft sm" data-testid="nudge" disabled={busy} onClick={nudge}>
+        Nudge {pending} who haven&rsquo;t replied
+      </button>
+      <span className="muted small" data-testid="invite-open-stats">{opened} of {pending} opened the invite</span>
+      {msg && <span className="muted small" data-testid="nudge-msg">{msg}</span>}
+    </div>
+  );
+}
+
+// The hero card: cover art + title/meta, and - for the host/cohosts - an Edit
+// button that flips the card into in-place editing (details, visibility, a
+// square cover photo or Klipy GIF, and a page backdrop theme).
+function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: EventDetail; reload: () => void; canEdit: boolean; onPreviewTheme: (t: string | null) => void; onEditing?: (v: boolean) => void }) {
+  const api = useApi();
+  const e = data.event;
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { onEditing?.(editing); }, [editing, onEditing]);
+  const [title, setTitle] = useState(e.title);
+  const [desc, setDesc] = useState(e.description);
+  const [locMode, setLocMode] = useState(e.location_mode);
+  const [locAddr, setLocAddr] = useState(e.location_address);
+  const [visibility, setVisibility] = useState(e.visibility);
+  const [topic, setTopic] = useState(e.topic);
+  const [city, setCity] = useState(e.city || guessCity());
+  const [photo, setPhoto] = useState(e.photo_url);
+  const [theme, setTheme] = useState(e.theme);
+  // Editable start time - only meaningful once the event has a concrete time
+  // (fixed or finalized); a poll still decides its time by voting.
+  const [startsAt, setStartsAt] = useState(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
+  const [deadline, setDeadline] = useState(e.poll_deadline ? toDatetimeLocal(e.poll_deadline) : "");
+  const [capacity, setCapacity] = useState(e.capacity > 0 ? String(e.capacity) : "");
+  const [endsAt, setEndsAt] = useState(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
+  // Following: does this event surface to people who follow the host/group?
+  const [listed, setListed] = useState(e.listed);
+  // Sibling occurrences (multi-date series): every date is editable from here,
+  // one input per occurrence. Keyed by sibling event id.
+  const sibs = (data.series ?? []).filter((x) => x.id !== e.id && x.starts_at);
+  const [sibTimes, setSibTimes] = useState<Record<string, string>>({});
+  const sibValue = (id: string, iso: string) => sibTimes[id] ?? toDatetimeLocal(iso);
+  // Extra dates the host adds while editing - each becomes a new occurrence.
+  const [addStarts, setAddStarts] = useState<string[]>([]);
+  // Series editing: apply content edits (title/details/cover/theme…) to every
+  // occurrence - each keeps its own date.
+  const [applySeries, setApplySeries] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // The edit form is grouped into 4 disclosure sections; only ONE is open at a
+  // time (openSec holds its key, null = all collapsed). "When" leads open -
+  // retiming is by far the most common edit here.
+  const [openSec, setOpenSec] = useState<string | null>("when");
+  const secToggle = (id: string) => (ev: React.MouseEvent) => {
+    ev.preventDefault(); // controlled <details>: state, not the browser, owns open
+    setOpenSec((cur) => (cur === id ? null : id));
+  };
+
+  function openEdit() {
+    // Re-seed from the freshest event so a stale card never overwrites edits.
+    setTitle(e.title); setDesc(e.description); setLocMode(e.location_mode);
+    setLocAddr(e.location_address); setVisibility(e.visibility);
+    setTopic(e.topic); setCity(e.city || guessCity());
+    setPhoto(e.photo_url); setTheme(e.theme); setMsg(null);
+    setStartsAt(e.starts_at && e.status === "scheduled" ? toDatetimeLocal(e.starts_at) : "");
+    setDeadline(e.poll_deadline ? toDatetimeLocal(e.poll_deadline) : "");
+    setCapacity(e.capacity > 0 ? String(e.capacity) : "");
+    setEndsAt(e.ends_at ? toDatetimeLocal(e.ends_at) : "");
+    setListed(e.listed);
+    setSibTimes({});
+    setAddStarts([]);
+    setOpenSec("when"); // reopen to the most-common edit each time
+    setEditing(true);
+  }
+
+  function onPickPhoto(ev: React.ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    ev.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    setCropFile(file); // CropModal takes it from here (square cover crop)
+  }
+
+  async function save(ev: React.FormEvent) {
+    ev.preventDefault();
+    setMsg(null);
+    const res = await sendJSON(api, "PUT", `/api/events/${e.id}`, {
+      title, description: desc, location_mode: locMode, location_address: locAddr,
+      visibility, topic: visibility === "public" ? topic : "", city: visibility === "public" ? city.trim() : "",
+      photo_url: photo, theme,
+      starts_at: startsAt ? new Date(startsAt).toISOString() : "",
+      ends_at: endsAt ? new Date(endsAt).toISOString() : "",
+      apply_series: applySeries,
+      series_times: sibs
+        .filter((x) => sibTimes[x.id] && sibTimes[x.id] !== toDatetimeLocal(x.starts_at!))
+        .map((x) => ({ id: x.id, starts_at: new Date(sibTimes[x.id]).toISOString() })),
+      add_starts: addStarts.filter((d) => d.trim() !== "").map((d) => new Date(d).toISOString()),
+      poll_deadline: deadline ? new Date(deadline).toISOString() : "",
+      capacity: capacity.trim() === "" ? 0 : Number(capacity),
+      listed,
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setMsg(b.error || "could not save");
+    }
+    setEditing(false);
+    onPreviewTheme(null);
+    reload();
+  }
+
+  if (!editing) {
+    // Poster stamp line: venue/city if known, else nothing (there is no
+    // event-type field on the frontend Event model to fall back to - see
+    // the Phase 4/5 note in the House Lights doc).
+    const posterSub = e.location_mode === "host_place" && e.location_address
+      ? e.location_address
+      : e.city || undefined;
+    return (
+      <div className="card event-hero">
+        {/* Cover slot: a real photo/GIF, or the TitlePoster playbill fallback
+            when there's none - never an emoji tile, never nothing. */}
+        {e.photo_url
+          ? <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />
+          : <TitlePoster title={e.title} sub={posterSub} scale="hero" />}
+        <div className="hero-body stack">
+          {/* Title left, Edit right on desktop; stacked on a phone (the title
+              gets the full width instead of being squeezed to a sliver). */}
+          <div className="card-header">
+            <div style={{ minWidth: 0 }}>
+              <h1><span data-testid="event-title">{e.title}</span></h1>
+              {data.host_name && (
+                <span className="row" style={{ gap: 6, marginTop: 4 }} data-testid="hosted-by">
+                  <Avatar url={data.host_avatar || null} name={data.host_name} size={20} />
+                  <span className="muted small">Hosted by <strong>{data.host_name}</strong></span>
+                  {/* Follow the HOST (asymmetric - their listed events land in your
+                      feed). Hidden for the host themselves and for guests, who have
+                      no account to hang a follow on (same gate as "+ Add friend"). */}
+                  {data.role !== "host" && !data.viewer_id.startsWith("guest_") && (
+                    <FollowButton kind="host" value={e.host_id} following={data.following_host}
+                      source="event_page" testid="follow-host" />
+                  )}
+                </span>
+              )}
+            </div>
+            {canEdit && (
+              <span className="row card-actions" style={{ gap: 6, alignItems: "center" }}>
+                <button className="btn ghost sm" data-testid="edit-event-open" onClick={openEdit}>Edit</button>
+              </span>
+            )}
+          </div>
+          {/* Status pill sits under the title/host row, not beside it. */}
+          <div>
+            {e.status === "cancelled" ? <Pill kind="cancelled">Cancelled</Pill>
+              : e.status === "draft" ? <Pill kind="draft">Draft</Pill>
+              : e.status === "polling" ? <Pill kind="deciding">Deciding</Pill>
+              : <Pill kind="locked">Locked in</Pill>}
+          </div>
+          {e.description && <p style={{ overflowWrap: "anywhere" }}><Linkify text={e.description} /></p>}
+          {/* One date line, even for a series - the full date list lives in the
+              Repeats card (listing every date here twice read as clutter). */}
+          <div className="meta">
+            {e.status === "polling" ? Ic.clock() : Ic.calendar()}
+            <div>
+              <span className="stamp time">
+                {e.status === "polling"
+                  ? (pollClosed(e) ? "Poll closed" : "Time being decided")
+                  : fmtDate(e.starts_at, e.timezone)}
+                {e.status !== "polling" && e.starts_at ? ` · ${fmtDateTime(e.starts_at, e.timezone).split(", ").pop()}` : ""}
+                {e.status !== "polling" && e.ends_at ? ` – ${fmtDateTime(e.ends_at, e.timezone).split(", ").pop()}` : ""}
+              </span>
+              {e.status === "polling" && (
+                pollClosed(e)
+                  ? <div className="sub">Time coming soon</div>
+                  : e.poll_deadline
+                    ? <div className="sub">Poll closes {fmtDateTime(e.poll_deadline, e.timezone)}</div>
+                    : null
+              )}
+            </div>
+          </div>
+          <div className="meta">
+            {e.location_mode === "virtual" ? Ic.link() : Ic.place()}
+            <div>
+              {e.location_mode === "virtual" ? (
+                <a href={e.location_address} target="_blank" rel="noopener noreferrer" className="accent"
+                  style={{ textDecoration: "underline", overflowWrap: "anywhere" }} data-testid="join-link">
+                  Join online{(() => { try { return ` (${new URL(e.location_address).host})`; } catch { return ""; } })()}
+                </a>
+              ) : e.location_mode === "find_venue" ? (
+                "Location to be decided"
+              ) : e.location_address ? (
+                <>
+                  <span style={{ overflowWrap: "anywhere" }}>{e.location_address}</span>
+                  <div className="sub row" style={{ gap: 12 }}>
+                    <a href={mapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
+                      onClick={(ev) => openGoogleMaps(ev, e.location_address)}
+                      className="accent" data-testid="directions-link">Google Maps</a>
+                    <a href={appleMapsUrl(e.location_address)} target="_blank" rel="noopener noreferrer"
+                      className="accent" data-testid="directions-apple">Apple Maps</a>
+                  </div>
+                </>
+              ) : "Address to come"}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form className="card stack" data-testid="hero-edit" onSubmit={save}>
+      {/* Cover preview leads the form as the hero visual (mirrors the read
+          view), independent of which section is open. */}
+      {photo && <img className="event-cover" data-testid="event-cover" src={photo} alt="" />}
+
+      {/* Grouped into 4 disclosure sections, single-open at a time (controlled
+          <details>, same pattern as comments/prefs). "When" leads open. */}
+      <details className="edit-sec" open={openSec === "when"}>
+        <summary data-testid="edit-sec-when" onClick={secToggle("when")}>When</summary>
+        <div className="stack">
+          {e.status === "polling" && (
+            <label className="field">Poll closes <span className="muted small">(optional)</span>
+              <span className="row" style={{ gap: 6 }}>
+                <input type="datetime-local" className="input" min={MIN_DT} data-testid="edit-deadline"
+                  value={deadline} onChange={(ev) => setDeadline(ev.target.value)} />
+                {deadline !== "" && (
+                  <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="edit-deadline-clear"
+                    onClick={() => setDeadline("")} title="Remove the close date">{Ic.x()}</button>
+                )}
+              </span>
+            </label>
+          )}
+          {e.status === "scheduled" && (
+            <>
+              <label className="field">{sibs.length > 0 ? "This date" : "When"}
+                <input type="datetime-local" className="input" min={MIN_DT} data-testid="edit-time"
+                  value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
+              </label>
+              <label className="field">Ends <span className="muted small">(optional)</span>
+                <span className="row" style={{ gap: 6 }}>
+                  <input type="datetime-local" className="input" min={startsAt || MIN_DT} data-testid="edit-end"
+                    value={endsAt} onChange={(ev) => setEndsAt(ev.target.value)} />
+                  {endsAt !== "" && (
+                    <button type="button" className="btn ghost sm" style={{ flex: "none" }} data-testid="edit-end-clear"
+                      onClick={() => setEndsAt("")} title="Remove the end time">{Ic.x()}</button>
+                  )}
+                </span>
+              </label>
+            </>
+          )}
+          {sibs.map((occ, i) => (
+            <label className="field" key={occ.id}>Date {i + 2} of the series
+              <input type="datetime-local" className="input" min={MIN_DT}
+                data-testid={`edit-time-sib-${i}`} value={sibValue(occ.id, occ.starts_at!)}
+                onChange={(ev) => setSibTimes((m) => ({ ...m, [occ.id]: ev.target.value }))} />
+            </label>
+          ))}
+          {/* Grow the series after the fact: each added date becomes a sibling
+              occurrence with the same content and everyone carried over (a lone
+              event turns into a series). */}
+          {e.status === "scheduled" && (
+            <>
+              {addStarts.map((d, i) => (
+                <div key={i} className="row" style={{ gap: 6 }}>
+                  <input type="datetime-local" className="input" min={MIN_DT} data-testid={`edit-add-date-${i}`}
+                    value={d} onChange={(ev) => setAddStarts((m) => m.map((x, j) => (j === i ? ev.target.value : x)))} />
+                  <button type="button" className="btn ghost sm" data-testid={`edit-add-date-remove-${i}`}
+                    onClick={() => setAddStarts((m) => m.filter((_, j) => j !== i))}>{Ic.x()}</button>
+                </div>
+              ))}
+              <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start" }}
+                data-testid="edit-add-date" onClick={() => setAddStarts((m) => [...m, ""])}>
+                + Add another date
+              </button>
+              {addStarts.length > 0 && (
+                <p className="muted small">New dates join this event as one series - everyone on it is carried over and RSVPs per date.</p>
+              )}
+            </>
+          )}
+          {(data.series?.length ?? 0) > 1 && (
+            <label className="row small" style={{ gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" data-testid="edit-apply-series" checked={applySeries}
+                onChange={(ev2) => setApplySeries(ev2.target.checked)} />
+              Apply to all {data.series!.length} dates in this series (each keeps its own time)
+            </label>
+          )}
+        </div>
+      </details>
+
+      <details className="edit-sec" open={openSec === "details"}>
+        <summary data-testid="edit-sec-details" onClick={secToggle("details")}>Details</summary>
+        <div className="stack">
+          <input className="input" maxLength={140} data-testid="edit-title" value={title} onChange={(ev) => setTitle(ev.target.value)} placeholder="Title" />
+          <textarea className="input" maxLength={2000} data-testid="edit-desc" value={desc} rows={2} onChange={(ev) => setDesc(ev.target.value)} placeholder="Description" />
+          <label className="row small" style={{ gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" data-testid="edit-listed" checked={listed}
+              onChange={(ev) => setListed(ev.target.checked)} />
+            Show to my followers
+          </label>
+        </div>
+      </details>
+
+      <details className="edit-sec" open={openSec === "where"}>
+        <summary data-testid="edit-sec-where" onClick={secToggle("where")}>Where</summary>
+        <div className="stack">
+          <div className="row wrap" style={{ gap: 6 }}>
+            <button type="button" className={locMode === "host_place" ? "btn sm" : "btn ghost sm"}
+              data-testid="edit-loc-host" onClick={() => setLocMode("host_place")}>Set an address</button>
+            <button type="button" className={locMode === "virtual" ? "btn sm" : "btn ghost sm"}
+              data-testid="edit-loc-virtual" onClick={() => setLocMode("virtual")}>Online</button>
+            <button type="button" className={locMode === "find_venue" ? "btn sm" : "btn ghost sm"}
+              data-testid="edit-loc-venue" onClick={() => setLocMode("find_venue")}>Set location later</button>
+          </div>
+          {locMode === "host_place" && (
+            <AddressInput value={locAddr} onChange={setLocAddr} placeholder="Start typing an address…" testid="edit-address" />
+          )}
+          {locMode === "virtual" && (
+            <input className="input" maxLength={300} data-testid="edit-meeting-url" value={locAddr} inputMode="url"
+              placeholder="https://zoom.us/j/… or https://meet.google.com/…"
+              onChange={(ev) => setLocAddr(ev.target.value)} />
+          )}
+          {/* Visibility/topic/city controls removed with Discover (App.tsx TABS
+              note) - the API keeps them and save re-sends the CURRENT values, so
+              existing public events keep their settings untouched. */}
+          <label className="field">Max spots <span className="muted small">(optional - beyond it people join a waitlist)</span>
+            <input type="number" min={0} max={500} inputMode="numeric" className="input" data-testid="edit-capacity"
+              value={capacity} placeholder="Unlimited" onChange={(ev) => setCapacity(ev.target.value)} />
+          </label>
+        </div>
+      </details>
+
+      <details className="edit-sec" open={openSec === "look"}>
+        <summary data-testid="edit-sec-look" onClick={secToggle("look")}>Look</summary>
+        <div className="stack">
+          <div className="row wrap" style={{ gap: 6 }}>
+            <button type="button" className="btn ghost sm" data-testid="cover-upload"
+              onClick={() => fileRef.current?.click()}>{photo ? "Change photo" : "Add a photo"}</button>
+            {photo && (
+              <button type="button" className="btn ghost sm" data-testid="cover-remove" onClick={() => setPhoto("")}>Remove</button>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" data-testid="cover-file"
+              style={{ display: "none" }} onChange={onPickPhoto} />
+            {cropFile && (
+              <CropModal file={cropFile} shape="square" size={640}
+                onDone={(url) => { setPhoto(url); setCropFile(null); }}
+                onCancel={() => setCropFile(null)} />
+            )}
+          </div>
+          <GifPicker onPick={(url) => setPhoto(url)} />
+          <div className="row wrap" style={{ gap: 6 }}>
+            <span className="muted small">Theme:</span>
+            {EVENT_THEMES.map((t) => (
+              <button key={t.value} type="button" className={`chip sm ${theme === t.value ? "on" : ""}`}
+                data-testid={`theme-${t.value || "none"}`}
+                onClick={() => { setTheme(t.value); onPreviewTheme(t.value || null); }}>
+                {/* swatch + name, no emoji - the theme itself is the swatch color */}
+                {t.value && <span className="theme-swatch" style={{ background: THEME_SWATCH[t.value] }} aria-hidden />}
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </details>
+
+      {msg && <p className="err small">{msg}</p>}
+      {/* Sticky action bar: in a taller sectioned form Save/Cancel must stay
+          reachable without scrolling back down (sticky to the form's bottom). */}
+      <div className="row edit-actions">
+        <button className="btn primary" data-testid="edit-save">Save changes</button>
+        <button type="button" className="btn ghost sm" data-testid="edit-cancel" onClick={() => { setEditing(false); onPreviewTheme(null); }}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+// Host-only controls: toggle the comment thread + manage cohosts.
+function HostControls({ data, reload, onCancelled, onCancelFailed }: { data: EventDetail; reload: () => void; onCancelled?: () => void; onCancelFailed?: () => void }) {
+  const api = useApi();
+  const e = data.event;
+  const [handle, setHandle] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function toggleComments() {
+    await sendJSON(api, "PUT", `/api/events/${e.id}/comments-enabled`, { enabled: !e.comments_enabled });
+    reload();
+  }
+  async function toDrafts() {
+    await sendJSON(api, "POST", `/api/events/${e.id}/draft`, { draft: true });
+    reload();
+  }
+  async function addCohost(ev: React.FormEvent) {
+    ev.preventDefault();
+    setMsg(null);
+    const res = await sendJSON(api, "POST", `/api/events/${e.id}/cohosts`, { handle });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return setMsg(b.error || "could not add");
+    }
+    setHandle("");
+    reload();
+  }
+  async function removeCohost(uid: string) {
+    await api(`/api/events/${e.id}/cohosts/${uid}`, { method: "DELETE" });
+    reload();
+  }
+
+  return (
+    <div className="card stack" data-testid="host-controls">
+      <h3 style={{ margin: 0 }}>Host controls</h3>
+      <div className="row between">
+        <span className="small">Comments are <strong>{e.comments_enabled ? "on" : "off"}</strong></span>
+        <span className="row" style={{ gap: 6, flex: "none" }}>
+          {e.status !== "draft" && e.status !== "cancelled" && (
+            <button className="btn ghost sm" data-testid="draft-park" onClick={toDrafts}
+              title="Hide from guests and pause all emails - nothing is deleted">
+              Move to drafts
+            </button>
+          )}
+          <button className="btn soft sm" data-testid="toggle-comments" onClick={toggleComments}>
+            {e.comments_enabled ? "Turn off" : "Turn on"}
+          </button>
+        </span>
+      </div>
+
+      <div className="section-h">Cohosts</div>
+      <p className="muted small" style={{ margin: 0 }}>Cohosts can edit the event, share the invite, and moderate comments.</p>
+      {data.cohosts.map((c) => (
+        <div key={c.user_id} className="row between" data-testid="cohost">
+          <span>{c.display_name || c.handle} <span className="muted small">@{c.handle}</span></span>
+          <ConfirmButton label="Remove" confirmLabel="Tap again to remove" testid={`cohost-remove-${c.handle}`}
+            onConfirm={() => removeCohost(c.user_id)} />
+        </div>
+      ))}
+      <form className="row" onSubmit={addCohost}>
+        <input className="input" maxLength={40} data-testid="cohost-handle" value={handle} onChange={(ev) => setHandle(ev.target.value)} placeholder="friend's handle" />
+        <button className="btn sm" data-testid="cohost-add">Add cohost</button>
+      </form>
+      {msg && <p className="muted small">{msg}</p>}
+
+      <div className="section-h">Danger zone</div>
+      <div className="row wrap">
+        <ConfirmButton label="Cancel event" confirmLabel="Tap again - guests will see it as cancelled" testid="cancel-event"
+          onConfirm={async () => {
+            onCancelled?.(); // optimistic: the page reads as cancelled instantly
+            const res = await api(`/api/events/${e.id}`, { method: "DELETE" });
+            if (!res.ok) onCancelFailed?.();
+            reload();
+          }} />
+        {e.series_id && (
+          <ConfirmButton label="Cancel whole series" confirmLabel="Tap again - cancels EVERY date" testid="cancel-series"
+            onConfirm={async () => {
+              onCancelled?.();
+              const res = await api(`/api/events/${e.id}?series=all`, { method: "DELETE" });
+              if (!res.ok) onCancelFailed?.();
+              reload();
+            }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// The comment thread - visible to everyone; composer shows when comments are on.
+function EventComments({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const e = data.event;
+  const [body, setBody] = useState("");
+  const [gif, setGif] = useState("");      // a picked Klipy gif OR an uploaded photo riding on the next post
+  const [picking, setPicking] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
+
+  async function post() {
+    if (!body.trim() && !gif) return;
+    const res = await sendJSON(api, "POST", `/api/events/${e.id}/comments`, { body, gif_url: gif });
+    if (res.ok) {
+      setBody("");
+      setGif("");
+      setPicking(false);
+      reload();
+    }
+  }
+  async function del(cid: string) {
+    await api(`/api/events/${e.id}/comments/${cid}`, { method: "DELETE" });
+    reload();
+  }
+
+  const n = data.comments.length;
+  // Collapsed by default (same disclosure pattern as preferences) so the thread
+  // + composer don't compete with RSVP as the first action. Uncontrolled <details>
+  // (no `open` prop) keeps the user's toggle across background refetches.
+  return (
+    <details className="card stack" data-testid="comments">
+      <summary className="section-h" style={{ cursor: "pointer", margin: 0 }} data-testid="comments-summary">
+        {n > 0 ? `Comments · ${n}` : "Comments"}
+      </summary>
+      <div className="stack" style={{ marginTop: 10 }}>
+      {data.comments.length === 0 && <p className="muted small">Nothing here yet - start the thread</p>}
+      {data.comments.length > 0 && (
+        <div className="stack" style={{ gap: 10 }}>
+          {data.comments.map((c, i) => {
+            const own = c.user_id === data.viewer_id;
+            return (
+              <div key={c.id} className="comment-row" data-testid="comment">
+                <Avatar url={c.avatar_url} name={c.display_name} size={30} />
+                <div className={`comment-bubble ${own ? "own" : ""}`}>
+                  <div className="comment-meta">
+                    <strong>{own ? "You" : c.display_name || "Someone"}</strong>
+                    <span className="muted" title={new Date(c.created_at).toLocaleString()}>{timeAgo(c.created_at)}</span>
+                    {(own || data.can_manage) && (
+                      <span style={{ marginLeft: "auto" }}>
+                        <ConfirmButton label="Delete" confirmLabel="Confirm?" testid={`comment-delete-${i}`}
+                          onConfirm={() => del(c.id)} />
+                      </span>
+                    )}
+                  </div>
+                  {c.body && <div className="comment-body"><Linkify text={c.body} /></div>}
+                  {c.gif_url && <img className="comment-gif" data-testid="comment-gif" src={c.gif_url} alt="gif" loading="lazy" />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {e.comments_enabled ? (
+        <div className="stack" style={{ gap: 6 }}>
+          {gif && (
+            <span className="row" style={{ gap: 6 }}>
+              <img className="comment-gif" data-testid="comment-gif-preview" src={gif} alt="chosen gif" />
+              <button type="button" className="btn ghost sm" onClick={() => setGif("")}>{Ic.x()}</button>
+            </span>
+          )}
+          <div className="row">
+            <input className="input" maxLength={2000} data-testid="comment-input" value={body} placeholder="Say something…"
+              onChange={(ev) => setBody(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && post()} />
+            <button type="button" className="btn ghost sm" data-testid="comment-gif-open"
+              onClick={() => setPicking((p) => !p)}>GIF</button>
+            <button type="button" className="btn ghost sm" data-testid="comment-photo-open"
+              onClick={() => photoRef.current?.click()} title="Attach a photo"></button>
+            <input ref={photoRef} type="file" accept="image/*" data-testid="comment-photo-file"
+              style={{ display: "none" }}
+              onChange={async (ev) => {
+                const f = ev.target.files?.[0];
+                ev.target.value = "";
+                if (!f) return;
+                try { setGif(await fileToPhoto(f)); setPicking(false); } catch { /* unreadable image */ }
+              }} />
+            <button className="btn sm" data-testid="comment-post" onClick={post} disabled={!body.trim() && !gif}>Post</button>
+          </div>
+          {picking && <GifPicker onPick={(url) => { setGif(url); setPicking(false); }} />}
+        </div>
+      ) : (
+        <p className="muted small" data-testid="comments-off">Comments are turned off for this event.</p>
+      )}
+      </div>
+    </details>
+  );
+}
+
+function ShareLink({ eventId }: { eventId: string }) {
+  const url = `${location.origin}/e/${eventId}`;
+  const [copied, setCopied] = useState(false);
+  // ONE affordance by design: the link itself. Tap = copied. (QR, WhatsApp/SMS
+  // deep links, and web-share were removed - the link travels everywhere.)
+  return (
+    <div className="card stack">
+      <h3>Invite people</h3>
+      <button type="button" className="share-copy" data-testid="share-link" title="Tap to copy"
+        onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); analytics.capture(EVENTS.shareLinkCopied); setTimeout(() => setCopied(false), 1800); }}>
+        {copied ? "Copied" : url.replace(/^https?:\/\//, "")}
+      </button>
+      <p className="muted small" style={{ margin: 0 }}>Tap to copy - anyone who opens it can RSVP.</p>
+    </div>
+  );
+}
+
+function PollResults({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const voters = new Set(data.votes.map((v) => v.user_id)).size || 1;
+  const yesFor = (o: TimeOption) => data.votes.filter((v) => v.option_id === o.id && v.response === "yes").length;
+  // Rank best-first: explicit yes-votes, then how the slot fits EVERYONE's
+  // saved availability (server-computed across all attendees, not just the
+  // viewer) - the "it just knows" ranking.
+  const fitOf = (o: TimeOption) => data.option_fit?.[o.id] ?? { free: 0, busy: 0 };
+  const ranked = [...data.time_options].sort((a, b) =>
+    (yesFor(b) - yesFor(a)) || (fitOf(b).free - fitOf(a).free) || (fitOf(a).busy - fitOf(b).busy));
+  async function finalize(o: TimeOption) {
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, { starts_at: o.starts_at });
+    reload();
+  }
+  // Multi-pick: tap several options, schedule them all as one series (everyone
+  // carried onto each date, RSVPs intact).
+  const [multi, setMulti] = useState<Set<string>>(new Set());
+  const toggleMulti = (id: string) => setMulti((m) => {
+    const next = new Set(m);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+  async function finalizeMulti() {
+    const times = ranked.filter((o) => multi.has(o.id)).map((o) => o.starts_at).sort();
+    if (times.length === 0) return;
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, {
+      starts_at: times[0], more_starts: times.slice(1),
+    });
+    reload();
+  }
+  return (
+    <div className="card stack">
+      <h3>Availability</h3>
+      {ranked.map((o, i) => {
+        const yes = yesFor(o);
+        return (
+          <div key={o.id} className="stack" style={{ gap: 4 }}>
+            <div className="row between">
+              <span className="small">
+                {fmtDateTime(o.starts_at, data.event.timezone)}
+                {i === 0 && (yes > 0 || fitOf(o).free > 0) && <span className="pill scheduled" style={{ marginLeft: 6 }}>Best</span>}
+                {(fitOf(o).free > 0 || fitOf(o).busy > 0) && (
+                  <span className="muted small" style={{ marginLeft: 6 }} data-testid={`fit-${i}`}>
+                    {fitOf(o).free > 0 && <>{fitOf(o).free} free</>}
+                    {fitOf(o).free > 0 && fitOf(o).busy > 0 && " · "}
+                    {fitOf(o).busy > 0 && <>{fitOf(o).busy} busy</>}
+                  </span>
+                )}
+              </span>
+              <div className="row">
+                <span className="muted small">{yes} available</span>
+                <button type="button" className={`chip sm ${multi.has(o.id) ? "on" : ""}`} data-testid={`select-${i}`}
+                  onClick={() => toggleMulti(o.id)} title="Select several, then schedule them together">
+                  {multi.has(o.id) ? "Selected" : "Select"}
+                </button>
+                <button className="btn sm" data-testid={`finalize-${i}`} onClick={() => finalize(o)}>Pick</button>
+              </div>
+            </div>
+            <div className="tally"><span style={{ width: `${(yes / voters) * 100}%` }} /></div>
+          </div>
+        );
+      })}
+      {multi.size > 0 && (
+        <button className="btn primary" style={{ alignSelf: "flex-start" }} data-testid="finalize-multi" onClick={finalizeMulti}>
+          Schedule {multi.size} date{multi.size > 1 ? "s" : ""} as a series
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Aggregates the general poll for the host, shaped by the event's scope:
+//   week    → a dates × dayparts heatmap over the event's 7-day window
+//   month   → a ranked list of the most-picked days
+//   general → month ranking + weekday×daypart heatmap (the original)
+// Darker = more people free; then the host finalizes a concrete time.
+function GeneralResults({ data, reload }: { data: EventDetail; reload: () => void }) {
+  const api = useApi();
+  const [when, setWhen] = useState("");
+  const scope = data.event.general_scope;
+
+  const voters = new Set(data.general_votes.map((v) => v.user_id)).size;
+
+  // Per-guest view: tap a responder's dot to see exactly what THEY picked,
+  // overlaid on the aggregate. Names/photos come from the attendee list.
+  const [sel, setSel] = useState<string | null>(null);
+  const responders = [...new Set(data.general_votes.map((v) => v.user_id))].map((uid) => {
+    const v = data.voters?.find((x) => x.user_id === uid);
+    const a = data.attendees.find((x) => x.user_id === uid);
+    return { id: uid, name: v?.display_name || a?.display_name || "Guest", avatar: v?.avatar_url || a?.avatar_url || null };
+  });
+  const selVals = new Set(sel ? data.general_votes.filter((v) => v.user_id === sel).map((v) => v.value) : []);
+  // With a responder selected, make their availability unmistakable: their
+  // picks fill + glow in the accent while every other cell fades right back.
+  // (A subtle border alone was unreadable over the heat colors.)
+  const pickedStyle = (value: string): React.CSSProperties => {
+    if (!sel) return {};
+    return selVals.has(value)
+      ? {
+          background: "color-mix(in srgb, var(--accent) 38%, transparent)",
+          boxShadow: "inset 0 0 0 2px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 50%, transparent)",
+          position: "relative", zIndex: 1,
+        }
+      : { opacity: 0.22, filter: "saturate(0.35)" };
+  };
+
+  const countBy = (dimension: string) => {
+    const m = new Map<string, number>();
+    data.general_votes.filter((v) => v.dimension === dimension)
+      .forEach((v) => m.set(v.value, (m.get(v.value) ?? 0) + 1));
+    return m;
+  };
+  // Results heatmap intensity: three discrete teal steps (.c1/.c2/.c3 in
+  // styles.css), not a continuous gradient - "how full is this cell" reads
+  // as tiers. Rendering only - togglePick/canPick/instCell below are
+  // untouched.
+  const heatClass = (n: number, top: number): string => {
+    if (n === 0) return "";
+    const frac = n / Math.max(1, top);
+    return frac >= 0.67 ? "c3" : frac >= 0.34 ? "c2" : "c1";
+  };
+  const bestClass = (n: number, top: number): string => (n > 0 && n === top ? "best" : "");
+
+  // general scope: month ranking + weekday×daypart heatmap.
+  const monthCounts = countBy("month");
+  const months = [...monthCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const monthLabel = (v: string) => {
+    const [y, mo] = v.split("-").map(Number);
+    return new Date(y, mo - 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  };
+  const monthTop = Math.max(1, ...monthCounts.values());
+  const slotCounts = countBy("slot");
+  const slotTop = Math.max(1, ...slotCounts.values());
+
+  // week scope: dates × dayparts heatmap over the event's answer window.
+  const weekDates = daysFromDate(data.event.created_at, 7);
+  const monthDates28 = daysFromDate(data.event.created_at, 28);
+  const dayslotCounts = countBy("dayslot");
+  const dayslotTop = Math.max(1, ...dayslotCounts.values());
+
+  // dates scope: the actual-time grid over the host's chosen days.
+  const timeslotCounts = countBy("timeslot");
+  const timeslotTop = Math.max(1, ...timeslotCounts.values());
+  const grid = data.time_grid;
+
+  // month scope: ranked days.
+  const dayCounts = countBy("day");
+  const days = [...dayCounts.entries()].sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1));
+  const dayTop = Math.max(1, ...dayCounts.values());
+  const dayLabel = (v: string) => {
+    const [y, mo, d] = v.split("-").map(Number);
+    return new Date(y, mo - 1, d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  };
+
+  // Multi-date finalize: the host TAPS winning cells right on the results (or
+  // types times manually) - one or several. Extra dates become a series with
+  // everyone (RSVPs intact) carried onto each occurrence.
+  const [moreWhens, setMoreWhens] = useState<string[]>([]);
+  // picked: heat-cell selections, cellKey -> datetime-local. A daypart cell
+  // ("evening") maps to a representative hour, but the host sets ONE clock time
+  // for the whole set via pickTime below - it applies to every picked date.
+  const [picked, setPicked] = useState<Map<string, string>>(new Map());
+  // Daypart scopes let the host pick a "time of day"; dates scope carries exact
+  // clock times already, so the uniform-time control only shows for the former.
+  const daypartScope = scope === "week" || scope === "month" || scope === "general";
+  // Uniform start time for every picked cell ("" = follow each cell's daypart
+  // default until the host adjusts it). Once set, new picks adopt it too.
+  const [pickTime, setPickTime] = useState<string>("");
+  const timeOf = (dt: string) => dt.slice(11, 16);     // "…THH:MM" -> "HH:MM"
+  const withTime = (dt: string, hm: string) => dt.slice(0, 11) + hm;
+  const canPick = data.can_manage;
+  const togglePick = (key: string, dtLocal: string) => {
+    if (!canPick) return;
+    setPicked((m) => {
+      const next = new Map(m);
+      if (next.has(key)) { next.delete(key); return next; }
+      // New pick adopts the shared time: the host's explicit pickTime, else the
+      // time already on the existing picks, else this cell's own daypart hour.
+      const uniform = daypartScope ? (pickTime || (m.size > 0 ? timeOf([...m.values()][0]) : timeOf(dtLocal))) : timeOf(dtLocal);
+      next.set(key, withTime(dtLocal, uniform));
+      return next;
+    });
+  };
+  // The time shown in the control + written onto picks (once there are any).
+  const effPickTime = pickTime || (picked.size > 0 ? timeOf([...picked.values()][0]) : "19:00");
+  // Adjusting it re-times EVERY picked date (dates keep their day, share the hour).
+  const setUniformTime = (hm: string) => {
+    setPickTime(hm);
+    setPicked((m) => new Map([...m].map(([k, v]) => [k, withTime(v, hm)])));
+  };
+  const cellPickStyle = (key: string): React.CSSProperties =>
+    picked.has(key)
+      ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative", zIndex: 2 }
+      : {};
+  // General-scope cells aren't dated - the host first picks a TARGET MONTH
+  // (the group's month votes, best-first; "Soonest" = next occurrence), then a
+  // weekday cell resolves to that month's first future matching date.
+  const [targetMonth, setTargetMonth] = useState<string>("");
+  const monthChoices: { value: string; label: string }[] = (() => {
+    const voted = [...monthCounts.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+    const opts = voted.length > 0 ? voted : nextMonths(6).map((m) => m.value);
+    return opts.map((v) => {
+      const [y, mo] = v.split("-").map(Number);
+      return { value: v, label: new Date(y, mo - 1).toLocaleDateString(undefined, { month: "short", year: "numeric" }) };
+    });
+  })();
+  // Tapping a weekday cell EXPANDS its concrete dates ("every Tuesday of
+  // August") - the host picks the 1st, 3rd, all of them, whatever. One cell
+  // open at a time.
+  const [instCell, setInstCell] = useState<{ wd: number; dp: string } | null>(null);
+  const fmtYMD = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // Every future date of that weekday inside the target month, or the next 4
+  // occurrences from today when scheduling into "Soonest".
+  const weekdayInstances = (wd: number): string[] => {
+    const out: string[] = [];
+    if (targetMonth) {
+      const [y, mo] = targetMonth.split("-").map(Number);
+      const d = new Date(y, mo - 1, 1);
+      while (d.getDay() !== wd) d.setDate(d.getDate() + 1);
+      for (; d.getMonth() === mo - 1; d.setDate(d.getDate() + 7)) {
+        if (d.getTime() >= Date.now() - 86_400_000) out.push(fmtYMD(d));
+      }
+      return out;
+    }
+    const d = new Date();
+    do { d.setDate(d.getDate() + 1); } while (d.getDay() !== wd);
+    for (let i = 0; i < 4; i++) {
+      out.push(fmtYMD(d));
+      d.setDate(d.getDate() + 7);
+    }
+    return out;
+  };
+  const instKey = (wd: number, dp: string, date: string) => `inst|${wd}:${dp}|${date}`;
+  const cellHasInstPicks = (wd: number, dp: string) =>
+    [...picked.keys()].some((k) => k.startsWith(`inst|${wd}:${dp}|`));
+  async function finalize() {
+    const all = [when, ...moreWhens, ...picked.values()].filter((v) => v.trim() !== "")
+      .map((v) => new Date(v).toISOString()).sort();
+    if (all.length === 0) return;
+    await sendJSON(api, "POST", `/api/events/${data.event.id}/finalize`, {
+      starts_at: all[0], more_starts: all.slice(1),
+    });
+    reload();
+  }
+  const pickCount = [when, ...moreWhens].filter((v) => v.trim() !== "").length + picked.size;
+
+  return (
+    <div className="card stack" data-testid="general-results">
+      <div className="row between"><h3>Group availability</h3><span className="muted small">{voters} responded</span></div>
+
+      {scope === "week" && (
+        <div>
+          <div className="section-h" style={{ margin: "0 0 4px" }}>Best times this week</div>
+          {dayslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
+            <>
+              <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-week-heat">
+                <div />
+                {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
+                {weekDates.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
+                  <Fragment key={d.value}>
+                    <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
+                    {DAYPARTS.map((dp) => {
+                      const key = `${d.value}:${dp.value}`;
+                      const n = dayslotCounts.get(key) ?? 0;
+                      return (
+                        <button key={dp.value} type="button"
+                          className={`cell ${heatClass(n, dayslotTop)} ${bestClass(n, dayslotTop)}`} data-testid={`grw-pick-${d.value}-${dp.value}`}
+                          onClick={() => togglePick(key, `${d.value}T${String(DAYPART_HOUR[dp.value]).padStart(2, "0")}:00`)}
+                          style={{ ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.72rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
+                          {n > 0 ? n : "·"}
+                        </button>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </div>
+              <p className="grid-legend">Darker = more people free</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {scope === "dates" && grid && (
+        <div>
+          <div className="section-h" style={{ margin: "0 0 4px" }}>Best times{canPick ? " · tap a cell to lock it in" : ""}</div>
+          {timeslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
+            <>
+              <TimeGrid days={(data.poll_days || []).map(dayCol)} slots={gridSlots(grid.start_min, grid.end_min, grid.slot_min)}
+                free={new Set()} counts={timeslotCounts} top={timeslotTop} fmtSlot={fmtMinutes}
+                pick={new Set([...picked.keys()])} idPrefix="grt" testid="gr-time-heat"
+                onCellClick={canPick ? (day, m) => togglePick(`${day}:${m}`,
+                  `${day}T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`) : undefined} />
+              <p className="grid-legend">Darker = more people free</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {scope === "month" && (
+        <div>
+          <div className="section-h" style={{ margin: "0 0 4px" }}>Best times over the next 4 weeks</div>
+          {dayslotCounts.size === 0 && days.length > 0 ? (
+            /* legacy events answered as day-only chips */
+            <div className="stack" style={{ gap: 4 }} data-testid="gr-month-days">
+              {days.map(([value, n]) => (
+                <div key={value} className="stack" style={{ gap: 2, ...pickedStyle(value), paddingLeft: sel && selVals.has(value) ? 6 : 0 }}>
+                  <div className="row between"><span className="small">{dayLabel(value)}</span><span className="muted small">{n}</span></div>
+                  <div className="tally"><span style={{ width: `${(n / dayTop) * 100}%` }} /></div>
+                </div>
+              ))}
+            </div>
+          ) : dayslotCounts.size === 0 ? <p className="muted small">No picks yet.</p> : (
+            <>
+              <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }} data-testid="gr-month-heat">
+                <div />
+                {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
+                {monthDates28.filter((d) => dayslotCounts.size === 0 || DAYPARTS.some((dp) => (dayslotCounts.get(`${d.value}:${dp.value}`) ?? 0) > 0)).map((d) => (
+                  <Fragment key={d.value}>
+                    <div className="day" style={{ textAlign: "left" }}>{d.label}</div>
+                    {DAYPARTS.map((dp) => {
+                      const key = `${d.value}:${dp.value}`;
+                      const n = dayslotCounts.get(key) ?? 0;
+                      return (
+                        <button key={dp.value} type="button"
+                          className={`cell ${heatClass(n, dayslotTop)} ${bestClass(n, dayslotTop)}`} data-testid={`grm-pick-${d.value}-${dp.value}`}
+                          onClick={() => togglePick(key, `${d.value}T${String(DAYPART_HOUR[dp.value]).padStart(2, "0")}:00`)}
+                          style={{ ...pickedStyle(key), ...cellPickStyle(key), display: "grid", placeItems: "center", fontSize: "0.72rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
+                          {n > 0 ? n : "·"}
+                        </button>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </div>
+              <p className="grid-legend">Darker = more people free</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {scope === "general" && (
+        <>
+          <div>
+            <div className="section-h" style={{ margin: "0 0 4px" }}>Months</div>
+            {months.length === 0 ? <p className="muted small">No picks yet.</p> : (
+              <div className="stack" style={{ gap: 4 }}>
+                {months.map(([value, n]) => (
+                  <div key={value} className="stack" style={{ gap: 2, ...pickedStyle(value), paddingLeft: sel && selVals.has(value) ? 6 : 0 }}>
+                    <div className="row between"><span className="small">{monthLabel(value)}</span><span className="muted small">{n}</span></div>
+                    <div className="tally"><span style={{ width: `${(n / monthTop) * 100}%` }} /></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="section-h" style={{ margin: "0 0 4px" }}>Best times</div>
+            {canPick && (
+              <div className="row wrap" style={{ gap: 6, marginBottom: 6 }} data-testid="target-month-row">
+                <span className="muted small">Schedule into:</span>
+                <button type="button" className={`chip sm ${targetMonth === "" ? "on" : ""}`}
+                  data-testid="target-month-soon" onClick={() => setTargetMonth("")}>Soonest</button>
+                {monthChoices.map((m) => (
+                  <button key={m.value} type="button" className={`chip sm ${targetMonth === m.value ? "on" : ""}`}
+                    data-testid={`target-month-${m.value}`} onClick={() => setTargetMonth(m.value)}>{m.label}</button>
+                ))}
+              </div>
+            )}
+            <div className="grid" style={{ gridTemplateColumns: `minmax(2.4rem, auto) repeat(${DAYPARTS.length}, 1fr)` }}>
+              <div />
+              {DAYPARTS.map((dp) => <div key={dp.value} className="hd">{dp.short}</div>)}
+              {WEEKDAYS.map((d, wd) => ({ d, wd })).filter(({ wd }) => slotCounts.size === 0 || DAYPARTS.some((dp) => (slotCounts.get(slotKey(wd, dp.value)) ?? 0) > 0)).map(({ d, wd }) => (
+                <Fragment key={wd}>
+                  <div className="day" style={{ textAlign: "left" }}>{d}</div>
+                  {DAYPARTS.map((dp) => {
+                    const key = slotKey(wd, dp.value);
+                    const n = slotCounts.get(key) ?? 0;
+                    const open = instCell?.wd === wd && instCell?.dp === dp.value;
+                    const hasPicks = cellHasInstPicks(wd, dp.value);
+                    return (
+                      <button key={dp.value} type="button"
+                        className={`cell ${heatClass(n, slotTop)} ${bestClass(n, slotTop)}`} data-testid={`grg-pick-${wd}-${dp.value}`}
+                        onClick={() => { if (canPick) setInstCell(open ? null : { wd, dp: dp.value }); }}
+                        style={{ ...pickedStyle(key), ...(hasPicks || open ? { outline: "3px solid var(--accent)", outlineOffset: "-3px", position: "relative", zIndex: 2, opacity: open ? 1 : undefined } : {}), display: "grid", placeItems: "center", fontSize: "0.72rem", fontWeight: 700, cursor: canPick ? "pointer" : "default" }}>
+                        {n > 0 ? n : "·"}
+                      </button>
+                    );
+                  })}
+                </Fragment>
+              ))}
+            </div>
+            {slotCounts.size > 0 && <p className="grid-legend">Darker = more people free</p>}
+            {instCell && (() => {
+              const dates = weekdayInstances(instCell.wd);
+              const hour = String(DAYPART_HOUR[instCell.dp]).padStart(2, "0");
+              const dpLabel = DAYPARTS.find((x) => x.value === instCell.dp)?.short ?? instCell.dp;
+              const keys = dates.map((date) => instKey(instCell.wd, instCell.dp, date));
+              const allOn = dates.length > 0 && keys.every((k) => picked.has(k));
+              return (
+                <div className="row wrap" style={{ gap: 6, marginTop: 8 }} data-testid="inst-row">
+                  <span className="muted small">{WEEKDAYS[instCell.wd]} · {dpLabel}:</span>
+                  {dates.length === 0 && <span className="muted small">no dates left in that month</span>}
+                  {dates.map((date, i) => (
+                    <button key={date} type="button" className={`chip sm ${picked.has(keys[i]) ? "on" : ""}`}
+                      data-testid={`inst-${date}`}
+                      onClick={() => togglePick(keys[i], `${date}T${hour}:00`)}>
+                      {new Date(`${date}T12:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </button>
+                  ))}
+                  {dates.length > 1 && (
+                    <button type="button" className="chip sm" data-testid="inst-all"
+                      onClick={() => setPicked((m) => {
+                        const next = new Map(m);
+                        if (allOn) keys.forEach((k) => next.delete(k));
+                        else dates.forEach((date, i) => next.set(keys[i], `${date}T${hour}:00`));
+                        return next;
+                      })}>
+                      {allOn ? "None" : "All"}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </>
+      )}
+
+      {responders.length > 0 && (
+        <div className="stack" style={{ gap: 6 }} data-testid="responder-dots">
+          <div className="row between">
+            <div className="section-h" style={{ margin: 0 }}>Who responded</div>
+            {sel && <button className="btn ghost sm" data-testid="responders-all" onClick={() => setSel(null)}>Show everyone</button>}
+          </div>
+          <div className="row wrap" style={{ gap: 6 }}>
+            {responders.map((r) => (
+              <button key={r.id} type="button" title={r.name}
+                className={`resp-dot ${sel === r.id ? "on" : ""}`} data-testid={`responder-${r.id}`}
+                onClick={() => setSel(sel === r.id ? null : r.id)}>
+                <Avatar url={r.avatar} name={r.name} size={30} />
+              </button>
+            ))}
+          </div>
+          <p className="muted small">
+            {sel
+              ? `Highlighting ${responders.find((r) => r.id === sel)?.name}'s picks - tap again for everyone.`
+              : "Tap someone to see exactly what they picked."}
+          </p>
+        </div>
+      )}
+
+      <div className="divider" />
+      <div className="muted small">
+        {canPick ? "Tap winning cells above to schedule them" : "Pick the winning date & time"}
+        {canPick ? " - or type times manually:" : ":"}
+      </div>
+      {picked.size > 0 && (
+        <div className="stack" style={{ gap: 8 }}>
+          {/* One time for every picked date - the recurring-series case. Change
+              it here and all the chips below re-time together. Per-date
+              precision still lives in the manual datetime inputs. */}
+          {daypartScope && canPick && (
+            <label className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <span className="muted small">At</span>
+              <input type="time" className="input" style={{ width: "auto" }} data-testid="pick-time"
+                value={effPickTime} onChange={(ev) => ev.target.value && setUniformTime(ev.target.value)} />
+              <span className="muted small">· applies to all {picked.size} picked date{picked.size > 1 ? "s" : ""}</span>
+            </label>
+          )}
+          <div className="row wrap" style={{ gap: 6 }} data-testid="picked-cells">
+            {[...picked.entries()].map(([key, v]) => (
+              <button key={key} type="button" className="chip sm on" data-testid={`picked-${key}`}
+                onClick={() => togglePick(key, v)} title="Tap to remove" style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                {fmtDateTime(new Date(v).toISOString())}
+                <span style={{ display: "flex", marginLeft: "0.2rem" }}>{Ic.x(13)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="row" style={{ gap: 6 }}>
+        <input type="datetime-local" className="input" min={MIN_DT} data-testid="general-finalize-time" value={when}
+          onChange={(ev) => setWhen(ev.target.value)} />
+        {when !== "" && (
+          <button type="button" className="btn ghost sm" data-testid="general-finalize-clear"
+            onClick={() => setWhen("")} title="Clear this time">{Ic.x()}</button>
+        )}
+      </div>
+      {moreWhens.map((v, i) => (
+        <div key={i} className="row" style={{ gap: 6 }}>
+          <input type="datetime-local" className="input" min={MIN_DT} data-testid={`general-finalize-time-${i + 1}`} value={v}
+            onChange={(ev) => setMoreWhens((m) => m.map((x, j) => (j === i ? ev.target.value : x)))} />
+          <button type="button" className="btn ghost sm" data-testid={`general-finalize-remove-${i + 1}`}
+            onClick={() => setMoreWhens((m) => m.filter((_, j) => j !== i))}>{Ic.x()}</button>
+        </div>
+      ))}
+      <div className="row wrap">
+        <button type="button" className="btn ghost sm" data-testid="general-add-date"
+          onClick={() => setMoreWhens((m) => [...m, ""])}>+ Add another date</button>
+        <button className="btn primary sm" data-testid="general-finalize" disabled={pickCount === 0} onClick={finalize}>
+          {pickCount > 1 ? `Schedule ${pickCount} dates` : "Finalize"}
+        </button>
+      </div>
+      {pickCount > 1 && (
+        <p className="muted small">All {pickCount} dates become one series - everyone here is on each date, RSVPs carried over.</p>
+      )}
+    </div>
+  );
+}
+
+// Who's coming - grouped by RSVP so it's scannable at a glance. Any real
+// (non-guest) attendee who isn't already your friend gets an "Add friend"
+// button right here, so an event is a place to grow your circle.
+function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: string }) {
+  const api = useApi();
+  const { data: fr, reload } = useAsync<{ friends: Friend[]; outgoing: { handle?: string }[] }>(
+    (a) => getJSON(a, "/api/friends"),
+  );
+  const [requested, setRequested] = useState<Set<string>>(new Set());
+
+  const friendIds = new Set((fr?.friends ?? []).map((f) => f.friend_id));
+  const pending = new Set((fr?.outgoing ?? []).map((o) => o.handle).filter(Boolean) as string[]);
+  // Guests have no account to befriend from - they still see the full list.
+  const viewerIsGuest = viewerId.startsWith("guest_");
+
+  async function addFriend(handle: string) {
+    setRequested((s) => new Set(s).add(handle));
+    const res = await sendJSON(api, "POST", "/api/friends", { handle });
+    if (!res.ok) setRequested((s) => { const n = new Set(s); n.delete(handle); return n; });
+    else reload();
+  }
+
+  const GROUPS: { key: Attendee["rsvp"]; label: string }[] = [
+    { key: "going", label: "Going" },
+    { key: "waitlist", label: "Waitlist" },
+    { key: "maybe", label: "Maybe" },
+    { key: "declined", label: "Can't go" },
+  ];
+
+  const total = attendees.length;
+  const going = attendees.filter((a) => a.rsvp === "going").length;
+
+  return (
+    <div className="card stack" data-testid="guests">
+      <div className="row between">
+        <h3 style={{ margin: 0 }}>Who's coming</h3>
+        <span className="muted small">{going} going · {total} responded</span>
+      </div>
+      {total === 0 && <p className="muted small">No responses yet - share the link to get RSVPs.</p>}
+
+      {GROUPS.map(({ key, label }) => {
+        const rows = attendees.filter((a) => a.rsvp === key);
+        if (rows.length === 0) return null;
+        return (
+          <div key={key} className="stack" style={{ gap: 6 }} data-testid={`rsvp-group-${key}`}>
+            <div className="section-h" style={{ margin: 0 }}>{label} · {rows.length}</div>
+            {rows.map((a, i) => {
+              const isSelf = a.user_id === viewerId;
+              // Masked anonymous rows have no user_id/handle - never befriendable.
+              const canAdd = !viewerIsGuest && !!a.handle && !isSelf && !friendIds.has(a.user_id);
+              const already = a.handle ? (pending.has(a.handle) || requested.has(a.handle)) : false;
+              return (
+                <div key={a.user_id || `anon-${i}`} className="row between" data-testid="guest-row">
+                  <span className="row" style={{ gap: 8 }}>
+                    <Avatar url={a.avatar_url} name={a.display_name} size={28} />
+                    <span className="stack" style={{ gap: 0 }}>
+                      <span>{a.display_name || "Guest"}{isSelf && <span className="muted small"> (you)</span>}</span>
+                      {a.handle && <span className="muted small">@{a.handle}</span>}
+                    </span>
+                  </span>
+                  {canAdd ? (
+                    already ? (
+                      <span className="muted small" data-testid={`friend-requested-${a.handle}`}>Requested</span>
+                    ) : (
+                      <button className="btn soft sm" data-testid={`add-friend-${a.handle}`}
+                        onClick={() => addFriend(a.handle!)}>+ Add friend</button>
+                    )
+                  ) : friendIds.has(a.user_id) ? (
+                    <span className="muted small">Friends</span>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+

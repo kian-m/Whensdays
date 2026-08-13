@@ -1,0 +1,4 @@
+Contact: mailto:privacy@whensdays.com
+Expires: 2027-07-11T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://whensdays.com/.well-known/security.txt

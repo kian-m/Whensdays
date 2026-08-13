@@ -10,15 +10,21 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.0.0",
+    "@clerk/clerk-react": "^5.61.6",
+    "@fontsource-variable/familjen-grotesk": "^5.3.0",
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource-variable/spline-sans-mono": "^5.3.0",
+    "posthog-js": "^1.399.2",
+    "qrcode-generator": "^2.0.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.18.1"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "typescript": "^5.7.2",
+    "typescript": "^7.0.2",
     "vite": "^6.0.0"
   }
 }

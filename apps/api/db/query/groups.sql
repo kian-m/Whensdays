@@ -1,0 +1,140 @@
+-- ============================ groups ==============================
+
+-- name: CreateGroup :one
+INSERT INTO groups (owner_id, name, description, emoji)
+VALUES ($1, $2, $3, $4)
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version;
+
+-- name: GetGroup :one
+SELECT id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version
+FROM groups
+WHERE id = $1;
+
+-- name: ListMyGroups :many
+SELECT DISTINCT g.id, g.owner_id, g.name, g.emoji, g.created_at, g.icon_url, g.description, g.invite_token_version
+FROM groups g
+LEFT JOIN group_members m ON m.group_id = g.id
+WHERE g.owner_id = $1 OR m.user_id = $1
+ORDER BY g.created_at DESC;
+
+-- name: IsGroupMember :one
+SELECT EXISTS (
+    SELECT 1 FROM groups g
+    LEFT JOIN group_members m ON m.group_id = g.id AND m.user_id = $2
+    WHERE g.id = $1 AND (g.owner_id = $2 OR m.user_id IS NOT NULL)
+);
+
+-- name: ListGroupMembers :many
+SELECT m.user_id, m.created_at, m.role, p.display_name, p.handle, p.avatar_url
+FROM group_members m
+LEFT JOIN profiles p ON p.user_id = m.user_id
+WHERE m.group_id = $1
+ORDER BY m.created_at;
+
+-- name: AddGroupMember :exec
+INSERT INTO group_members (group_id, user_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING;
+
+-- name: RemoveGroupMember :exec
+DELETE FROM group_members WHERE group_id = $1 AND user_id = $2;
+
+-- name: ListGroupEvents :many
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
+FROM events
+WHERE group_id = $1 AND status <> 'cancelled' AND status <> 'draft'
+ORDER BY created_at DESC;
+
+-- name: ListGoingAttendeeEmails :many
+SELECT p.email
+FROM event_attendees a
+JOIN profiles p ON p.user_id = a.user_id
+WHERE a.event_id = $1 AND a.rsvp = 'going' AND p.email <> '';
+
+-- name: SetGroupIcon :one
+UPDATE groups SET icon_url = $2
+WHERE id = $1
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version;
+
+-- name: ListGroupEventMonths :many
+-- Start times of every HAPPENED scheduled group event - the cron computes
+-- month streaks from these (mirrors the web's groupStreak, which also counts
+-- this month's still-upcoming events; the email celebrates only real ones).
+SELECT group_id, starts_at FROM events
+WHERE group_id IS NOT NULL AND status = 'scheduled'
+  AND starts_at IS NOT NULL AND starts_at <= now();
+
+-- name: MarkStreakCongrats :one
+-- Idempotency gate: no row back = another tick (or instance) already sent.
+INSERT INTO group_streak_congrats (group_id, month) VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING group_id;
+
+-- name: ListGroupMemberContacts :many
+SELECT p.user_id, p.display_name, p.email
+FROM group_members m
+JOIN profiles p ON p.user_id = m.user_id
+WHERE m.group_id = $1 AND p.email <> '';
+
+-- name: CountGroupMembers :one
+SELECT count(*)::int FROM group_members WHERE group_id = $1;
+
+
+-- name: IsGroupAdmin :one
+-- Owner counts as admin everywhere.
+SELECT EXISTS (
+    SELECT 1 FROM groups g WHERE g.id = sqlc.arg(id) AND g.owner_id = sqlc.arg(user_id)
+    UNION
+    SELECT 1 FROM group_members m WHERE m.group_id = sqlc.arg(id) AND m.user_id = sqlc.arg(user_id) AND m.role = 'admin'
+);
+
+-- name: SetGroupMemberRole :exec
+UPDATE group_members SET role = $3 WHERE group_id = $1 AND user_id = $2;
+
+
+-- name: UpdateGroupDetails :one
+UPDATE groups SET name = $2, description = $3 WHERE id = $1
+RETURNING id, owner_id, name, emoji, created_at, icon_url, description, invite_token_version;
+
+
+-- ---------------------- invite link (see 0045) ----------------------
+-- The join token is signed over "group|<id>|<version>". The version rides the
+-- group SELECTs above only so sqlc keeps generating the shared db.Group model
+-- (a column list that no longer matches the table splits into per-query row
+-- types); handlers read it through the two statements below.
+
+-- name: GetGroupInviteVersion :one
+SELECT invite_token_version FROM groups WHERE id = $1;
+
+-- name: BumpGroupInviteVersion :one
+-- Regenerate: invalidates only THIS group's outstanding invite links.
+UPDATE groups SET invite_token_version = invite_token_version + 1
+WHERE id = $1
+RETURNING invite_token_version;
+
+-- name: ListGroupListedEvents :many
+-- The public group page's event list: upcoming, live, and explicitly LISTED by
+-- the host ("show to my followers"). Column list mirrors ListGroupEvents so the
+-- rows are plain db.Event. Never returns drafts, cancellations, or past dates.
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
+FROM events
+WHERE group_id = $1 AND listed = true
+  AND status IN ('polling', 'scheduled')
+  AND (starts_at IS NULL OR starts_at >= now() - interval '12 hours')
+ORDER BY starts_at NULLS LAST;
+
+-- name: ListGroupPastListedEvents :many
+-- The public page's bounded "Past" section (V4, social proof for venues):
+-- listed + live (never draft/cancelled/unlisted) events that already happened,
+-- most recent first, capped so the page never grows unbounded. The 12h grace
+-- mirrors ListGroupListedEvents's cutoff so the two lists never overlap.
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
+FROM events
+WHERE group_id = $1 AND listed = true
+  AND status <> 'cancelled' AND status <> 'draft'
+  AND starts_at IS NOT NULL AND starts_at < now() - interval '12 hours'
+ORDER BY starts_at DESC
+LIMIT 10;

@@ -6,13 +6,28 @@ on:
   pull_request:
 
 jobs:
+  secrets:
+    # Secret scanner — fails the build if any credential is committed (full
+    # history on push, PR range on pull_request). See .gitleaks.toml.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
   docs:
     # Flag PRs that change app code without updating the docs. Bypass with
     # "[skip-docs]" in the PR title when a change genuinely needs no doc update.
-    if: github.event_name == 'pull_request'
+    # Dependabot can't update the docs - its PRs are exempt.
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Require doc updates for code changes
@@ -33,22 +48,33 @@ jobs:
           echo "docs check passed"
 
   screenshots:
-    # Regenerate README feature screenshots from the live app and fail if the
-    # committed PNGs are stale. Keeps docs/screenshots in lockstep with the UI.
+    # Regenerate the README feature screenshots as a docs ARTIFACT — not a
+    # correctness gate. continue-on-error so it never reds the build: the shots
+    # are full-page (they render relative dates, so they drift daily) AND the
+    # step rebuilds Docker images, which can flake on transient network errors
+    # (e.g. `go mod download` hitting proxy.golang.org). The real gates are the
+    # api/web/e2e jobs. The fresh PNGs still upload for review.
+    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Regenerate screenshots
         run: make docs-shots
-      - name: Fail if screenshots changed
+      # Report drift as a warning, don't fail the build: the feature screenshots
+      # are FULL-PAGE and render relative dates (the availability grid starts at
+      # "today"; the calendar shows the current month), so the regenerated PNGs
+      # differ from any committed set on a later day no matter the code. A strict
+      # pixel gate would need both the browser AND server clocks frozen. The fresh
+      # PNGs are still uploaded below as an artifact for docs/PR review.
+      - name: Report if screenshots changed
         run: |
           if ! git diff --quiet -- docs/screenshots; then
-            echo "::error::docs/screenshots is out of date. Run 'make docs-shots' and commit the result."
+            echo "::warning::docs/screenshots differ from the committed set (expected: full-page shots render today's date). Run 'make docs-shots' to refresh."
             git --no-pager diff --stat -- docs/screenshots
-            exit 1
+          else
+            echo "screenshots are up to date"
           fi
-          echo "screenshots are up to date"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: feature-screenshots
@@ -57,10 +83,10 @@ jobs:
   api:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
-          go-version: "1.23"
+          go-version: "1.26"
       - run: go mod tidy # generates go.sum (committed locally via `make install`)
         working-directory: apps/api
       - run: go vet ./...
@@ -71,9 +97,9 @@ jobs:
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: pnpm
@@ -84,44 +110,16 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     needs: [api, web]
-    services:
-      db:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: clsandbox
-          POSTGRES_PASSWORD: clsandbox
-          POSTGRES_DB: clsandbox
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U clsandbox"
-          --health-interval 5s --health-timeout 3s --health-retries 5
-    env:
-      DATABASE_URL: postgres://clsandbox:clsandbox@localhost:5432/clsandbox?sslmode=disable
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-      CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-      E2E_CLERK_USER_USERNAME: ${{ secrets.E2E_CLERK_USER_USERNAME }}
-      E2E_CLERK_USER_PASSWORD: ${{ secrets.E2E_CLERK_USER_PASSWORD }}
+    # Run the FULL prod-shaped stack in containers (compose.e2e.yaml): web nginx →
+    # API → Postgres, in AUTH_MODE=dev so it's hermetic — no Clerk account, no
+    # secrets, deterministic. This is the exact command developers run locally
+    # (`make e2e-docker`), so CI == local. The previous job started `go run .`
+    # against real Clerk and timed out on clerk.signIn in CI; dev mode removes
+    # that dependency and the flakiness with it.
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: pnpm
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-      - run: pnpm install --frozen-lockfile
-      - run: cd e2e && pnpm exec playwright install --with-deps chromium
-      - run: make migrate # apply schema to the service db
-      # Start api + web, wait for them, then run visual tests.
-      - run: |
-          (cd apps/api && go run . &)
-          pnpm dev:web &
-          npx wait-on http://localhost:5173 http://localhost:8080/healthz
-          pnpm e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v7
+      - run: make e2e-docker
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report

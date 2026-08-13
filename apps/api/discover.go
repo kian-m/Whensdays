@@ -1,0 +1,327 @@
+package main
+
+import (
+	"crypto/subtle"
+	"fmt"
+	"net/http"
+	"os"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/clsandbox/api/internal/db"
+)
+
+// discover.go - Phase 2 (public discovery) + the P2 reminder cron.
+//
+// Public events are browsable by ANYONE (GET /api/discover is unauthenticated
+// and read-only: it exposes only what the host chose to publish - title, type,
+// time, topic, city, host name). Follows (host or topic) build a personal feed.
+// Reminders: a once-daily 2pm-Pacific scheduler hits the key-gated cron
+// endpoint; each event happening the next Pacific calendar day is reminded once.
+
+// topicRe: topics are lowercase slugs, e.g. "twitch", "board-games".
+var topicRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
+
+// followKinds are the things you can FOLLOW (asymmetric, "put their plans in my
+// feed") - mirrors the follows.kind CHECK in migration 0044. Following is NOT
+// Groups (symmetric membership) and is deliberately not called "subscriptions"
+// (that word means .ics calendar sync in this product). No 'venue' kind: venue
+// bots are ordinary hosts, so 'host' already covers them.
+var followKinds = []string{"host", "topic", "group"}
+
+// ---------------------- reminders (cron) ----------------------
+
+// handleCronReminders is unauthenticated but gated by CRON_KEY (constant-time
+// compare). Designed for Cloud Scheduler; idempotent via reminder_sent.
+func (s *server) handleCronReminders(w http.ResponseWriter, r *http.Request) {
+	key := os.Getenv("CRON_KEY")
+	if key == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Cron-Key")), []byte(key)) != 1 {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	events, err := s.queries.ListEventsNeedingReminder(r.Context())
+	if err != nil {
+		s.internal(w, "list reminders", err)
+		return
+	}
+	// Claim each event BEFORE sending so a scheduler retry (or a second
+	// instance) can never re-send: only the attempt that flips reminder_sent
+	// from false gets a row back and is eligible to email. Reminders are then
+	// digested per recipient (one email even with several events tomorrow).
+	var due []db.Event
+	for _, ev := range events {
+		if _, err := s.queries.ClaimEventReminder(r.Context(), ev.ID); err == nil {
+			due = append(due, ev)
+		}
+	}
+	sent := s.sendReminders(r.Context(), due)
+	// Day-after recaps ride the same daily tick: yesterday's events get the
+	// "how was it? plan the next one" email (idempotent via event_recaps).
+	recapped := 0
+	if recaps, err := s.queries.ListEventsNeedingRecap(r.Context()); err == nil {
+		for _, ev := range recaps {
+			// Claim the recap marker BEFORE sending (retry/multi-instance safe):
+			// no row back means it was already recapped, so skip the email.
+			if _, err := s.queries.ClaimEventRecap(r.Context(), ev.ID); err != nil {
+				continue
+			}
+			if s.notifyRecap(r.Context(), ev) > 0 {
+				recapped++
+			}
+			// If that was the LAST scheduled occurrence of a series, nudge the
+			// host to re-poll the group for the next dates (the claim above
+			// makes this once-only too).
+			if ev.SeriesID.Valid {
+				if sibs, serr := s.queries.ListSeriesEvents(r.Context(), ev.SeriesID); serr == nil {
+					last := true
+					for _, sib := range sibs {
+						if sib.StartsAt.Valid && ev.StartsAt.Valid && sib.StartsAt.Time.After(ev.StartsAt.Time) {
+							last = false
+							break
+						}
+					}
+					if last {
+						s.notifySeriesEnded(r.Context(), ev)
+					}
+				}
+			}
+		}
+	}
+	// Group streak congratulations ride the same daily tick: a group whose
+	// monthly run just extended gets one celebratory email to every member
+	// (idempotent via group_streak_congrats).
+	streaks := s.sendStreakCongrats(r.Context())
+	// Poll velocity: last-chance vote reminders + poll-ready host emails.
+	voteReminded, pollsReady := s.sendPollVelocity(r.Context())
+	// Queued activity (new RSVPs + comments) rides this same daily tick too.
+	// It used to have its OWN half-hourly Cloud Scheduler job, which woke Neon
+	// 48x/day to almost always find an empty queue - ~27 of the free tier's 100
+	// CU-hours/month, since each poke costs a full 5-minute autosuspend cycle.
+	// Draining here instead is free: this cron already wakes the database. The
+	// tradeoff is latency (activity now batches up to ~24h), which is only
+	// acceptable because everything time-critical - invite, finalize, cancel,
+	// reminder, recap, and quorum ("everyone voted") - sends immediately and
+	// never touches this queue.
+	activity := s.flushActivityDigests(r.Context())
+	// V3: the daily "new events from pages you follow" digest. A single global
+	// claim ('follow_digest', run_day) in cron_run_claims - see followdigest.go
+	// for why this differs from the per-event claims above.
+	followDigest := s.sendFollowDigest(r.Context())
+	s.analytics.CaptureServer("reminders_run", map[string]any{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady, "activity": activity, "follow_digest": followDigest})
+	writeJSON(w, http.StatusOK, map[string]int{"events": len(events), "emailed": sent, "recaps": recapped, "streaks": streaks, "vote_reminders": voteReminded, "polls_ready": pollsReady, "activity": activity, "follow_digest": followDigest})
+}
+
+// ---------------------- public discovery ----------------------
+
+// handleDiscover is public by design (no auth): browse upcoming public events,
+// optionally filtered by ?topic= and ?city=. No viewer → no annotations.
+func (s *server) handleDiscover(w http.ResponseWriter, r *http.Request) {
+	s.discoverFor(w, r, "")
+}
+
+// handleDiscoverMine is the authed twin: same browse, plus per-viewer
+// annotations (friends going, your RSVP, friend-hosted) for tile styling.
+func (s *server) handleDiscoverMine(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	s.discoverFor(w, r, uid)
+}
+
+func (s *server) discoverFor(w http.ResponseWriter, r *http.Request, viewer string) {
+	topic := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("topic")))
+	if topic != "" && !topicRe.MatchString(topic) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid topic"})
+		return
+	}
+	city := strings.TrimSpace(r.URL.Query().Get("city"))
+	if len(city) > 60 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid city"})
+		return
+	}
+	events, err := s.queries.ListPublicEvents(r.Context(), db.ListPublicEventsParams{Column1: topic, Column2: expandCityFilter(city), Column3: viewer})
+	if err != nil {
+		s.internal(w, "discover", err)
+		return
+	}
+	// Category chips render only for topics with something to show.
+	topics, err := s.queries.ListActiveTopics(r.Context())
+	if err != nil {
+		s.internal(w, "active topics", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events, "topics": topics})
+}
+
+// handleFeed returns the ranked "For you" feed (auth required), scored by the
+// algorithm in ranking.go. Cold start degrades gracefully to time-proximity +
+// popularity. Three scopes:
+//
+//	(default)  public events UNION the listed events of everyone you follow -
+//	           the natural "for you" mix for a signed-in user
+//	following  ONLY the followed hosts'/groups' listed events (the primitive a
+//	           dedicated Following surface consumes)
+//	friends    upcoming events your accepted friends are hosting
+func (s *server) handleFeed(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	var candidates []db.ListPublicEventsRow
+	var err error
+	switch r.URL.Query().Get("scope") {
+	case "friends":
+		rows, ferr := s.queries.ListFriendsEvents(r.Context(), uid)
+		err = ferr
+		for _, x := range rows {
+			candidates = append(candidates, db.ListPublicEventsRow(x))
+		}
+	case "following":
+		rows, ferr := s.queries.ListFollowedEvents(r.Context(), uid)
+		err = ferr
+		for _, x := range rows {
+			candidates = append(candidates, db.ListPublicEventsRow(x))
+		}
+	default:
+		// Public browse + what you follow, deduped (a public event from a host
+		// you follow is one tile, not two - the ranker still boosts it).
+		var followed []db.ListFollowedEventsRow
+		perr := parallel(
+			func() (e error) {
+				candidates, e = s.queries.ListPublicEvents(r.Context(), db.ListPublicEventsParams{Column1: "", Column2: []string{}, Column3: uid})
+				return
+			},
+			func() (e error) { followed, e = s.queries.ListFollowedEvents(r.Context(), uid); return },
+		)
+		err = perr
+		extra := make([]db.ListPublicEventsRow, 0, len(followed))
+		for _, x := range followed {
+			extra = append(extra, db.ListPublicEventsRow(x))
+		}
+		candidates = mergeCandidates(candidates, extra)
+	}
+	if err != nil {
+		s.internal(w, "feed candidates", err)
+		return
+	}
+	follows, err := s.queries.ListFollows(r.Context(), uid)
+	if err != nil {
+		s.internal(w, "list follows", err)
+		return
+	}
+
+	sig := feedSignals{
+		FollowedHosts: map[string]bool{}, FollowedTopics: map[string]bool{},
+		HostPrior: map[string]int{}, TopicPrior: map[string]int{}, TypePrior: map[string]int{},
+		FriendGoing: map[string]int{}, Going: map[string]int{}, Now: time.Now(),
+	}
+	for _, f := range follows {
+		// 'group' follows carry a group id, which is neither a host nor a topic -
+		// they shape WHICH events are candidates (ListFollowedEvents), not the score.
+		switch f.Kind {
+		case "host":
+			sig.FollowedHosts[f.Value] = true
+		case "topic":
+			sig.FollowedTopics[f.Value] = true
+		}
+	}
+	// Taste from the user's own RSVP history. Best-effort: a signal failing to
+	// load should never take the feed down.
+	if hist, err := s.queries.ListUserRsvpHistory(r.Context(), uid); err == nil {
+		for _, h := range hist {
+			sig.HostPrior[h.HostID]++
+			if h.Topic != "" {
+				sig.TopicPrior[h.Topic]++
+			}
+			sig.TypePrior[h.EventType]++
+		}
+	}
+	if counts, err := s.queries.CountGoingForPublicUpcoming(r.Context()); err == nil {
+		for _, c := range counts {
+			sig.Going[uuidStr(c.EventID)] = int(c.Going)
+		}
+	}
+	if friends, err := s.queries.ListFriendIDs(r.Context(), uid); err == nil && len(friends) > 0 {
+		if counts, err := s.queries.CountFriendGoingForPublicUpcoming(r.Context(), friends); err == nil {
+			for _, c := range counts {
+				sig.FriendGoing[uuidStr(c.EventID)] = int(c.Going)
+			}
+		}
+	}
+
+	ranked := rankEvents(candidates, sig)
+	if len(ranked) > 50 {
+		ranked = ranked[:50]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": ranked, "follows": follows})
+}
+
+func (s *server) handleAddFollow(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	var in struct {
+		Kind  string `json:"kind"`
+		Value string `json:"value"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	in.Value = strings.TrimSpace(in.Value)
+	if !oneOf(in.Kind, followKinds...) || in.Value == "" || len(in.Value) > 100 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "kind must be host/topic/group with a value"})
+		return
+	}
+	if in.Kind == "topic" && !topicRe.MatchString(in.Value) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid topic"})
+		return
+	}
+	// A group follow's value is the group id - normalize it through the UUID
+	// parser so the stored text always matches `group_id::text` in the feed query.
+	if in.Kind == "group" {
+		gid, ok := parseUUID(in.Value)
+		if !ok {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "invalid group"})
+			return
+		}
+		if _, err := s.queries.GetGroup(r.Context(), gid); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		in.Value = uuidStr(gid)
+	}
+	if in.Kind == "host" && in.Value == uid {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "you can't follow yourself"})
+		return
+	}
+	if err := s.queries.AddFollow(r.Context(), db.AddFollowParams{UserID: uid, Kind: in.Kind, Value: in.Value}); err != nil {
+		s.internal(w, "add follow", err)
+		return
+	}
+	s.analytics.Capture(uid, "followed", map[string]any{"kind": in.Kind, "value": in.Value})
+	writeJSON(w, http.StatusCreated, map[string]string{"status": "ok"})
+}
+
+func (s *server) handleRemoveFollow(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userIDFrom(r.Context())
+	kind, value := r.PathValue("kind"), r.PathValue("value")
+	if !oneOf(kind, followKinds...) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad kind"})
+		return
+	}
+	if err := s.queries.RemoveFollow(r.Context(), db.RemoveFollowParams{UserID: uid, Kind: kind, Value: value}); err != nil {
+		s.internal(w, "remove follow", err)
+		return
+	}
+	s.analytics.Capture(uid, "unfollowed", map[string]any{"kind": kind, "value": value})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// validatePublicFields checks visibility/topic/city on event creation. Topics
+// are a FIXED category set (ranking.go) - never free text.
+func validatePublicFields(visibility, topic, city string) error {
+	if visibility != "" && !oneOf(visibility, "private", "friends", "public") {
+		return fmt.Errorf("invalid visibility")
+	}
+	if topic != "" && !validCategory(topic) {
+		return fmt.Errorf("topic must be one of the preset categories")
+	}
+	if len(city) > 60 {
+		return fmt.Errorf("city too long")
+	}
+	return nil
+}

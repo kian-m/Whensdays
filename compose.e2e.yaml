@@ -22,6 +22,13 @@ services:
       API_PORT: "8080"
       DATABASE_URL: postgres://clsandbox:clsandbox@db:5432/clsandbox?sslmode=disable
       AUTH_MODE: dev # stubbed auth — hermetic test only
+      CALENDAR_MODE: stub # stubbed calendar providers — hermetic test only
+      KLIPY_MODE: stub # deterministic gif picker, no key/network
+      GEO_MODE: stub # deterministic address type-ahead, no network
+      WGIS_MODE: stub # fixed WGIS feed, no network (venue sync test)
+      WEIMPROV_MODE: stub # fixed We Improv feed, no network (venue sync test)
+      ROZCOS_MODE: stub # fixed Rozco's open-mic feed, no network (venue sync test)
+      CRON_KEY: e2e-cron-key # lets the spec exercise key-gated cron routes (no-key posts still 401)
       RUN_MIGRATIONS: "true" # apply schema on boot
     depends_on:
       db:
@@ -36,7 +43,7 @@ services:
       - api
 
   e2e:
-    image: mcr.microsoft.com/playwright:v1.49.1-jammy
+    image: mcr.microsoft.com/playwright:v1.55.1-jammy
     working_dir: /work
     volumes:
       - ./e2e:/work

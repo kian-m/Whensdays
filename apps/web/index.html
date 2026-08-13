@@ -3,10 +3,150 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>clSandbox</title>
+    <title>Whensdays - plans, minus the group-chat chaos</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <!-- Safari doesn't support SVG favicons - it takes the PNG (regenerate
+         from icon.svg if the logo changes); SVG-capable browsers prefer it. -->
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="64x64" />
+    <!-- Warm the TLS handshakes we know are coming (Clerk auth JS, GIF CDN) so
+         they don't stack on top of first interaction. dns-prefetch is the cheap
+         fallback for browsers that ignore preconnect. -->
+    <link rel="preconnect" href="https://clerk.whensdays.com" crossorigin />
+    <link rel="dns-prefetch" href="https://clerk.whensdays.com" />
+    <link rel="dns-prefetch" href="https://static.klipy.com" />
+    <link rel="dns-prefetch" href="https://use.whensdays.com" />
+    <!-- iOS home-screen bookmarks need a PNG (SVG + transparency render black). -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#1a1424" />
+    <!-- Link unfurls for the landing page itself (event links get richer,
+         per-event cards from the API). %VITE_APP_ORIGIN% is baked at build time. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Whensdays" />
+    <meta property="og:title" content="Whensdays - build a following, fill the room" />
+    <meta property="og:description" content="Fans follow your venue, band, or comedy night with one link - every show lands in their feed, inbox, and calendar." />
+    <meta property="og:url" content="%VITE_APP_ORIGIN%/" />
+    <meta property="og:image" content="%VITE_APP_ORIGIN%/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="description" content="Whensdays turns ‘we should hang out’ into real plans: poll everyone on when they're free, lock the time that works for the whole group, and invite friends with one link - no account needed to join." />
+    <link rel="canonical" href="%VITE_APP_ORIGIN%/" />
+    <!-- Structured data: how Google rich-results and AI crawlers classify the
+         product. Keep in sync with the landing copy + llms.txt. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Whensdays",
+      "url": "%VITE_APP_ORIGIN%/",
+      "applicationCategory": "SchedulingApplication",
+      "operatingSystem": "Web",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "description": "Free scheduling and availability app for friend groups and clubs. Guests RSVP and vote on times from one invite link - no account needed. Availability polls, recurring series, group streaks, calendar sync, and one-tap RSVP email.",
+      "publisher": { "@type": "Organization", "name": "Whensdays LLC" }
+    }
+    </script>
+    <!-- Organization entity: declares "Whensdays" as a real thing to search/AI.
+         sameAs links the brand to its authoritative profiles - AI cross-checks
+         these to decide an entity exists. Add each URL here AS the profile goes
+         live (Product Hunt, AlternativeTo, LinkedIn, X, Crunchbase); an empty
+         sameAs helps far less than one pointing at real corroborating pages. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Whensdays",
+      "legalName": "Whensdays LLC",
+      "url": "%VITE_APP_ORIGIN%/",
+      "logo": "%VITE_APP_ORIGIN%/apple-touch-icon.png",
+      "description": "Whensdays is a free group-scheduling app: poll everyone on when they're free, lock in the best time, and invite people with one link - no account needed to RSVP. Built for friend groups and clubs that meet again and again.",
+      "sameAs": [
+        "https://github.com/kian-m/Whensdays"
+      ]
+    }
+    </script>
+    <!-- WebSite schema: names the site entity + its sitelinks search box, and
+         reinforces the brand name for search/AI disambiguation. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Whensdays",
+      "alternateName": "Whensdays - group scheduling app",
+      "url": "%VITE_APP_ORIGIN%/"
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Do guests need an account to RSVP or vote on times?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. Anyone with the invite link can RSVP, vote on availability, and comment with just their name - no signup required." }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Whensdays free?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Creating events, availability polls, groups, reminders, and calendar sync are free." }
+        },
+        {
+          "@type": "Question",
+          "name": "How is Whensdays different from Doodle or When2meet?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Whensdays is built for recurring friend groups: guests join with no account, hosts schedule several winning dates at once as a series, groups keep streaks, and email includes one-tap RSVP with digest notifications instead of spam." }
+        },
+        {
+          "@type": "Question",
+          "name": "Can it find a time that works for everyone?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes - everyone marks availability on a day-and-time grid (this week, this month, or generally), and candidate times are ranked against the whole group's availability and synced calendars." }
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Apply the saved theme before first paint to avoid a flash. Default = dark. -->
+    <script>
+      try {
+        if (localStorage.getItem("whensdays.theme") === "light")
+          document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) {}
+    </script>
+    <div id="root">
+      <!-- Static content for crawlers without JavaScript (most AI bots).
+           React replaces this on mount. Visually hidden (sr-only pattern,
+           inline so it applies before any CSS loads) - crawlers read the raw
+           HTML, so hiding it from human eyes costs nothing; without this the
+           block flashed on cold loads until the JS bundle executed. NOT
+           display:none - screen readers landing pre-mount can still read it. -->
+      <main style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">
+        <h1>Whensdays - build a following, fill the room</h1>
+        <p>A free page for your venue, band, or comedy night: fans follow it
+        with one link, and every show you post lands in their feed, their
+        inbox, and their calendar. Whensdays also runs the scheduling side
+        for RECURRING friend groups and clubs - book clubs, run clubs, game
+        nights, jams - so the same group finds when everyone's free, locks
+        the winning dates as a series, and keeps the streak alive; members
+        vote and RSVP with no app and no account.</p>
+        <h2>How it works</h2>
+        <ul>
+          <li>Pages: a venue, performer, or group gets a page fans follow with one link - new shows post straight to followers' feed, inbox, and calendar</li>
+          <li>Availability polls: exact times, this week, this month, or a general day-and-time grid</li>
+          <li>Schedule one date or several at once as a recurring series</li>
+          <li>Groups with streaks, re-polls, recaps, and reminders</li>
+          <li>Calendar sync (Google and Apple) and one-tap RSVP straight from email</li>
+        </ul>
+        <h2>Free scheduling and audience-building for groups that actually meet</h2>
+        <p><a href="/privacy/">Privacy policy</a> · <a href="/terms/">Terms of service</a> · <a href="/cookies/">Cookie policy</a></p>
+        <p>Free alternative to <a href="/vs/doodle/">Doodle</a>,
+        <a href="/vs/when2meet/">When2meet</a>,
+        <a href="/vs/lettucemeet/">LettuceMeet</a>, and
+        <a href="/vs/timeful/">Timeful</a> for recurring get-togethers -
+        game nights, book clubs, practices, monthly dinners.</p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

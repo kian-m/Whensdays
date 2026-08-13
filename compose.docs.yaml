@@ -22,6 +22,9 @@ services:
       API_PORT: "8080"
       DATABASE_URL: postgres://clsandbox:clsandbox@db:5432/clsandbox?sslmode=disable
       AUTH_MODE: dev
+      CALENDAR_MODE: stub
+      KLIPY_MODE: stub # deterministic gif picker, no key/network
+      GEO_MODE: stub # deterministic address type-ahead, no network
       RUN_MIGRATIONS: "true"
     depends_on:
       db:
@@ -36,7 +39,7 @@ services:
       - api
 
   shots:
-    image: mcr.microsoft.com/playwright:v1.49.1-jammy
+    image: mcr.microsoft.com/playwright:v1.55.1-jammy
     working_dir: /work
     volumes:
       - ./e2e:/work

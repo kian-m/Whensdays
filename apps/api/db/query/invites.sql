@@ -1,0 +1,49 @@
+-- ========================= event invites ==========================
+
+-- name: AddEventInvite :exec
+INSERT INTO event_invites (event_id, user_id, inviter_id)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING;
+
+-- name: ListEventInvites :many
+SELECT i.user_id, i.inviter_id, i.seen, p.display_name
+FROM event_invites i
+LEFT JOIN profiles p ON p.user_id = i.user_id
+WHERE i.event_id = $1
+ORDER BY i.created_at;
+
+-- name: CountUnseenInvites :one
+-- Only count invites that still have a clickable tile the user can open to clear
+-- them — the same set ListEventsInvited surfaces (active event, not your own, not
+-- one you've already responded to or cohost). Otherwise a cancelled event, a
+-- self-invite, or an already-RSVP'd invite leaves a badge with no way to dismiss
+-- it. Responding (RSVP) or opening the event both clear it.
+SELECT count(*)::int FROM event_invites ei
+WHERE ei.user_id = $1 AND NOT ei.seen
+  AND EXISTS (SELECT 1 FROM events e WHERE e.id = ei.event_id AND e.status <> 'cancelled' AND e.status <> 'draft' AND e.host_id <> $1)
+  AND NOT EXISTS (SELECT 1 FROM event_attendees a WHERE a.event_id = ei.event_id AND a.user_id = $1)
+  AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = ei.event_id AND ch.user_id = $1);
+
+-- name: MarkOneInviteSeen :exec
+UPDATE event_invites SET seen = true WHERE event_id = $1 AND user_id = $2;
+
+-- name: ListUnseenInviteEventIDs :many
+-- Same filter as CountUnseenInvites so the per-event "new" dots match the badge.
+SELECT ei.event_id FROM event_invites ei
+WHERE ei.user_id = $1 AND NOT ei.seen
+  AND EXISTS (SELECT 1 FROM events e WHERE e.id = ei.event_id AND e.status <> 'cancelled' AND e.status <> 'draft' AND e.host_id <> $1)
+  AND NOT EXISTS (SELECT 1 FROM event_attendees a WHERE a.event_id = ei.event_id AND a.user_id = $1)
+  AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = ei.event_id AND ch.user_id = $1);
+
+-- name: CountPendingIncoming :one
+SELECT count(*)::int FROM friendships WHERE addressee_id = $1 AND status = 'pending';
+
+-- name: ListEventsInvited :many
+SELECT e.id, e.host_id, e.title, e.event_type, e.description,
+       e.location_mode, e.location_address, e.scheduling_mode, e.starts_at, e.status, e.created_at, e.comments_enabled, e.group_id, e.series_id, e.recurrence, e.reminder_sent, e.visibility, e.topic, e.city, e.custom_emoji, e.custom_label, e.general_scope, e.photo_url, e.theme, e.timezone, e.ends_at, e.poll_deadline, e.poll_ready_sent, e.vote_reminder_sent, e.quorum_sent, e.capacity, e.listed
+FROM events e
+JOIN event_invites i ON i.event_id = e.id
+WHERE i.user_id = $1 AND e.status <> 'cancelled' AND e.status <> 'draft' AND e.host_id <> $1
+  AND NOT EXISTS (SELECT 1 FROM event_attendees a WHERE a.event_id = e.id AND a.user_id = $1)
+  AND NOT EXISTS (SELECT 1 FROM event_cohosts ch WHERE ch.event_id = e.id AND ch.user_id = $1)
+ORDER BY e.created_at DESC;

@@ -1,0 +1,917 @@
+/* House Lights: a small theater just before the show starts. Dark is the
+   default "stage"; light is the "matinee" (house lights up). Every surface is
+   solid --surface with hairline --line borders - flat, no blur, no drifting
+   background. Palette is extracted from the wordmark (icon.svg): plum
+   stage, cream ink, and the W's candy stripes as functional color (coral =
+   action, amber = time/pending, teal = going/free). See
+   docs/design/HOUSE-LIGHTS.md for the full spec. */
+:root {
+  color-scheme: dark;
+  /* stage (dark, default) */
+  --bg: #1a1424;
+  --surface: #241c31;
+  --surface-2: #2b2239;
+  --line: #3a2f4d;
+  --ink: #f2e9dc;
+  --muted: #a596b4;
+  --plum: #2f2440;        /* logo dark: button text, poster bg, avatar bg */
+  --cream: #f8e3c9;       /* logo cream: poster type, hover button text */
+  --accent: #ee6c4d;      /* coral - action only */
+  --accent-deep: #c14e33;
+  --time: #e9a13b;        /* amber - datetimes, pending, marquee */
+  --go: #3aa38b;          /* teal - going / free / success */
+  --maybe: #e9a13b;       /* alias of --time */
+  --no: #e0607a;          /* rose - busy / declined / destructive */
+  --r: 12px; --r-sm: 8px; --r-xs: 5px;
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --stripe: linear-gradient(90deg, var(--accent) 0 25%, var(--time) 25% 50%, var(--go) 50% 75%, var(--cream) 75% 100%);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  --font-display: 'Fraunces Variable', Georgia, serif;
+  --font-body: 'Familjen Grotesk Variable', system-ui, -apple-system, sans-serif;
+  --font-data: 'Spline Sans Mono Variable', ui-monospace, 'SF Mono', monospace;
+  /* back-compat aliases: components not yet respec'd in a later phase still
+     reference the old --radius* names (incl. inline styles in ui.tsx) - point
+     them at the real tokens instead of leaving them undefined. */
+  --radius: var(--r); --radius-sm: var(--r-sm); --radius-xs: var(--r-xs);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  /* matinee - same theater, house lights up */
+  --bg: #faf5ec;
+  --surface: #ffffff;
+  --surface-2: #f3ecdd;
+  --line: #e5dccb;
+  --ink: #2f2440;
+  --muted: #6f6280;
+  --plum: #2f2440;
+  --cream: #f8e3c9;
+  --accent: #ee6c4d;      /* fills only (plum text on it) */
+  --accent-deep: #c14e33; /* coral text/links on paper (4.4:1) */
+  --time: #9c6614;        /* amber deepened for paper (4.5:1) */
+  --go: #2b7f6c;
+  --maybe: #9c6614;
+  --no: #c14458;
+  --shadow: 0 18px 44px rgba(47, 36, 64, 0.14);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg) var(--grain);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+/* type scale - Fraunces at display sizes only (titles, posters, lock banner),
+   Familjen for body/UI copy, Spline Sans Mono for stamps/pills/section
+   labels. Nothing else ever goes mono; mono never does sentences. */
+h1, h2, h3 { margin: 0; overflow-wrap: break-word; }
+h1 {
+  font-family: var(--font-display); font-weight: 900; font-size: 1.7rem;
+  line-height: 1.05; letter-spacing: -0.02em;
+}
+h2 {
+  font-family: var(--font-display); font-weight: 900; font-size: 1.35rem;
+  line-height: 1.1; letter-spacing: -0.015em;
+}
+h3 {
+  /* card titles stay quiet - Familjen, NOT Fraunces */
+  font-family: var(--font-body); font-weight: 700; font-size: 1.05rem; line-height: 1.25;
+}
+p { margin: 0; }
+a { color: var(--accent); text-decoration: none; }
+[data-theme="light"] a { color: var(--accent-deep); }
+a:hover { text-decoration: underline; }
+.small { font-size: 0.85rem; color: var(--muted); }
+
+/* section label - mono, uppercase, letterspaced. Never sentences. */
+.section-h {
+  font-family: var(--font-data); font-weight: 600; font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);
+  margin: 1.4rem 0 0.2rem;
+}
+
+/* stamp - dates, times, counts. Mono, uppercase, tabular. Time stamps get the
+   amber tint via the .time modifier (fmtDate/fmtDateTime render into this). */
+.stamp {
+  font-family: var(--font-data); font-weight: 600; font-size: 0.8rem;
+  letter-spacing: 0.1em; text-transform: uppercase; font-variant-numeric: tabular-nums;
+}
+.stamp.time { color: var(--time); }
+
+/* Card header (group + event hero): title block left, action buttons/status
+   right on desktop; on a phone they STACK (title gets the full width, actions
+   drop to their own line) so a title never gets squeezed to a sliver beside
+   the buttons. */
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+@media (max-width: 640px) {
+  .card-header { flex-direction: column; }
+  .card-header > .card-actions { align-self: stretch; }
+}
+
+.app { max-width: 720px; margin: 0 auto; padding: 0 1.1rem 4rem; }
+
+/* top nav */
+.nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.1rem 0 1.4rem;
+}
+.brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.15rem; }
+/* The brand lockup = the W logo (.dot, apps/web/public/icon.svg - same asset
+   as the favicon) + the cursive "hensdays" wordmark (.word) right after it,
+   spelling Whensdays. The wordmark is a CSS mask painted with --ink so it's
+   near-black in light mode and warm-white in dark automatically. */
+.brand { gap: 3px; }
+.brand .dot {
+  width: 34px; height: 34px; display: inline-block; flex: none;
+  background: url("/icon.svg") center / contain no-repeat;
+}
+.brand .word {
+  width: 76px; height: 27px; display: inline-block; flex: none;
+  margin-top: 8px; /* cursive x-height sits on the W's baseline */
+  background: var(--ink);
+  -webkit-mask: url("/hensdays.svg") center / contain no-repeat;
+  mask: url("/hensdays.svg") center / contain no-repeat;
+}
+.nav-right { display: flex; align-items: center; gap: 0.4rem; }
+.nav-links { display: flex; align-items: center; gap: 0.4rem; }
+.nav-links a {
+  padding: 0.4rem 0.7rem; border-radius: var(--r-sm); color: var(--muted); font-weight: 600; font-size: 0.9rem;
+}
+.nav-links a.active { background: var(--surface-2); color: var(--accent); }
+
+/* bottom tab bar - mobile only (hidden on wider screens) */
+.tabbar { display: none; }
+.tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; color: var(--muted); font-size: 0.68rem; font-weight: 650; letter-spacing: -0.01em;
+}
+.tab svg { width: 24px; height: 24px; }
+.tab .icon-wrap { border-radius: var(--r-sm); padding: 3px 14px; transition: background 0.15s ease; }
+.tab.active { color: var(--accent); }
+/* active indicator: a soft accent tint hugging the icon */
+.tab.active .icon-wrap { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+/* tiny red notification count on nav items */
+.dot-badge {
+  background: var(--no); color: #fff; font-size: 0.62rem; font-weight: 800;
+  border-radius: 999px; min-width: 15px; height: 15px; padding: 0 4px;
+  display: inline-grid; place-items: center; line-height: 1;
+}
+.tab .icon-wrap { position: relative; display: inline-flex; }
+.tab .icon-wrap .dot-badge { position: absolute; top: -4px; right: -9px; }
+/* desktop nav: badge floats above the label so the word never shifts */
+.nav-links a { position: relative; }
+.nav-links .dot-badge { position: absolute; top: -7px; right: -4px; }
+.tab:active { transform: scale(0.94); }
+
+@media (max-width: 640px) {
+  .nav-links { display: none; }
+  .nav { padding: 0.9rem 0 1rem; }
+  .tabbar {
+    display: flex; align-items: stretch;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    height: calc(58px + env(safe-area-inset-bottom));
+    padding: 0 0.3rem env(safe-area-inset-bottom);
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+  }
+  /* keep content clear of the fixed bar */
+  .app { padding-bottom: calc(58px + env(safe-area-inset-bottom) + 1rem); }
+  /* mobile-first: rows wrap rather than overflow. Buttons are nowrap, so a row
+     that can't fit folds to the next line instead of pushing off-screen.
+     EXCEPT .between header rows (title left, actions right): folding drops the
+     action button under the title (the wandering Edit) - they keep one line
+     and their children shrink instead. */
+  .row { flex-wrap: wrap; }
+  .row.between { flex-wrap: nowrap; }
+  .row.between > * { min-width: 0; }
+  /* action clusters inside header rows (e.g. Quick + New event) stay one line
+     pinned right; the heading shrinks instead */
+  .row.between > .row { flex-wrap: nowrap; flex: none; }
+  /* A single action button/chip beside a title/hint keeps its intrinsic size
+     too - the `> * { min-width: 0 }` above would otherwise let it shrink below
+     its label and look smushed. The flexible text sibling shrinks instead. */
+  .row.between > .btn, .row.between > .chip { flex: none; }
+}
+
+/* cards - flat, solid surface with a hairline border. No blur, no glint,
+   no glow. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 1rem;
+}
+.stack { display: flex; flex-direction: column; gap: 0.9rem; }
+
+/* Host event-edit form: grouped disclosure sections (single-open) + a sticky
+   action bar so Save/Cancel stay reachable in the taller sectioned form. */
+.edit-sec { border: 1px solid var(--line); border-radius: var(--r-sm); }
+.edit-sec > summary {
+  cursor: pointer; font-weight: 600; padding: 0.7rem 0.85rem; list-style: none; user-select: none;
+}
+.edit-sec > summary::-webkit-details-marker { display: none; }
+.edit-sec > summary::after { content: "⌄"; float: right; opacity: 0.55; }
+.edit-sec[open] > summary::after { content: "⌃"; }
+.edit-sec > div { padding: 0 0.85rem 0.85rem; }
+.edit-actions {
+  position: sticky; bottom: 0; z-index: 5;
+  margin: 0.2rem -1.2rem -1.1rem; padding: 0.75rem 1.2rem;
+  background: var(--surface);
+  border-top: 1px solid var(--line); border-radius: 0 0 var(--r) var(--r);
+}
+@media (max-width: 640px) {
+  /* keep the sticky bar clear of the fixed mobile tabbar */
+  .edit-actions { bottom: calc(58px + env(safe-area-inset-bottom)); }
+}
+
+/* skeleton placeholders - a first load renders the page's real chrome with
+   shimmer blocks where data will land (see Skel/ListSkeleton in ui.tsx),
+   never a bare "Loading…" wall. Gradient-only motion, same policy as themes.
+   Recolored to plum-toned surfaces for House Lights. */
+.skel {
+  display: block;
+  background: linear-gradient(100deg, var(--surface-2) 40%, var(--line) 50%, var(--surface-2) 60%);
+  background-size: 300% 100%;
+  border-radius: var(--r-xs);
+  animation: skel-sweep 1.4s ease-in-out infinite;
+}
+@keyframes skel-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+.row { display: flex; align-items: center; gap: 0.6rem; }
+.between { justify-content: space-between; }
+.wrap { flex-wrap: wrap; }
+.muted { color: var(--muted); }
+
+/* event tiles (comp's .tile): a flat --surface card (already carried by
+   .card) laid out as a thumb + title/stamp/facepile row. No gradient wash, no
+   colored glow border, no relationship-tier tinting - §9 kills that whole
+   "AI SaaS glow" language. A themed event gets ONLY the shared .theme-tile 3px
+   bottom edge (below); "you're going" reads from the pill/text in the row,
+   never from lighting up the whole card. */
+.tile { display: flex; gap: 0.85rem; align-items: center; }
+.friends-going {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 0.75rem; font-weight: 700; color: var(--go);
+  background: rgba(35, 160, 115, 0.12); border-radius: var(--r-xs); padding: 0.12rem 0.5rem;
+}
+
+/* event card */
+.ev { display: flex; gap: 0.9rem; align-items: flex-start; cursor: pointer; transition: transform 0.05s ease; }
+.ev:hover { transform: translateY(-1px); }
+.ev .emoji {
+  font-size: 1.5rem; width: 46px; height: 46px; flex: none;
+  display: grid; place-items: center; background: var(--surface-2); border-radius: 10px;
+}
+.ev .title { font-weight: 700; }
+
+/* buttons - crisp, editorial. Sharp radius, confident weight, real
+   interaction physics (hover lift, press scale, visible focus ring) - defined
+   once here, never per-component. Primary is plum text on a coral fill;
+   hover flips to accent-deep with cream text (the only two safe coral text
+   pairings). No gradients on interactive elements. */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.45em;
+  font: inherit; font-weight: 700; font-size: 0.95rem;
+  padding: 0.6rem 1.15rem; border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap; /* a button label must never wrap mid-phrase on mobile */
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  /* An unmodified .btn (no .primary/.ghost/.quiet/.danger) must still be
+     presentable - a plain <button className="btn"> used to render with a
+     transparent fill + transparent border (browser-default looking) at every
+     call site that forgot a modifier. Default to the quiet look; .primary/
+     .ghost/.danger below override it for the sites that need a different job. */
+  background: var(--surface-2); color: var(--ink); border: 1px solid var(--line);
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(0.98); }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--time); outline-offset: 2px; }
+.btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.btn.primary { background: var(--accent); color: var(--plum); border-color: var(--accent-deep); }
+.btn.primary:hover { background: var(--accent-deep); color: var(--cream); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.ghost:hover { border-color: var(--muted); }
+/* .quiet is the current name; .soft is kept as an alias so pages that still
+   reference the old class name keep working until they're swept in a later
+   phase. */
+.btn.quiet, .btn.soft { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+.btn.danger { background: transparent; color: var(--no); border-color: var(--line); }
+.btn.sm { padding: 0.35rem 0.85rem; font-size: 0.85rem; }
+.btn-block { width: 100%; text-align: center; }
+
+/* segmented control - joined single-choice buttons, visually distinct from
+   chips (which are for optional multi-select). Used by the create flow's
+   scheduling mode. Labels wrap rather than overflow on a narrow phone.
+   Selected = teal fill + plum text, same as .chip.on - picking a segment is a
+   SELECTION, not an instruction, so it stays out of coral (coral is reserved
+   for the one primary action per screen). */
+.segmented {
+  display: flex; width: 100%; border: 1px solid var(--line);
+  border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2);
+}
+.segmented button {
+  flex: 1 1 0; min-width: 0; font: inherit; font-weight: 600; font-size: 0.82rem;
+  line-height: 1.15; white-space: normal; cursor: pointer; color: var(--ink);
+  padding: 0.55rem 0.4rem; min-height: 44px; background: transparent; border: none;
+  border-left: 1px solid var(--line); transition: background 0.12s ease, color 0.12s ease;
+}
+.segmented button:first-child { border-left: none; }
+.segmented button.on { background: var(--go); color: var(--plum); }
+.segmented button:focus-visible { outline: 2px solid var(--time); outline-offset: -2px; }
+
+/* plain text link - for secondary/optional actions that must NOT read as a chip
+   or a primary button (create flow's "More", "Where + more", disclosures). */
+.linklike {
+  background: none; border: none; padding: 0; font: inherit; font-weight: 600;
+  color: var(--accent); cursor: pointer; text-align: left; white-space: nowrap;
+}
+[data-theme="light"] .linklike { color: var(--accent-deep); }
+.linklike:hover { text-decoration: underline; }
+.linklike:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+.linklike.muted { color: var(--muted); font-weight: 500; }
+
+/* inputs */
+label.field { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35rem; }
+.input, select.input, textarea.input {
+  width: 100%; min-width: 0; max-width: 100%; font: inherit; padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--bg); color: var(--ink);
+}
+/* iOS Safari gives date/time inputs an intrinsic width that refuses to shrink,
+   so they can blow past their container on phones. Strip the native chrome and
+   force them to behave like every other input (with a tap-friendly height,
+   since appearance:none collapses them). */
+input.input[type="datetime-local"], input.input[type="date"], input.input[type="time"] {
+  -webkit-appearance: none; appearance: none; min-height: 44px; display: block;
+}
+.input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+textarea.input { resize: vertical; min-height: 64px; }
+/* placeholder examples read as hints, not content */
+.input::placeholder { color: var(--muted); opacity: 0.6; }
+
+/* chips / pills - typographic, flat. A selected chip fills teal (selection is
+   a state, coral stays reserved for instructions). Status pills read as
+   editorial state labels: mono uppercase letterspaced micro-type, hairline
+   border, colored dot. */
+.chip {
+  display: inline-flex; align-items: center; gap: 0.4em;
+  border: 1px solid var(--line); background: transparent; border-radius: var(--r-sm);
+  padding: 0.5rem 0.95rem; font: inherit; font-weight: 600; font-size: 0.9rem;
+  cursor: pointer; white-space: nowrap; color: var(--ink);
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.chip:hover { transform: translateY(-1px); border-color: var(--muted); }
+.chip:active { transform: scale(0.97); }
+.chip.on { background: var(--go); border-color: var(--go); color: var(--plum); }
+.chip.on svg { color: var(--plum); }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-data); font-weight: 600; font-size: 0.66rem;
+  letter-spacing: 0.12em; text-transform: uppercase; font-variant-numeric: tabular-nums;
+  border-radius: var(--r-xs); padding: 0.28rem 0.6rem;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+}
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+/* kinds: deciding (renames "polling") = amber; locked ("Locked in") = teal;
+   draft = muted; cancelled = rose; going/maybe/declined mirror the RSVP
+   colors. .polling/.scheduled are kept as aliases for the old kind names. */
+.pill.going, .pill.locked, .pill.scheduled { color: var(--go); }
+.pill.maybe, .pill.deciding, .pill.polling { color: var(--time); }
+.pill.declined, .pill.cancelled { color: var(--no); }
+.pill.draft { color: var(--muted); }
+.pill.polling::before, .pill.deciding::before { animation: fx-twinkle 2s ease-in-out infinite; }
+
+/* availability grid */
+.grid {
+  display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 0.35rem; align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+/* Grid headers/row labels are dates and dayparts - the stamp voice (mono,
+   uppercase, letterspaced) applies, just at a lighter letter-spacing than
+   .stamp proper so compact columns don't overflow. */
+.grid .hd {
+  font-family: var(--font-data); font-size: 0.72rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.03em;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.grid .day {
+  font-family: var(--font-data); font-size: 0.78rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* DayGrid's 6-daypart (.compact-cols) grids only need smaller cells on phones,
+   where all 6 columns otherwise wouldn't fit one screen - on wider viewports
+   there's room for the normal 44px .cell/.hd sizing above, so this stays
+   scoped to a max-width query rather than a fixed JS decision (which used to
+   shrink the grid even on desktop, wasting most of the card's width). */
+@media (max-width: 640px) {
+  .grid.compact-cols { gap: 0.25rem; }
+  .grid.compact-cols .hd { font-size: 0.66rem; }
+  .grid.compact-cols .cell { min-width: 0; min-height: 34px; }
+}
+/* Two-line stacked grid labels ("Weekday" over "Mon D") so a long compound
+   date header fits a narrow phone column without truncating to 1-2 letters.
+   The ellipsis on .day/.hd stays as a defensive fallback only. */
+.label-stack { display: flex; flex-direction: column; line-height: 1.15; gap: 1px; max-width: 100%; }
+.label-stack > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.label-stack-sub { font-size: 0.68rem; font-weight: 600; color: var(--muted); }
+/* Availability cells are tri-state:
+   neutral (unselected) · green .on (free) · red .busy-mark (busy).
+   Cells that show a count (poll-results heatmaps) always render it in mono,
+   tabular-nums - the stamp voice for numbers, never the default body font. */
+.cell {
+  position: relative;
+  min-height: 44px; min-width: 44px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+  font-family: var(--font-data); font-variant-numeric: tabular-nums;
+}
+.cell.on { background: var(--go); border-color: var(--go); }
+.cell.busy-mark { background: var(--no); border-color: var(--no); }
+
+/* Results heatmaps (GeneralResults' week/month/general grids + TimeGrid's
+   counts-branch, 'dates' scope): three discrete teal alpha steps rather than
+   a continuous gradient, so "how full is this cell" reads as tiers, not a
+   slider. Rendering only - the interaction logic that drives which class a
+   cell gets (togglePick, canPick, onCellClick) lives in EventPage.tsx/ui.tsx
+   and is untouched here. */
+.cell.c1 { background: color-mix(in srgb, var(--go) 16%, transparent); color: var(--ink); }
+.cell.c2 { background: color-mix(in srgb, var(--go) 34%, transparent); color: var(--ink); }
+.cell.c3 { background: color-mix(in srgb, var(--go) 55%, transparent); color: var(--cream); }
+/* the best cell(s) - coral border + a tiny BEST tag, same idea as the comp. */
+.cell.best { border: 2px solid var(--accent); }
+.cell.best::after {
+  content: "BEST"; position: absolute; top: -7px; right: -2px;
+  font-family: var(--font-data); font-size: 0.5rem; letter-spacing: 0.08em; font-weight: 700;
+  background: var(--accent); color: var(--plum); padding: 1px 4px; border-radius: 3px;
+}
+/* mono legend line under a results heatmap. */
+.grid-legend { margin-top: 0.3rem; color: var(--muted); font-size: 0.72rem;
+  font-family: var(--font-data); letter-spacing: 0.08em; text-transform: uppercase; }
+/* MonthPicker is a dense 7-column day-of-month grid, not a tap-target-
+   sensitive availability grid. It sits TWO cards deep (page > form > picker),
+   so its real interior is only ~220px on a 375px phone - a fixed 40px+ cell
+   width would force 7 columns (280px+) to overflow the card border. Let the
+   1fr tracks shrink to fit (min-width:0) and keep the tap target vertical
+   (min-height:40px); numbers 1-31 read fine in a ~28px-wide cell. */
+.cal-day {
+  min-width: 0; min-height: 40px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+}
+.cal-day.on { background: var(--go); border-color: var(--go); }
+/* Busy pulled from an imported calendar - locked, hatched red so it reads as
+   "busy, and not yours to edit". */
+.cell.locked {
+  cursor: not-allowed; border-color: transparent;
+  background:
+    repeating-linear-gradient(45deg, transparent 0 5px, rgba(226, 96, 110, 0.35) 5px 7px),
+    color-mix(in srgb, var(--no) 16%, transparent);
+}
+/* Color key shown under every availability grid. */
+.legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 0.8rem; color: var(--muted); }
+.legend .sw { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw i { width: 15px; height: 15px; min-width: 0; min-height: 0; border-radius: 4px; display: inline-block; }
+/* clickable row/column labels in the availability grid */
+.gp-head { background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
+.gp-head:hover { color: var(--accent); }
+
+/* event cover: photo or gif on the hero card, at its NATURAL aspect - a
+   square crop stays square, a banner crop (2:1) spans the card, and Klipy
+   gifs keep their own shape. Both max constraints + auto dims = scale to fit
+   without cropping; tiles still thumb these square via object-fit. */
+.event-cover {
+  width: auto; max-width: 100%; max-height: 340px;
+  border-radius: var(--r); align-self: center; display: block; margin: 0 auto;
+  box-shadow: var(--shadow);
+}
+
+/* Hero card: the ONLY card that gets the candy stripe, along its top edge.
+   Padding lives on .hero-body instead of the card itself so the cover photo
+   or TitlePoster (photo-less fallback) can bleed edge-to-edge underneath the
+   stripe, exactly like the comp's phone mock. */
+.card.event-hero { position: relative; overflow: hidden; padding: 0; }
+.card.event-hero::before { content: ""; display: block; height: 3px; background: var(--stripe); }
+.card.event-hero > .event-cover {
+  width: 100%; max-width: 100%; max-height: 300px; object-fit: cover;
+  border-radius: 0; box-shadow: none; margin: 0; display: block;
+}
+.hero-body { padding: 1.1rem 1.2rem 1.2rem; }
+
+/* TitlePoster (hero scale): the no-photo cover fallback - a typographic
+   playbill, not an emoji tile. Plum + grain, the title in Fraunces at
+   poster scale, an amber .stamp line underneath, a faint radial cream light
+   from the top edge (see TitlePoster in ui.tsx). */
+.poster {
+  background: var(--plum) var(--grain);
+  padding: 1.9rem 1.2rem 1.4rem;
+  position: relative;
+  overflow: hidden;
+}
+.poster::after {
+  content: "";
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(90% 70% at 50% 0%, rgba(248, 227, 201, 0.10), transparent 65%);
+}
+.poster-title {
+  position: relative;
+  font-family: var(--font-display); font-weight: 900; font-size: 2.6rem;
+  line-height: 0.95; letter-spacing: -0.02em; color: var(--cream);
+  text-wrap: balance;
+}
+.poster-sub { position: relative; margin-top: 0.7rem; color: var(--time); }
+
+/* TitlePoster (thumb scale, 56px default): the same fallback shrunk to a
+   tile - first letter only, plum + grain, a 3px stripe along the bottom
+   edge instead of the stamp line. Reuses the photo-thumb footprint (.thumb)
+   so it drops into the same slot as a real cover image. */
+.thumb.poster-thumb {
+  background: var(--plum) var(--grain);
+  display: grid; place-items: center; position: relative; overflow: hidden;
+  box-shadow: none; color: var(--cream);
+  font-family: var(--font-display); font-weight: 900;
+}
+.thumb.poster-thumb::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--stripe);
+}
+
+/* Hero meta rows (when/where): icon + a stamp line (amber for anything
+   time-related) + an optional muted .sub line, hairline-divided. */
+.meta { display: flex; gap: 0.65rem; align-items: flex-start; padding: 0.45rem 0; border-top: 1px solid var(--line); }
+.meta:first-of-type { border-top: 0; }
+.meta svg { flex: none; width: 17px; height: 17px; margin-top: 2px; color: var(--muted); }
+.meta > div { min-width: 0; }
+.meta .sub { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+/* Invite card: the link is the button - tap to copy. */
+.share-copy {
+  font: inherit; color: var(--accent); font-weight: 700;
+  background: var(--surface-2); border: 1px dashed var(--line);
+  border-radius: var(--r-sm); padding: 0.7rem 0.9rem; cursor: pointer;
+  overflow-wrap: anywhere; text-align: left;
+}
+.share-copy:active { transform: scale(0.99); }
+
+/* event tile thumbnail (cover photo/gif as the tile's main visual). No
+   box-shadow: a list has many tiles, and §1.9 reserves the one shadow per
+   screen for the element that must float (modal/phone-frame/active card) -
+   a shadow on every thumb was exactly the "AI glow" this direction removes. */
+.thumb { border-radius: var(--r-sm); object-fit: cover; flex: none; display: block; }
+/* comment thread: chat-style bubbles (avatar + bubble; own = accent tint) */
+.comment-row { display: flex; gap: 8px; align-items: flex-start; }
+.comment-bubble {
+  flex: 1; min-width: 0; padding: 0.5rem 0.7rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  border-top-left-radius: 4px; /* chat tail toward the avatar */
+}
+.comment-bubble.own {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
+}
+.comment-meta { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; min-height: 22px; }
+.comment-meta .muted { font-size: 0.72rem; }
+.comment-meta .btn { padding: 1px 7px; font-size: 0.72rem; line-height: 1.4; }
+.comment-body { margin-top: 2px; overflow-wrap: anywhere; }
+.comment-body + .comment-gif, .comment-meta + .comment-gif { margin-top: 6px; }
+
+/* a gif attached to a comment */
+.comment-gif { max-width: 180px; border-radius: var(--r-sm); display: block; }
+/* klipy gif results */
+/* Responsive columns: cells stay a legible size and the count adapts to width
+   (≈3 across on a phone, more on desktop) instead of cramming a fixed 4 into any
+   width. The grid itself is the scroll region - a viewport-relative height keeps
+   it a real, obviously-scrollable box on mobile, and overscroll-behavior stops
+   the page from scrolling once you hit the end. */
+/* A compact, always-scrollable GIF grid: FIXED row height so every cell reserves
+   its space on first paint (the images lazy-load into a stable box - no reflow
+   that used to leave the grid unbounded until a "Load more" tap), and a FIXED
+   ~2-row pixel max-height (no `vh`, which is unreliable on mobile) so it scrolls
+   from the very first render instead of stretching to many rows. */
+.gif-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); grid-auto-rows: 96px; gap: 6px; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; -webkit-overflow-scrolling: touch; }
+.gif-grid button { border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--r-sm); padding: 0; cursor: pointer; overflow: hidden; }
+.gif-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Event page themes are a QUIET wash, two ways at once:
+   1. one static radial tint of the theme's hue over the stage (::before,
+      fixed, non-interactive - the wash color rides var(--accent), set per
+      theme below, so this single rule covers every preset), and
+   2. the --accent override itself, so every button/chip/selected-state/
+      accent inside the event page adopts the theme colour.
+   Keys are unchanged (DB-stored eventThemes, gifs.go - §1.12). NO motion, NO
+   particle layers: an earlier version had a slow-flowing gradient (neon/
+   cozy) and simulated stars (night) - both proved unreliable on iOS Low
+   Power Mode (animation pauses/degrades, leaving frozen-looking artifacts)
+   and read as "busy" next to the rest of the calm, flat component language.
+   A quiet wash is quiet in both senses. */
+.event-theme { position: relative; }
+.event-theme::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120% 70% at 50% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 72%);
+  transition: background 0.4s ease;
+}
+.theme-party  { --accent: #e0559b; }
+.theme-beach  { --accent: #f0993a; }
+.theme-forest { --accent: #3f9d6f; }
+.theme-night  { --accent: #8b83ff; }
+.theme-neon   { --accent: #ff2d94; }
+.theme-cozy   { --accent: #df8038; }
+
+/* theme picker chip: a color swatch + the name, no emoji (mirrors the hues
+   set on .theme-x above - keep in sync with THEME_SWATCH in EventPage.tsx). */
+.theme-swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
+
+/* who's-in social-pressure bar: going vs invited, fill = the candy stripe
+   (radius from tokens, not a pill - §1.8). */
+.whosin-bar { height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.whosin-bar span { display: block; height: 100%; border-radius: 3px; min-width: 3px;
+  background: var(--stripe);
+  transition: width 0.5s cubic-bezier(0.2, 0.9, 0.3, 1); }
+
+/* RSVP card's note line under the chips ("{Host} gets a note when you answer"). */
+.rsvp-note { color: var(--muted); font-size: 0.83rem; margin-top: 0.1rem; }
+
+/* the lock-moment banner: a one-shot celebration when polling -> scheduled.
+   Fully visible with NO entrance animation on purpose (a paused CSS
+   animation with fill:both would leave it invisible on iOS Low Power Mode -
+   see CLAUDE.md); the celebration timeout unmounts it. The stripe top rule
+   IS the celebration (no confetti) - a teal hairline + soft teal wash, no
+   gradient background (gradients are reserved for --stripe/skeleton/theme
+   washes - §1.2). */
+.fx-locked {
+  position: fixed; top: 16%; left: 50%; transform: translateX(-50%); z-index: 40;
+  pointer-events: none; width: min(90vw, 380px);
+  background: var(--surface); border: 1px solid var(--go); border-radius: var(--r);
+  overflow: hidden; box-shadow: var(--shadow);
+}
+.fx-locked::before { content: ""; display: block; height: 3px; background: var(--stripe); }
+.fx-locked-body { padding: 0.9rem 1.1rem; background: color-mix(in srgb, var(--go) 9%, transparent); }
+.fx-locked-body b {
+  display: block; font-family: var(--font-display); font-weight: 900; font-size: 1.15rem; letter-spacing: -0.01em;
+}
+.fx-locked-body span { color: var(--muted); font-size: 0.86rem; }
+
+/* used by .pill.polling's live dot */
+@keyframes fx-twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.6); }
+  50%      { opacity: 1; transform: scale(1.3); }
+}
+
+/* Themed event TILES (Home/Discover/Groups): quiet like the page wash - a
+   3px accent-hued edge along the bottom (the same "stripe moment" language
+   as TitlePoster/EventThumb, just tinted per theme instead of the full
+   rainbow), no diagonal wash, no glow border. The theme-x class (shared
+   with .event-theme above) sets --accent, so this one rule covers every
+   preset. Tiles carry .theme-tile (never .event-theme), so the full-page
+   ::before backdrop above never applies here. */
+.theme-tile { position: relative; overflow: hidden; }
+.theme-tile::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--accent);
+}
+.theme-tile .title { color: var(--ink); font-weight: 700; }
+
+/* facepile: overlapping avatar stack on event tiles ("who's going") */
+.facepile { display: flex; align-items: center; margin-top: 6px; }
+.facepile .face { display: inline-flex; margin-left: -7px; border-radius: 50%; }
+.facepile .face:first-child { margin-left: 0; }
+/* ring separates overlapped faces from each other and the surface */
+.facepile .face .avatar { box-shadow: 0 0 0 2px var(--surface); }
+/* friends get a teal ring OUTSIDE the surface separation ring - going/free is
+   teal's job everywhere else, and a friend showing up is good news too. */
+.facepile .face-friend .avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--go); }
+
+/* horizontally scrollable emoji picker strip */
+.emoji-strip {
+  display: flex; gap: 4px; overflow-x: auto; padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+}
+.emoji-strip .chip { flex: none; }
+
+/* static category label on discover cards (not interactive) */
+.cat-tag {
+  flex: none; font-size: 0.78rem; font-weight: 700; color: var(--muted);
+  background: var(--surface-2); border-radius: 6px; padding: 0.2rem 0.6rem;
+}
+
+/* landing hero */
+.land { text-align: center; padding: 2.2rem 1rem 2rem; }
+/* Staggered fade-up on load - one orchestrated moment, then stillness. */
+@keyframes land-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.land > * { animation: land-rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.land > *:nth-child(2) { animation-delay: 0.08s; }
+.land > *:nth-child(3) { animation-delay: 0.16s; }
+.land > *:nth-child(4) { animation-delay: 0.22s; }
+.land > *:nth-child(5) { animation-delay: 0.3s; }
+.land > *:nth-child(n+6) { animation-delay: 0.36s; }
+@media (prefers-reduced-motion: reduce) { .land > * { animation: none; } }
+.land-go { font-size: 1.1rem; padding: 0.9rem 2.2rem; }
+/* Eyebrow above the display hero - mono stamp voice, amber, same language as
+   the comp's intro label. */
+.land-eyebrow {
+  display: block; font-family: var(--font-data); font-weight: 600; font-size: 0.75rem;
+  text-transform: uppercase; letter-spacing: 0.16em; color: var(--time);
+  margin: 3rem auto 0;
+}
+/* The secondary path (friend-group planning) - one quiet line under the
+   primary CTA, not its own section. */
+.land-micro { color: var(--muted); font-size: 0.9rem; margin-top: 1rem; }
+.land-micro a { font-weight: 700; }
+/* The product shots ARE the pitch: three phones, gently fanned - invite ->
+   pick the one best time -> spread a recurring series. Side by side on
+   desktop; on a phone the third would be too small, so the trio scrolls
+   horizontally (snap) instead of shrinking into unreadability. One shadow
+   per screen (§1.9): only the center shot floats, the outer two are flat
+   with a hairline border like everything else. */
+.land-shots {
+  display: flex; justify-content: center; align-items: flex-start;
+  gap: clamp(0.5rem, 2.4vw, 1.6rem); margin: 3rem auto 0.6rem;
+}
+.land-shot {
+  width: min(240px, 30vw); height: auto; display: block; flex: none;
+  border-radius: 26px; border: 1px solid var(--line);
+  transform: rotate(-2deg);
+}
+.land-shot-b { transform: rotate(1.5deg) translateY(20px); box-shadow: var(--shadow); }
+.land-shot-c { transform: rotate(-1.5deg) translateY(6px); }
+@media (max-width: 640px) {
+  /* Horizontal scroll-snap: full-size phones you swipe through, centered. */
+  .land-shots {
+    justify-content: flex-start; gap: 1rem;
+    overflow-x: auto; scroll-snap-type: x mandatory;
+    padding: 0.5rem calc(50vw - 34vw); -webkit-overflow-scrolling: touch;
+  }
+  .land-shot { width: 68vw; scroll-snap-align: center; transform: none; }
+  .land-shot-b, .land-shot-c { transform: none; }
+}
+.land-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.9rem, 9vw, 5rem);
+  font-weight: 900; letter-spacing: -0.02em; line-height: 0.98;
+  margin: 0.5rem auto 0;
+}
+.land-sub { color: var(--muted); max-width: 460px; margin: 1rem auto 1.6rem; font-size: 1.05rem; }
+.land-cta { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+.land-showcase { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 2rem auto 0; max-width: 520px; }
+.land-showcase .chip { cursor: default; }
+.land-points { display: flex; gap: 0.6rem 1.4rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; color: var(--muted); font-size: 0.9rem; }
+.land-points b { color: var(--ink); }
+
+/* filter chip row - scrolls horizontally on mobile */
+.filter-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+.filter-row .chip { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.filter-count {
+  background: var(--surface-2); color: var(--accent); border-radius: 999px;
+  font-size: 0.7rem; font-weight: 800; min-width: 17px; height: 17px; padding: 0 5px;
+  display: inline-grid; place-items: center; line-height: 1; font-variant-numeric: tabular-nums;
+}
+/* on a selected (teal) chip the badge needs to read on plum text, not white */
+.chip.on .filter-count { background: rgba(47, 36, 64, 0.2); color: var(--plum); }
+
+/* responder dots on the general-availability results - tap to see one guest's picks */
+.resp-dot { background: none; border: none; padding: 0; cursor: pointer; border-radius: 50%; opacity: 0.8; transition: opacity 0.1s ease, transform 0.1s ease; }
+.resp-dot:hover { opacity: 1; }
+.resp-dot:active { transform: scale(0.94); }
+.resp-dot.on { opacity: 1; transform: scale(1.12); }
+.resp-dot.on .avatar { box-shadow: 0 0 0 2.5px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent); }
+/* fade unselected responders while one is active, so who-you're-viewing is obvious */
+.resp-dot:not(.on):has(~ .resp-dot.on), .resp-dot.on ~ .resp-dot:not(.on) { opacity: 0.45; }
+
+/* toast: prominent, mobile-visible save confirmation (auto-dismiss) */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 60;
+  background: var(--go); color: #fff; font-weight: 700; font-size: 0.92rem;
+  padding: 0.6rem 1.1rem; border-radius: var(--r-sm);
+  box-shadow: 0 6px 20px rgba(35, 160, 115, 0.35);
+  animation: toast-in 0.18s ease;
+}
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (min-width: 641px) { .toast { bottom: 24px; } }
+
+/* photo crop dialog (avatars = circle mask preview, covers = square) */
+.crop-overlay {
+  position: fixed; inset: 0; z-index: 70; display: grid; place-items: center;
+  background: rgba(10, 14, 26, 0.6);
+}
+.crop-card { max-width: min(92vw, 352px); }
+.crop-viewport {
+  position: relative; overflow: hidden; max-width: 100%;
+  border-radius: var(--r-sm); border: 1px solid var(--line);
+  touch-action: none; cursor: grab; background: #000;
+}
+.crop-viewport:active { cursor: grabbing; }
+.crop-img { position: absolute; max-width: none; user-select: none; pointer-events: none; }
+.crop-circle .crop-mask {
+  position: absolute; inset: 0; border-radius: 50%;
+  box-shadow: 0 0 0 9999px rgba(10, 14, 26, 0.55); pointer-events: none;
+}
+
+/* calendar view (month/week/day) */
+.cal-month {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  overflow: hidden; box-shadow: var(--shadow);
+}
+.cal-head {
+  padding: 0.5rem 0.4rem; text-align: center; font-size: 0.72rem; font-weight: 700; color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-data); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.cal-cell {
+  min-height: 84px; padding: 4px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 2px; cursor: pointer; overflow: hidden;
+}
+.cal-cell:nth-child(7n) { border-right: none; }
+.cal-other { background: rgba(127, 127, 140, 0.08); color: var(--muted); }
+.cal-daynum {
+  font-size: 0.72rem; font-weight: 700; width: 20px; height: 20px; display: inline-grid; place-items: center; border-radius: 50%;
+  font-family: var(--font-data); font-variant-numeric: tabular-nums;
+}
+.cal-today { background: var(--accent); color: var(--plum); }
+.cal-pill {
+  border: none; font: inherit; text-align: left; cursor: pointer;
+  font-size: 0.66rem; font-weight: 700; border-radius: 5px; padding: 1px 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.cal-week {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  overflow: hidden; box-shadow: var(--shadow);
+}
+.cal-week-col { border-right: 1px solid var(--line); }
+.cal-week-col:last-child { border-right: none; }
+.cal-week-head { display: flex; flex-direction: column; align-items: center; padding: 0.5rem 0.2rem; border-bottom: 1px solid var(--line); }
+.cal-week-today { background: var(--surface-2); }
+.cal-pill-lg { font-size: 0.72rem; padding: 4px 6px; border-radius: 7px; display: flex; flex-direction: column; align-items: flex-start; white-space: normal; }
+.cal-pill-time {
+  font-family: var(--font-data); font-weight: 700; font-size: 0.6rem;
+  text-transform: uppercase; letter-spacing: 0.03em; font-variant-numeric: tabular-nums;
+  color: var(--time); opacity: 1;
+}
+.cal-day-row { background: none; border: none; font: inherit; text-align: left; padding: 4px 0; gap: 10px; display: flex; align-items: center; }
+
+/* avatars - plum fill, cream initials (matches the wordmark palette) */
+.avatar { border-radius: 50%; object-fit: cover; flex: none; display: inline-grid; place-items: center; }
+.avatar-fallback { background: var(--plum); color: var(--cream); font-weight: 700; }
+
+/* misc */
+.empty { text-align: center; color: var(--muted); padding: 2.2rem 1rem; }
+.hero { text-align: center; padding: 3.5rem 1rem; }
+.hero h1 { font-size: 2.6rem; }
+.tally { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.tally > span { display: block; height: 100%; background: var(--go); }
+.err { color: var(--no); font-size: 0.9rem; }
+.divider { height: 1px; background: var(--line); margin: 0.4rem 0; }
+
+/* address autocomplete dropdown (Photon suggestions) */
+.addr-menu {
+  position: absolute; z-index: 30; left: 0; right: 0; margin-top: 4px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm);
+  box-shadow: var(--shadow); overflow: hidden; max-height: 240px; overflow-y: auto;
+}
+.addr-item {
+  display: block; width: 100%; text-align: left; padding: 0.55rem 0.75rem;
+  background: none; border: none; font: inherit; color: var(--ink); cursor: pointer;
+}
+.addr-item:hover { background: var(--surface-2); color: var(--accent); }
+.accent { color: var(--accent); font-weight: 600; }
+
+/* slide-to-paint grids: touches on cells paint (never scroll); the page still
+   scrolls from headers, labels, and everything outside the grid */
+.grid.paintable { user-select: none; -webkit-user-select: none; }
+/* No touch-action:none here: drag-paint is mouse/pen only, so a one-finger
+   touch drag scrolls the page natively; a touch tap toggles a single cell. */
+
+/* add-to-homescreen steps: numbered chips + the real iOS glyphs */
+.a2hs-step {
+  width: 20px; height: 20px; border-radius: 999px; flex: none;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent); font-size: 0.72rem; font-weight: 800;
+  display: inline-grid; place-items: center;
+}
+
+/* EU cookie-consent bar: fixed strip above the tab bar */
+.consent-bar {
+  position: fixed; left: 10px; right: 10px; z-index: 80;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 0.7rem 0.9rem; border-radius: var(--r);
+  background: var(--surface); border: 1px solid var(--line);
+  box-shadow: var(--shadow); max-width: 700px; margin: 0 auto;
+}
+@media (min-width: 641px) { .consent-bar { bottom: 16px; } }
+
+/* OSM attribution line under address suggestions (ODbL) */
+.addr-attrib { padding: 6px 12px; font-size: 0.68rem; color: var(--muted); border-top: 1px solid var(--line); }
+.addr-attrib a { text-decoration: underline; }

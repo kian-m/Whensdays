@@ -1,0 +1,35 @@
+# Monthly venue sync: scrape ucbcomedy.com (real headed Chromium under xvfb -
+# a Cloudflare JS challenge blocks plain HTTP and headless) and POST the parsed
+# shows to the CRON_KEY-gated /api/cron/ucb-sync, which maintains the group's
+# jam series (add / retime / cancel). See e2e/scripts/ucb-sync.mjs and
+# apps/api/ucbsync.go. If Cloudflare ever blocks the runner's IP, run
+# `make ucb-sync` locally instead - a residential IP passes.
+#
+# Secrets: CRON_KEY (same one Cloud Scheduler uses), UCB_GROUP_ID (the group).
+name: ucb-sync
+
+on:
+  schedule:
+    - cron: "0 17 1 * *" # 1st of the month, ~9/10am Pacific
+  workflow_dispatch: # manual runs for testing
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        working-directory: e2e
+      - run: pnpm exec playwright install --with-deps --no-shell chromium
+        working-directory: e2e
+      - run: xvfb-run --auto-servernum node scripts/ucb-sync.mjs
+        working-directory: e2e
+        env:
+          CRON_KEY: ${{ secrets.CRON_KEY }}
+          UCB_GROUP_ID: ${{ secrets.UCB_GROUP_ID }}
+          APP_ORIGIN: https://whensdays.com

@@ -1,0 +1,268 @@
+-- ==================== reminders (cron) ============================
+
+-- name: ListEventsNeedingReminder :many
+-- Events happening the NEXT calendar day in Pacific time — the "day before"
+-- heads-up, sent by a once-daily 2pm-Pacific cron. Pacific (America/Los_Angeles)
+-- is fixed and DST-safe: Postgres does the tz conversion, so `starts_at`'s
+-- Pacific calendar date is compared to tomorrow's Pacific date. reminder_sent
+-- keeps it idempotent if the job runs more than once in a day.
+SELECT id, host_id, title, event_type, description,
+       location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed
+FROM events
+WHERE status = 'scheduled' AND reminder_sent = false
+  AND (starts_at AT TIME ZONE 'America/Los_Angeles')::date
+      = ((now() AT TIME ZONE 'America/Los_Angeles')::date + 1);
+
+-- name: ClaimEventReminder :one
+-- Atomic once-gate (multi-instance + retry safe): a row back means THIS call
+-- flipped the flag and owns the send; no row = already reminded, skip.
+UPDATE events SET reminder_sent = true
+WHERE id = $1 AND reminder_sent = false
+RETURNING id;
+
+-- name: ClaimCronRun :one
+-- Once-per-day-per-job gate for single-email crons (analytics digest). A row
+-- back means this attempt owns today's send; no row = already sent today.
+INSERT INTO cron_run_claims (job, run_day) VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING job;
+
+-- ==================== public discovery ============================
+
+-- name: ListPublicEvents :many
+-- group_id/group_name ride here (and on ListFollowedEvents/ListFriendsEvents,
+-- column-for-column) so the web can attribute a followed-feed tile to the page
+-- ("via {group name}") instead of just the host - the whole point of a page
+-- being a group. LEFT JOIN because most events have no group. performer_name
+-- (V7) rides here too, column-for-column, purely so ListFollowedEventsRow
+-- keeps converting straight to ListPublicEventsRow (mergeCandidates/rankEvents)
+-- - public browse has no follow context, so it's always NULL here.
+SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme, e.group_id, g.name AS group_name,
+       NULL::text AS performer_name,
+       (SELECT count(*)::int FROM event_attendees a
+          JOIN friendships f ON f.status = 'accepted'
+           AND ((f.requester_id = $3::text AND f.addressee_id = a.user_id)
+             OR (f.addressee_id = $3::text AND f.requester_id = a.user_id))
+        WHERE a.event_id = e.id AND a.rsvp = 'going') AS friends_going,
+       COALESCE((SELECT a2.rsvp FROM event_attendees a2 WHERE a2.event_id = e.id AND a2.user_id = $3::text), '')::text AS viewer_rsvp,
+       (EXISTS(SELECT 1 FROM friendships f2 WHERE f2.status = 'accepted'
+           AND ((f2.requester_id = $3::text AND f2.addressee_id = e.host_id)
+             OR (f2.addressee_id = $3::text AND f2.requester_id = e.host_id))))::bool AS from_friend
+FROM events e
+LEFT JOIN profiles p ON p.user_id = e.host_id
+LEFT JOIN groups g ON g.id = e.group_id
+WHERE e.status IN ('polling', 'scheduled')
+  AND (e.starts_at IS NULL OR e.starts_at >= now())
+  AND (e.visibility = 'public'
+    OR ($3::text <> '' AND e.visibility = 'friends' AND EXISTS(
+        SELECT 1 FROM friendships ff WHERE ff.status = 'accepted'
+          AND ((ff.requester_id = $3 AND ff.addressee_id = e.host_id)
+            OR (ff.addressee_id = $3 AND ff.requester_id = e.host_id)))))
+  AND ($1::text = '' OR e.topic = $1)
+  AND (cardinality($2::text[]) = 0 OR e.city ILIKE ANY($2::text[]))
+ORDER BY e.starts_at NULLS LAST
+LIMIT 100;
+
+-- name: ListFeedEvents :many
+SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id
+FROM events e
+LEFT JOIN profiles p ON p.user_id = e.host_id
+WHERE e.visibility = 'public' AND e.status = 'scheduled' AND e.starts_at >= now()
+  AND (e.host_id IN (SELECT value FROM follows f WHERE f.user_id = $1 AND kind = 'host')
+    OR (e.topic <> '' AND e.topic IN (SELECT value FROM follows f WHERE f.user_id = $1 AND kind = 'topic')))
+ORDER BY e.starts_at NULLS LAST
+LIMIT 100;
+
+-- ========================== follows ===============================
+
+-- name: AddFollow :exec
+INSERT INTO follows (user_id, kind, value)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING;
+
+-- name: RemoveFollow :exec
+DELETE FROM follows WHERE user_id = $1 AND kind = $2 AND value = $3;
+
+-- name: ListFollows :many
+SELECT kind, value FROM follows WHERE user_id = $1 ORDER BY created_at;
+
+-- name: CountFollows :one
+-- Cheap gate for the web: only fetch the followed-events feed (a second round
+-- trip) when the viewer actually follows something. Rides the dashboard's
+-- existing parallel fan-out (handleListEvents) as one more COUNT query.
+SELECT count(*)::int FROM follows WHERE user_id = $1;
+
+-- name: IsFollowing :one
+SELECT EXISTS(
+    SELECT 1 FROM follows WHERE user_id = $1 AND kind = $2 AND value = $3
+)::bool;
+
+-- name: CountFollowersOf :one
+-- The reverse of CountFollows: how many people follow ONE entity (kind+value),
+-- not how many things one user follows. Public (the page's own follower count)
+-- and the member view (so an owner watches their audience grow) both use this.
+SELECT count(*)::int FROM follows WHERE kind = $1 AND value = $2;
+
+-- name: ListFollowedEvents :many
+-- Following (phase 1): upcoming events from the hosts and GROUPS this user
+-- follows. Asymmetric and independent of Groups membership - following a club
+-- means "put their plans in my feed", not "I'm in the club".
+--
+-- Only `listed` events surface: the host's per-event opt-in ("Show to my
+-- followers"). That's what makes visibility='private' safe here - a private
+-- event is still link-capability-gated for RSVP, but the host explicitly chose
+-- to announce it to their followers. Same status/time filters as every other
+-- feed query, so cancelled/draft/past never appear.
+-- Column list mirrors ListPublicEvents exactly so the rows convert to
+-- ListPublicEventsRow for the shared ranker.
+--
+-- V7 third arm: an event also surfaces if it has a CONFIRMED performer the
+-- recipient follows (kind='host') - "follow a person, see every event they're
+-- on", regardless of who hosts. Consent gates this: only 'confirmed' rows
+-- qualify (see the event_performers migration), never 'pending' - a host
+-- can't blast a followed performer's audience just by tagging them.
+-- performer_match picks ONE confirmed+followed performer's name per event
+-- (earliest added, if more than one) for the "with {performer}" attribution;
+-- the web prefers group > performer > host when several apply.
+WITH performer_match AS (
+    SELECT DISTINCT ON (ep.event_id)
+        ep.event_id, pp.display_name AS performer_name
+    FROM event_performers ep
+    JOIN profiles pp ON pp.user_id = ep.user_id
+    WHERE ep.status = 'confirmed'
+      AND EXISTS(SELECT 1 FROM follows fp
+                 WHERE fp.user_id = $1::text AND fp.kind = 'host' AND fp.value = ep.user_id)
+    ORDER BY ep.event_id, ep.created_at
+)
+SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme, e.group_id, g.name AS group_name,
+       pm.performer_name,
+       (SELECT count(*)::int FROM event_attendees a
+          JOIN friendships f ON f.status = 'accepted'
+           AND ((f.requester_id = $1::text AND f.addressee_id = a.user_id)
+             OR (f.addressee_id = $1::text AND f.requester_id = a.user_id))
+        WHERE a.event_id = e.id AND a.rsvp = 'going') AS friends_going,
+       COALESCE((SELECT a2.rsvp FROM event_attendees a2 WHERE a2.event_id = e.id AND a2.user_id = $1::text), '')::text AS viewer_rsvp,
+       (EXISTS(SELECT 1 FROM friendships f2 WHERE f2.status = 'accepted'
+           AND ((f2.requester_id = $1::text AND f2.addressee_id = e.host_id)
+             OR (f2.addressee_id = $1::text AND f2.requester_id = e.host_id))))::bool AS from_friend
+FROM events e
+LEFT JOIN profiles p ON p.user_id = e.host_id
+LEFT JOIN groups g ON g.id = e.group_id
+LEFT JOIN performer_match pm ON pm.event_id = e.id
+WHERE e.status IN ('polling', 'scheduled')
+  AND (e.starts_at IS NULL OR e.starts_at >= now())
+  AND e.listed = true
+  AND (EXISTS(SELECT 1 FROM follows fh
+              WHERE fh.user_id = $1::text AND fh.kind = 'host' AND fh.value = e.host_id)
+    OR (e.group_id IS NOT NULL AND EXISTS(
+              SELECT 1 FROM follows fg
+              WHERE fg.user_id = $1::text AND fg.kind = 'group' AND fg.value = e.group_id::text))
+    OR pm.event_id IS NOT NULL)
+ORDER BY e.starts_at NULLS LAST
+LIMIT 100;
+
+-- ==================== feed ranking signals =========================
+
+-- name: ListUserRsvpHistory :many
+SELECT e.host_id, e.topic, e.event_type
+FROM event_attendees a
+JOIN events e ON e.id = a.event_id
+WHERE a.user_id = $1 AND a.rsvp IN ('going', 'maybe')
+ORDER BY a.created_at DESC
+LIMIT 200;
+
+-- name: ListFriendIDs :many
+SELECT (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END)::text AS friend_id
+FROM friendships f
+WHERE f.status = 'accepted' AND (f.requester_id = $1 OR f.addressee_id = $1);
+
+-- name: CountGoingForPublicUpcoming :many
+SELECT a.event_id, count(*)::int AS going
+FROM event_attendees a
+JOIN events e ON e.id = a.event_id
+WHERE e.visibility = 'public' AND e.status = 'scheduled' AND e.starts_at >= now()
+  AND a.rsvp = 'going'
+GROUP BY a.event_id;
+
+-- name: CountFriendGoingForPublicUpcoming :many
+SELECT a.event_id, count(*)::int AS going
+FROM event_attendees a
+JOIN events e ON e.id = a.event_id
+WHERE e.visibility = 'public' AND e.status = 'scheduled' AND e.starts_at >= now()
+  AND a.rsvp = 'going' AND a.user_id = ANY($1::text[])
+GROUP BY a.event_id;
+
+-- name: ListFriendsEvents :many
+-- Column list mirrors ListPublicEvents (group_id/group_name/performer_name
+-- included) so rows convert to ListPublicEventsRow for the shared ranker, same
+-- as ListFollowedEvents. performer_name is always NULL here - friends-hosted
+-- events carry no follow-based performer attribution.
+SELECT e.id, e.title, e.event_type, e.starts_at, e.topic, e.city,
+       p.display_name AS host_name, p.avatar_url AS host_avatar, e.host_id, e.custom_emoji, e.custom_label, e.photo_url, e.theme, e.group_id, g.name AS group_name,
+       NULL::text AS performer_name,
+       (SELECT count(*)::int FROM event_attendees a
+          JOIN friendships f ON f.status = 'accepted'
+           AND ((f.requester_id = $1::text AND f.addressee_id = a.user_id)
+             OR (f.addressee_id = $1::text AND f.requester_id = a.user_id))
+        WHERE a.event_id = e.id AND a.rsvp = 'going') AS friends_going,
+       COALESCE((SELECT a2.rsvp FROM event_attendees a2 WHERE a2.event_id = e.id AND a2.user_id = $1::text), '')::text AS viewer_rsvp,
+       (EXISTS(SELECT 1 FROM friendships f2 WHERE f2.status = 'accepted'
+           AND ((f2.requester_id = $1::text AND f2.addressee_id = e.host_id)
+             OR (f2.addressee_id = $1::text AND f2.requester_id = e.host_id))))::bool AS from_friend
+FROM events e
+LEFT JOIN profiles p ON p.user_id = e.host_id
+LEFT JOIN groups g ON g.id = e.group_id
+WHERE e.status IN ('polling', 'scheduled')
+  AND (e.starts_at IS NULL OR e.starts_at >= now())
+  AND e.visibility IN ('friends', 'public')
+  AND e.host_id IN (
+      SELECT (CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END)::text
+      FROM friendships f
+      WHERE f.status = 'accepted' AND (f.requester_id = $1 OR f.addressee_id = $1))
+ORDER BY e.starts_at NULLS LAST
+LIMIT 100;
+
+-- name: ListPeopleYouMayKnow :many
+-- Suggests people you've co-attended events with, ranked by how meaningful the
+-- overlap is: a shared public event is the weakest signal; both being "going"
+-- to a friends-only or invite-only (link) event is the strongest. Excludes
+-- yourself, guests, and anyone you already have a friendship/request with.
+SELECT
+    other.user_id AS friend_id,
+    p.display_name,
+    p.handle,
+    p.avatar_url,
+    SUM(
+        (CASE e.visibility WHEN 'public' THEN 1 WHEN 'friends' THEN 3 ELSE 4 END)
+        + (CASE WHEN me.rsvp = 'going' AND other.rsvp = 'going'
+                THEN (CASE e.visibility WHEN 'public' THEN 1 WHEN 'friends' THEN 3 ELSE 4 END)
+                ELSE 0 END)
+    )::int AS score,
+    COUNT(DISTINCT e.id)::int AS shared_events
+FROM event_attendees me
+JOIN event_attendees other ON other.event_id = me.event_id AND other.user_id <> me.user_id
+JOIN events e ON e.id = me.event_id
+JOIN profiles p ON p.user_id = other.user_id
+WHERE me.user_id = $1
+  AND me.rsvp IN ('going', 'maybe')
+  AND other.rsvp IN ('going', 'maybe')
+  AND other.user_id NOT LIKE 'guest_%'
+  AND NOT EXISTS (
+      SELECT 1 FROM friendships f
+      WHERE (f.requester_id = $1 AND f.addressee_id = other.user_id)
+         OR (f.addressee_id = $1 AND f.requester_id = other.user_id))
+GROUP BY other.user_id, p.display_name, p.handle, p.avatar_url
+ORDER BY score DESC, shared_events DESC
+LIMIT 12;
+
+-- name: ListActiveTopics :many
+-- Topics that currently have at least one upcoming public event — drives the
+-- Discover category chips (only categories with something to show render).
+SELECT DISTINCT topic
+FROM events
+WHERE visibility = 'public' AND status <> 'cancelled' AND topic <> ''
+  AND (starts_at IS NULL OR starts_at >= now())
+ORDER BY topic;

@@ -1,0 +1,53 @@
+# Dependabot: weekly version updates + security alerts for every ecosystem in
+# the monorepo. Minor/patch updates are GROUPED into one PR per ecosystem
+# (each PR runs the full CI incl. the hermetic e2e, so updates land tested);
+# majors stay individual - they deserve their own review.
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+    groups:
+      go-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # pnpm WORKSPACE: the lockfile lives at the repo root, so npm updates must
+  # target "/" (per-app directories edit package.json without the root
+  # lockfile and break --frozen-lockfile installs).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      js-minor-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Playwright's package version must move in LOCKSTEP with the pinned
+      # runner images (compose.e2e.yaml, compose.docs.yaml, Makefile) - a
+      # mismatched bump fails with missing browser binaries. Updated manually.
+      - dependency-name: "@playwright/test"
+      - dependency-name: playwright
+      # The vite major + its react plugin move together as a deliberate
+      # migration (config changes), not as auto-merged bumps.
+      - dependency-name: vite
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitejs/plugin-react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@clerk/testing"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Base images in the multi-stage Dockerfiles (golang, nginx, node).
+  - package-ecosystem: "docker"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"

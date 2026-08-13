@@ -14,6 +14,9 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",
+    // Pin clock formatting so date/time rendering is stable across machines/CI.
+    timezoneId: "UTC",
+    locale: "en-US",
   },
   // Pin rendering so screenshots are deterministic across machines/CI.
   expect: {

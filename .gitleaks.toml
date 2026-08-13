@@ -1,0 +1,25 @@
+# gitleaks config — secret scanning for the Whensdays repo.
+# Extends the built-in ruleset (covers AWS/GCP/Stripe/Clerk/GitHub/JWT/PEM/etc.)
+# and adds a tight allowlist so intentional placeholders don't false-positive.
+title = "Whensdays secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Non-secret placeholders and generated/vendored files"
+# .env.example holds only fake placeholders (sk_test_xxx, phc_xxx, replace-me…);
+# it is the template, never real values.
+paths = [
+  '''\.env\.example$''',
+  '''(^|/)go\.sum$''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)internal/db/.*\.sql\.go$''',      # sqlc-generated
+  '''(^|/)docs/screenshots/''',              # PNGs
+  '''-snapshots/''',                          # Playwright baselines
+]
+# Obvious dummy values used across docs/examples.
+regexes = [
+  '''(?i)(xxx|replace-me|your-.*-here|example\.com|phc_xxx|sk_test_xxx|pk_test_xxx)''',
+  '''dev-(guest-token|calendar-state)-key''', # documented dev-only fallback keys
+]

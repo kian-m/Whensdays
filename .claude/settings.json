@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make e2e-docker)",
+      "Bash(pnpm exec tsc*)",
+      "Bash(pnpm typecheck)",
+      "Bash(go vet ./...)",
+      "Bash(go test ./...)",
+      "Bash(go build ./...)",
+      "Bash(go test -run *)",
+      "Bash(gh run watch*)",
+      "Bash(gofmt -l*)",
+      "Bash(gcloud logging read*)",
+      "Bash(gcloud run services describe*)",
+      "Bash(gcloud scheduler jobs describe*)",
+      "Bash(gcloud scheduler jobs list*)",
+      "Bash(gh secret list)",
+      "Bash(gcloud secrets list*)",
+      "Bash(gcloud run services list*)",
+      "Bash(gcloud secrets describe*)",
+      "Bash(pnpm --filter @clsandbox/web typecheck)",
+      "Bash(gcloud secrets versions list*)"
+    ]
+  }
+}

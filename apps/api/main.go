@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,14 +17,17 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // embed the IANA tz database (distroless image ships none)
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
-	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for migrations
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for migrations
 	"github.com/pressly/goose/v3"
 
+	"github.com/clsandbox/api/internal/analytics"
 	"github.com/clsandbox/api/internal/db"
+	"github.com/clsandbox/api/internal/notify"
 )
 
 //go:embed db/migrations/*.sql
@@ -34,8 +38,21 @@ type ctxKey string
 const userIDKey ctxKey = "userID"
 
 type server struct {
-	queries *db.Queries
-	logger  *slog.Logger
+	queries      *db.Queries
+	pool         *pgxpool.Pool
+	logger       *slog.Logger
+	analytics    *analytics.Client
+	calendar     calendarConfig
+	guests       guestSigner
+	notify       *notify.Client
+	appOrigin    string
+	klipyKey     string
+	klipyStub    bool
+	geoStub      bool
+	wgisStub     bool
+	weimprovStub bool
+	rozcosStub   bool
+	alerts       *alerter
 }
 
 func main() {
@@ -54,25 +71,229 @@ func main() {
 	}
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dbURL)
+	// Hot handlers fan queries out concurrently (see parallel in util.go), so
+	// the pool needs headroom beyond the default (max(4, NumCPU) - Cloud Run
+	// runs 1 vCPU). 16 stays well inside Neon's connection budget.
+	poolCfg, err := pgxpool.ParseConfig(dbURL)
+	if err != nil {
+		logger.Error("db config", "err", err)
+		os.Exit(1)
+	}
+	if poolCfg.MaxConns < 16 {
+		poolCfg.MaxConns = 16
+	}
+	// NEON COST: MinConns stays 0 (no warm floor) and idle connections close
+	// quickly, so once a request finishes the pool goes empty and Neon's compute
+	// can AUTOSUSPEND. A warm floor + the default 1-min health check pinged Neon
+	// every 60s and kept it billing 24/7. The fan-out re-opens connections on the
+	// next burst (~100ms cold) - a fine trade for a mostly-idle pre-launch DB.
+	poolCfg.MinConns = 0
+	poolCfg.MaxConnIdleTime = 30 * time.Second
+	poolCfg.HealthCheckPeriod = time.Hour // effectively off; nothing to keep warm
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		logger.Error("db connect", "err", err)
 		os.Exit(1)
 	}
 	defer pool.Close()
 
-	s := &server{queries: db.New(pool), logger: logger}
+	an := analytics.New(analytics.Config{
+		APIKey:         os.Getenv("POSTHOG_API_KEY"),
+		Host:           envOr("POSTHOG_HOST", "https://us.i.posthog.com"),
+		PersonalAPIKey: os.Getenv("POSTHOG_PERSONAL_API_KEY"),
+		Env:            envOr("APP_ENV", "development"),
+		Release:        os.Getenv("APP_VERSION"),
+	}, logger)
+	defer an.Close()
+
+	s := &server{
+		queries: db.New(pool), pool: pool, logger: logger, analytics: an,
+		calendar:     loadCalendarConfig(logger),
+		guests:       newGuestSigner(logger),
+		notify:       notify.New(os.Getenv("EMAIL_API_KEY"), os.Getenv("EMAIL_FROM"), logger),
+		alerts:       newAlerter(),
+		appOrigin:    strings.TrimRight(os.Getenv("APP_ORIGIN"), "/"),
+		klipyKey:     os.Getenv("KLIPY_API_KEY"),
+		klipyStub:    os.Getenv("KLIPY_MODE") == "stub",
+		geoStub:      os.Getenv("GEO_MODE") == "stub",
+		wgisStub:     os.Getenv("WGIS_MODE") == "stub",
+		weimprovStub: os.Getenv("WEIMPROV_MODE") == "stub",
+		rozcosStub:   os.Getenv("ROZCOS_MODE") == "stub",
+	}
+	// Email volume telemetry: every send becomes a PostHog event so the daily
+	// digest can show usage against the provider's free tier.
+	s.notify.OnSend = func(n int) { s.analytics.CaptureServer("email_sent", map[string]any{"recipients": n}) }
 	auth := s.authMiddleware()
+
+	// Per-IP rate limiters for the unauthenticated attack surface. Writes (guest
+	// join → DB row) are strict; public reads (unfurls, image compositing) are
+	// looser but still bounded so a scraper can't exhaust CPU/DB. Authenticated
+	// routes rely on Clerk + per-user scoping and are not IP-limited here.
+	// Disabled under AUTH_MODE=dev so hermetic E2E (all from one runner IP)
+	// stays deterministic - mirrors the CALENDAR/KLIPY/GEO stub pattern.
+	writeLimit := func(h http.Handler) http.Handler { return h }
+	readLimit := func(h http.Handler) http.Handler { return h }
+	proxyLimit := func(h http.Handler) http.Handler { return h }
+	if os.Getenv("AUTH_MODE") != "dev" {
+		writeLimit = newIPLimiter(30, 15).middleware  // ~30/min, burst 15
+		readLimit = newIPLimiter(300, 100).middleware // ~300/min, burst 100
+		// Outbound proxies (Klipy/Photon): per-USER cap protects upstream
+		// free-tier quotas from a single actor. ~40/min covers debounced
+		// typeahead + GIF search; abuse hits 429 well before the quota.
+		proxyLimit = newIPLimiter(40, 20).perUserMiddleware
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
+	// Same no-DB health check, but UNDER /api/ so it routes through the prod
+	// proxy (which only forwards /api/*). Point the uptime check here, NOT at a
+	// DB-querying route like /api/discover - the latter woke Neon every few
+	// minutes and blocked its autosuspend (a big free-tier compute drain).
+	mux.HandleFunc("GET /api/health", s.handleHealth)
+	// Unauthenticated by design: the event id is the capability (invite link).
+	mux.Handle("POST /api/csp-report", readLimit(http.HandlerFunc(s.handleCSPReport))) // browser CSP beacon
+	mux.Handle("POST /api/guest/join", writeLimit(http.HandlerFunc(s.handleGuestJoin)))
+	mux.Handle("POST /api/guest/merge", auth(http.HandlerFunc(s.handleGuestMerge)))
+	// Full-page loads of /e/{id} and /g/{id} are proxied here by nginx for link
+	// unfurls (the group id is the invite capability, same as an event's).
+	mux.Handle("GET /e/{id}", readLimit(http.HandlerFunc(s.handleOGPage)))
+	mux.Handle("GET /g/{id}", readLimit(http.HandlerFunc(s.handleGroupOGPage)))
+	mux.Handle("GET /api/groups/{id}/og.png", readLimit(http.HandlerFunc(s.handleGroupOGImage)))
+	// Public browse (read-only, publishes only host-chosen fields) + cron.
+	mux.Handle("GET /api/discover", readLimit(http.HandlerFunc(s.handleDiscover)))
+	// The public entity page behind a bare /g/{id} share link: view + follow, no
+	// membership. UNauthenticated so a signed-out visitor never hits a name-entry
+	// wall; optionalAuth still resolves a signed-in viewer for follow/join state.
+	// Entity-shaped on purpose - /u/{handle} will hang off the same envelope.
+	optAuth := s.optionalAuth()
+	mux.Handle("GET /api/public/groups/{id}", readLimit(optAuth(http.HandlerFunc(s.handleGroupPublicPage))))
+	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
+	mux.HandleFunc("POST /api/cron/analytics", s.handleCronAnalytics)        // CRON_KEY-gated daily digest
+	mux.HandleFunc("POST /api/cron/flush", s.handleCronFlush)                // CRON_KEY-gated manual digest flush (unscheduled - see notifications.go)
+	mux.HandleFunc("POST /api/cron/ucb-sync", s.handleCronUCBSync)           // CRON_KEY-gated venue-schedule sync (see ucbsync.go)
+	mux.HandleFunc("POST /api/cron/wgis-sync", s.handleCronWGISSync)         // CRON_KEY-gated WGIS feed sync (see wgissync.go)
+	mux.HandleFunc("POST /api/cron/weimprov-sync", s.handleCronWeimprovSync) // CRON_KEY-gated We Improv feed sync (see weimprovsync.go)
+	mux.HandleFunc("POST /api/cron/rozcos-sync", s.handleCronRozcosSync)     // CRON_KEY-gated Rozco's open-mic scrape (see rozcossync.go)
+	// Follows + personal feed.
+	mux.Handle("GET /api/feed", auth(http.HandlerFunc(s.handleFeed)))
+	mux.Handle("GET /api/event-types", auth(http.HandlerFunc(s.handleListCustomTypes)))
+	mux.Handle("DELETE /api/event-types/{label}", auth(http.HandlerFunc(s.handleDeleteCustomType)))
+	mux.Handle("GET /api/badges", auth(http.HandlerFunc(s.handleBadges)))
+	mux.Handle("POST /api/events/{id}/invites", auth(http.HandlerFunc(s.handleInviteFriend)))
+	mux.Handle("GET /api/discover/mine", auth(http.HandlerFunc(s.handleDiscoverMine)))
+	mux.Handle("POST /api/follows", auth(http.HandlerFunc(s.handleAddFollow)))
+	mux.Handle("DELETE /api/follows/{kind}/{value}", auth(http.HandlerFunc(s.handleRemoveFollow)))
 	mux.Handle("GET /api/notes", auth(http.HandlerFunc(s.handleListNotes)))
 	mux.Handle("POST /api/notes", auth(http.HandlerFunc(s.handleCreateNote)))
 
+	// Scheduler ("Whensdays") feature - see scheduler.go.
+	mux.Handle("GET /api/profile", auth(http.HandlerFunc(s.handleGetProfile)))
+	mux.Handle("PUT /api/profile", auth(http.HandlerFunc(s.handleUpsertProfile)))
+	mux.Handle("PUT /api/profile/avatar", auth(http.HandlerFunc(s.handleSetAvatar)))
+	mux.Handle("PUT /api/profile/email", auth(http.HandlerFunc(s.handleSetProfileEmail)))
+	mux.Handle("GET /api/availability", auth(http.HandlerFunc(s.handleGetAvailability)))
+	mux.Handle("PUT /api/availability", auth(http.HandlerFunc(s.handlePutAvailability)))
+	mux.Handle("GET /api/availability/days", auth(http.HandlerFunc(s.handleGetAvailabilityDays)))
+	mux.Handle("PUT /api/availability/days", auth(http.HandlerFunc(s.handlePutAvailabilityDays)))
+	mux.Handle("GET /api/events", auth(http.HandlerFunc(s.handleListEvents)))
+	mux.Handle("POST /api/events", auth(http.HandlerFunc(s.handleCreateEvent)))
+	mux.Handle("GET /api/events/{id}", auth(http.HandlerFunc(s.handleGetEvent)))
+	mux.Handle("POST /api/events/{id}/rsvp", auth(http.HandlerFunc(s.handleRsvp)))
+	mux.Handle("POST /api/events/{id}/votes", auth(http.HandlerFunc(s.handleVotes)))
+	mux.Handle("POST /api/events/{id}/general-votes", auth(http.HandlerFunc(s.handleGeneralVotes)))
+	mux.Handle("POST /api/events/{id}/poll-setup", auth(http.HandlerFunc(s.handlePollSetup)))
+	mux.Handle("POST /api/events/{id}/finalize", auth(http.HandlerFunc(s.handleFinalize)))
+	mux.Handle("PUT /api/events/{id}", auth(http.HandlerFunc(s.handleUpdateEvent)))
+	mux.Handle("GET /api/gifs/search", auth(proxyLimit(http.HandlerFunc(s.handleGifSearch))))
+	mux.Handle("GET /api/geo/search", auth(proxyLimit(http.HandlerFunc(s.handleGeoSearch))))
+	mux.Handle("DELETE /api/events/{id}", auth(http.HandlerFunc(s.handleCancelEvent)))
+	mux.Handle("DELETE /api/groups/{id}", auth(http.HandlerFunc(s.handleDeleteGroup)))
+	mux.Handle("DELETE /api/friends/{id}", auth(http.HandlerFunc(s.handleDeleteFriendship)))
+	// Comments + cohosts (see comments.go).
+	mux.Handle("POST /api/events/{id}/comments", auth(http.HandlerFunc(s.handlePostComment)))
+	mux.Handle("DELETE /api/events/{id}/comments/{commentId}", auth(http.HandlerFunc(s.handleDeleteComment)))
+	mux.Handle("PUT /api/events/{id}/comments-enabled", auth(http.HandlerFunc(s.handleSetCommentsEnabled)))
+	mux.Handle("PUT /api/events/{id}/listed", auth(http.HandlerFunc(s.handleSetEventListed)))
+	mux.Handle("POST /api/events/{id}/cohosts", auth(http.HandlerFunc(s.handleAddCohost)))
+	mux.Handle("DELETE /api/events/{id}/cohosts/{userId}", auth(http.HandlerFunc(s.handleRemoveCohost)))
+	// Performers on events (V7, see performers.go) - manager add/remove-by-handle
+	// like cohosts, plus a self-serve Confirm (consent gates follower
+	// distribution) and the unauthenticated one-tap email link (perf| token).
+	mux.Handle("POST /api/events/{id}/performers", auth(http.HandlerFunc(s.handleAddPerformer)))
+	mux.Handle("DELETE /api/events/{id}/performers/{userId}", auth(http.HandlerFunc(s.handleRemovePerformer)))
+	mux.Handle("POST /api/events/{id}/performers/confirm", auth(http.HandlerFunc(s.handleConfirmPerformer)))
+	mux.Handle("GET /api/events/{id}/performers/link", readLimit(http.HandlerFunc(s.handlePerformerLink)))
+	// Notification mute: signed-in toggle + the one-click email link (the latter
+	// is UNauthenticated - identity rides in a signed token; see mute.go).
+	mux.Handle("POST /api/events/{id}/mute", auth(http.HandlerFunc(s.handleMuteToggle)))
+	mux.Handle("GET /api/events/{id}/unsubscribe", readLimit(http.HandlerFunc(s.handleUnsubscribe)))
+	// One-tap RSVP from email (UNauthenticated - signed token; see engage.go)
+	// and the host's nudge-non-responders lever.
+	mux.Handle("GET /api/events/{id}/rsvp-link", readLimit(http.HandlerFunc(s.handleEmailRsvp)))
+	// Unfollow-from-email (V3 follow digest, UNauthenticated - signed token;
+	// see followdigest.go). Same script-free confirmation page pattern as the
+	// event mute unsubscribe above.
+	mux.Handle("GET /api/follows/unsubscribe", readLimit(http.HandlerFunc(s.handleFollowUnsubscribe)))
+	mux.Handle("POST /api/events/{id}/draft", auth(http.HandlerFunc(s.handleSetDraft)))
+	mux.Handle("POST /api/events/{id}/nudge", auth(http.HandlerFunc(s.handleNudge)))
+	// Public on purpose: the event id IS the invite capability (same fields the
+	// OG unfurl already serves), and a bare <a href> can't attach a bearer -
+	// this is what lets iOS open the invite directly in Calendar.
+	mux.Handle("GET /api/events/{id}/calendar.ics", readLimit(http.HandlerFunc(s.handleEventICS)))
+	// Personal live calendar feed: subscribe once, every event flows in.
+	// Unauthenticated (calendar apps poll bare) - identity rides an HMAC token.
+	mux.Handle("GET /api/feed.ics", readLimit(http.HandlerFunc(s.handleICSFeed)))
+	mux.Handle("GET /api/calendar/feed-url", auth(http.HandlerFunc(s.handleFeedURL)))
+	// Unauthenticated for the same reason: og:image is fetched by link
+	// scrapers (iMessage, Slack, …) that can't send a bearer.
+	mux.Handle("GET /api/events/{id}/og.png", readLimit(http.HandlerFunc(s.handleEventOGImage)))
+
+	// Calendar import (see calendars_import.go). The Google OAuth callback is
+	// intentionally UNauthenticated - Google redirects the browser to it with no
+	// bearer; identity rides in the signed `state`.
+	mux.Handle("GET /api/calendar/connections", auth(http.HandlerFunc(s.handleListCalendarConnections)))
+	mux.Handle("GET /api/calendar/events", auth(http.HandlerFunc(s.handleCalendarEvents)))
+	mux.Handle("GET /api/calendar/google/connect", auth(http.HandlerFunc(s.handleGoogleConnect)))
+	mux.Handle("POST /api/calendar/apple-caldav", auth(http.HandlerFunc(s.handleAppleCalDAVConnect)))
+	mux.HandleFunc("GET /api/calendar/google/callback", s.handleGoogleCallback)
+	mux.Handle("POST /api/calendar/apple", auth(http.HandlerFunc(s.handleAppleConnect)))
+	mux.Handle("DELETE /api/calendar/connections/{provider}", auth(http.HandlerFunc(s.handleDisconnectCalendar)))
+	// Groups (see groups.go) - the recurring-circle wedge.
+	mux.Handle("POST /api/groups", auth(http.HandlerFunc(s.handleCreateGroup)))
+	mux.Handle("GET /api/groups", auth(http.HandlerFunc(s.handleListGroups)))
+	mux.Handle("GET /api/groups/{id}", auth(http.HandlerFunc(s.handleGetGroup)))
+	mux.Handle("POST /api/groups/{id}/members", auth(http.HandlerFunc(s.handleAddGroupMember)))
+	// Joining needs the signed invite token in the body - the bare group id is
+	// NOT a join capability any more (see groups.go). Regenerating that token is
+	// owner/admin only and kills only this group's outstanding links.
+	mux.Handle("POST /api/groups/{id}/join", auth(http.HandlerFunc(s.handleJoinGroup)))
+	mux.Handle("POST /api/groups/{id}/invite/rotate", auth(http.HandlerFunc(s.handleRotateGroupInvite)))
+	mux.Handle("PUT /api/groups/{id}", auth(http.HandlerFunc(s.handleUpdateGroup)))
+	mux.Handle("PUT /api/groups/{id}/icon", auth(http.HandlerFunc(s.handleSetGroupIcon)))
+	mux.Handle("DELETE /api/groups/{id}/members/{userId}", auth(http.HandlerFunc(s.handleRemoveGroupMember)))
+	mux.Handle("PUT /api/groups/{id}/members/{userId}/role", auth(http.HandlerFunc(s.handleSetGroupMemberRole)))
+	mux.Handle("GET /api/friends", auth(http.HandlerFunc(s.handleListFriends)))
+	mux.Handle("POST /api/friends", auth(http.HandlerFunc(s.handleAddFriend)))
+	mux.Handle("POST /api/friends/{id}/accept", auth(http.HandlerFunc(s.handleAcceptFriend)))
+	mux.Handle("GET /api/friends/{id}/availability", auth(http.HandlerFunc(s.handleFriendAvailability)))
+
+	// Server-side feature flags evaluated for the current user (see analytics).
+	mux.Handle("GET /api/flags", auth(http.HandlerFunc(s.handleFlags)))
+
 	port := envOr("API_PORT", "8080")
+	// Activity emails (comments/RSVPs) are digested, and the drain rides the
+	// DAILY reminders cron (handleCronReminders) - not a schedule of its own.
+	// Every wakeup costs a full 5-minute Neon autosuspend cycle, so anything
+	// that pokes the DB on a short interval is expensive on the free tier: an
+	// in-process 5-minute ticker went first, then the half-hourly flush job
+	// (~27 of 100 CU-hours/month to usually find an empty queue). Both are gone.
+	// Time-critical mail (invite/finalize/cancel/reminder/quorum) never enters
+	// this queue, so batching activity to once a day costs nothing urgent.
+
 	srv := &http.Server{
-		Addr:              ":" + port,
-		Handler:           securityHeaders(requestLogger(logger, mux)),
+		Addr: ":" + port,
+		// telemetry (innermost) captures per-request metrics to PostHog.
+		Handler:           securityHeaders(requestLogger(logger, s.telemetry(mux))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
@@ -116,14 +337,58 @@ func runMigrations(dbURL string) error {
 
 // authMiddleware returns the protection wrapper for /api routes. Default is
 // Clerk (verifies the session JWT). AUTH_MODE=dev swaps in a stub that trusts an
-// X-Dev-User header — for local/CI hermetic runs only, never production.
+// X-Dev-User header - for local/CI hermetic runs only, never production.
 func (s *server) authMiddleware() func(http.Handler) http.Handler {
+	var base func(http.Handler) http.Handler
 	if os.Getenv("AUTH_MODE") == "dev" {
-		s.logger.Warn("AUTH_MODE=dev: authentication is STUBBED — do not use in production")
-		return devAuth
+		s.logger.Warn("AUTH_MODE=dev: authentication is STUBBED - do not use in production")
+		base = devAuth
+	} else {
+		// TrimSpace guards against a trailing newline in the secret (e.g. pasted
+		// into `gcloud secrets create` with Enter): Go's http client rejects an
+		// Authorization header containing "\n", so clerk-sdk-go's JWKS fetch fails
+		// and EVERY token 401s. Trimming makes secret provisioning newline-safe.
+		clerk.SetKey(strings.TrimSpace(mustEnv("CLERK_SECRET_KEY")))
+		base = clerkAuth
 	}
-	clerk.SetKey(mustEnv("CLERK_SECRET_KEY"))
-	return clerkAuth
+	// Guest tokens (see guests.go) are checked first in either mode:
+	// "Authorization: Guest <token>" → a low-privilege guest user.
+	return func(next http.Handler) http.Handler {
+		wrapped := base(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Guest "); ok {
+				uid, valid := s.guests.verify(tok)
+				if !valid {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid guest token"})
+					return
+				}
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userIDKey, uid)))
+				return
+			}
+			wrapped.ServeHTTP(w, r)
+		})
+	}
+}
+
+// optionalAuth resolves the caller when credentials are present and lets the
+// request through ANONYMOUSLY (userIDFrom → "") when they aren't. It's the
+// middleware for genuinely public reads that still want viewer state if the
+// visitor happens to be signed in - today the public group page (public.go).
+// Credentials = an Authorization header (Clerk bearer or "Guest <token>"), or
+// X-Dev-User under AUTH_MODE=dev; anything present is verified for real by the
+// normal chain, so a bad token still 401s rather than silently downgrading.
+func (s *server) optionalAuth() func(http.Handler) http.Handler {
+	full := s.authMiddleware()
+	return func(next http.Handler) http.Handler {
+		wrapped := full(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "" && r.Header.Get("X-Dev-User") == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			wrapped.ServeHTTP(w, r)
+		})
+	}
 }
 
 func devAuth(next http.Handler) http.Handler {
@@ -217,6 +482,9 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		// API returns JSON/images only; lock scripts to none as defense-in-depth.
+		h.Set("Content-Security-Policy", "default-src 'none'; img-src 'self' data: https://static.klipy.com; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -226,6 +494,46 @@ func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		logger.Info("request", "method", r.Method, "path", r.URL.Path, "dur_ms", time.Since(start).Milliseconds())
+	})
+}
+
+// statusRecorder captures the response status for telemetry.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// telemetry sends one PostHog event per request (method, matched route, status,
+// duration) as an operational signal - the raw material for latency/error-rate
+// dashboards and anomaly alerts. It wraps the mux so it sees the final status and
+// can resolve the low-cardinality route pattern. No-op when analytics is off.
+func (s *server) telemetry(mux *http.ServeMux) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.analytics.Enabled() {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		start := time.Now()
+		mux.ServeHTTP(rec, r)
+		if r.URL.Path == "/healthz" {
+			return // skip health-check noise
+		}
+		_, route := mux.Handler(r) // matched pattern, e.g. "GET /api/events/{id}"
+		s.analytics.CaptureServer("api_request", map[string]any{
+			"method":       r.Method,
+			"route":        route,
+			"path":         r.URL.Path,
+			"status":       rec.status,
+			"status_class": fmt.Sprintf("%dxx", rec.status/100),
+			"ok":           rec.status < 400,
+			"duration_ms":  time.Since(start).Milliseconds(),
+		})
 	})
 }
 
