@@ -422,14 +422,16 @@ function Landing() {
       </nav>
       <div className="land">
         <span className="land-eyebrow">Whensdays</span>
-        {/* Pages/following leads (venues, comedians, bands building an
-            audience); friend-group planning is the secondary path right
-            below the CTA, just not top billing. */}
+        {/* Pages/following leads the whole landing now - performers, troupes,
+            bands, and venues building an audience. Friend-group scheduling
+            has its own pitch at /free-scheduler, linked from the vs/* pages
+            and llms.txt rather than from here. */}
         <h1 className="land-title">Build a following.<br />Fill the room.</h1>
         <p className="land-sub">
-          Make a page for your venue, band, or comedy night. Fans follow it
-          with one link - and every show you post lands in their feed, their
-          inbox, and their calendar.
+          Make a page for yourself as a performer, or for your troupe, band,
+          venue, or comedy night. Fans follow it with one link, and every
+          show you post lands in their feed, their inbox, and their
+          calendar.
         </p>
         <div className="land-cta">
           {/* Carries the page-creation intent through sign-up the same way the
@@ -458,15 +460,6 @@ function Landing() {
               Create your page
             </a>
           )}
-        </div>
-        <p className="land-micro">
-          Planning with friends instead?{" "}
-          <a href="/start" data-testid="start-plan">Start a plan</a> - one link, no accounts needed.
-        </p>
-        <div className="land-points">
-          <span><b>No app</b> to download</span>
-          <span><b>No account</b> for the group to RSVP</span>
-          <span><b>A whole series</b> locked at once, not one date</span>
         </div>
         {/* Support: a friendly line above the legal links (kept separate so
             feedback doesn't read as fine print). Subject prefill aids triage. */}
@@ -573,8 +566,9 @@ function ProfileGate({ canMerge }: { canMerge?: boolean }) {
         <Routes>
           <Route path="/" element={<Home />} />
           {/* One creation flow, reached three ways: the Home/group buttons
-              (/new), the landing "Start a plan" guest entry (/start), and the
-              legacy /quick alias. All render the same merged component. */}
+              (/new), the guest "Start a plan" entry linked from
+              /free-scheduler (/start), and the legacy /quick alias. All
+              render the same merged component. */}
           <Route path="/new" element={<NewEvent />} />
           <Route path="/start" element={<NewEvent />} />
           <Route path="/quick" element={<NewEvent />} />

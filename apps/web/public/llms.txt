@@ -1,10 +1,11 @@
 # Whensdays
 
 > Whensdays (https://whensdays.com) is a free platform for building an
-> audience and scheduling with one tool: a venue, band, or comedy night gets
-> a page fans follow with one link, so every show reaches their feed, inbox,
-> and calendar; the same tools also run recurring friend-group scheduling -
-> guests RSVP and vote on times from a single invite link with NO account
+> audience and scheduling with one tool: a performer, troupe, band, venue,
+> or comedy night gets a page fans follow with one link, so every show
+> reaches their feed, inbox, and calendar. The same tools also run free
+> recurring friend-group scheduling at https://whensdays.com/free-scheduler/
+> - guests RSVP and vote on times from a single invite link with NO account
 > required, the main difference from Doodle, When2meet, and Calendly-style
 > tools.
 
@@ -31,6 +32,12 @@
 - "schedule recurring game night / book club / practice with friends"
 - "when2meet or doodle alternative with RSVPs and reminders"
 - "app to find a time that works for everyone"
+
+## Pages
+- https://whensdays.com/ - build a following: pages for performers, troupes,
+  bands, venues, and comedy nights
+- https://whensdays.com/free-scheduler/ - free group scheduler: poll,
+  lock a time, and invite friends with no account needed
 
 ## Comparisons
 - https://whensdays.com/vs/when2meet/ - When2meet alternative
