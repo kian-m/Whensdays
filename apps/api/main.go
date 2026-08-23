@@ -167,6 +167,9 @@ func main() {
 	// Entity-shaped on purpose - /u/{handle} will hang off the same envelope.
 	optAuth := s.optionalAuth()
 	mux.Handle("GET /api/public/groups/{id}", readLimit(optAuth(http.HandlerFunc(s.handleGroupPublicPage))))
+	// Marketing counter for the static /free-scheduler page (stats.go) - a
+	// single count(*), no PII, same trust/rate-limit tier as /api/discover.
+	mux.Handle("GET /api/public/stats", readLimit(http.HandlerFunc(s.handlePublicStats)))
 	mux.HandleFunc("POST /api/cron/reminders", s.handleCronReminders)
 	mux.HandleFunc("POST /api/cron/analytics", s.handleCronAnalytics)        // CRON_KEY-gated daily digest
 	mux.HandleFunc("POST /api/cron/flush", s.handleCronFlush)                // CRON_KEY-gated manual digest flush (unscheduled - see notifications.go)

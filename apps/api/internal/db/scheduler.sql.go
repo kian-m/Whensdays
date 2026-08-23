@@ -418,6 +418,20 @@ func (q *Queries) CountRegisteredUsers(ctx context.Context) (int32, error) {
 	return column_1, err
 }
 
+const countScheduledEvents = `-- name: CountScheduledEvents :one
+SELECT count(*)::int FROM events WHERE status = 'scheduled'
+`
+
+// The public marketing counter (GET /api/public/stats, e.g. the static
+// /free-scheduler page): events with a LOCKED time, not a still-open poll or
+// a cancelled plan, so it only grows on a genuine "we found a time" moment.
+func (q *Queries) CountScheduledEvents(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, countScheduledEvents)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createEvent = `-- name: CreateEvent :one
 
 INSERT INTO events (
