@@ -541,6 +541,12 @@ WHERE id = $1
 RETURNING id, host_id, title, event_type, description,
           location_mode, location_address, scheduling_mode, starts_at, status, created_at, comments_enabled, group_id, series_id, recurrence, reminder_sent, visibility, topic, city, custom_emoji, custom_label, general_scope, photo_url, theme, timezone, ends_at, poll_deadline, poll_ready_sent, vote_reminder_sent, quorum_sent, capacity, listed;
 
+-- name: CountScheduledEvents :one
+-- The public marketing counter (GET /api/public/stats, e.g. the static
+-- /free-scheduler page): events with a LOCKED time, not a still-open poll or
+-- a cancelled plan, so it only grows on a genuine "we found a time" moment.
+SELECT count(*)::int FROM events WHERE status = 'scheduled';
+
 -- name: CountRegisteredUsers :one
 -- The digest's hero stat: real signups (email on file, not a guest id).
 SELECT count(*)::int FROM profiles WHERE email <> '' AND user_id NOT LIKE 'guest#_%' ESCAPE '#';
