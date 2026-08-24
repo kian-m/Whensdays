@@ -601,10 +601,10 @@ function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect, hostNa
   return (
     <div className="card stack">
       <h3>Are you in?</h3>
-      <div className="row wrap">
+      <div className="row wrap" style={{ gap: "1.4rem" }}>
         {opts.map(([v, label]) => (
-          <button key={v} className={`chip ${active === v ? "on" : ""}`} data-testid={`rsvp-${v}`} onClick={() => set(v)}>
-            {active === v && v === "going" ? <span style={{ display: "flex", marginRight: "0.35rem" }}>{Ic.check(14)}</span> : null}
+          <button key={v} className={`toggle-quiet ${v} ${active === v ? "on" : ""}`} data-testid={`rsvp-${v}`} onClick={() => set(v)}>
+            <span className="dot" />
             {label}
           </button>
         ))}
@@ -631,7 +631,7 @@ function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect, hostNa
       )}
       {active === "waitlist" && (
         <p className="muted small" style={{ margin: 0 }} data-testid="waitlist-note">
-          ⏳ The event is full - you're on the waitlist. If a spot opens you're bumped in automatically (and emailed).
+          The event is full - you're on the waitlist. If a spot opens you're bumped in automatically (and emailed).
         </p>
       )}
       {/* The honest post-commit nudge: guests have no email on file, so

@@ -213,13 +213,15 @@ export function GroupPublicView({ id, signedOut, onJoined }: { id: string; signe
       {data.events.length > 0 && (
         <>
           <div className="section-h">What's coming up</div>
-          {collapseSeries([...data.events], "next")
-            .sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime())
-            .map((e) => (
-              <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
-                testid="group-public-event"
-                seriesN={e.series_id ? (seriesCounts(data.events)[e.series_id] ?? 1) : 0} />
-            ))}
+          <div className="list">
+            {collapseSeries([...data.events], "next")
+              .sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime())
+              .map((e) => (
+                <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
+                  testid="group-public-event"
+                  seriesN={e.series_id ? (seriesCounts(data.events)[e.series_id] ?? 1) : 0} />
+              ))}
+          </div>
         </>
       )}
 
@@ -231,7 +233,7 @@ export function GroupPublicView({ id, signedOut, onJoined }: { id: string; signe
           <summary className="section-h" data-testid="group-public-past-toggle" style={{ margin: 0, cursor: "pointer" }}>
             Past ({data.past_events.length})
           </summary>
-          <div className="stack" style={{ gap: 8, opacity: 0.75 }}>
+          <div className="list" style={{ opacity: 0.75 }}>
             {data.past_events.map((e) => (
               <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
                 testid="group-public-past-event" />
@@ -524,12 +526,14 @@ export function GroupPage() {
               counting its REMAINING dates), not one tile per date. Past
               occurrences and cancelled events don't show here at all (the
               streak above still reads the full history). */}
-          {collapseSeries([...upcomingEvents], "next")
-            .sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime())
-            .map((e) => (
-              <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
-                seriesN={e.series_id ? (seriesCounts(upcomingEvents)[e.series_id] ?? 1) : 0} />
-            ))}
+          <div className="list">
+            {collapseSeries([...upcomingEvents], "next")
+              .sort((a, b) => new Date(a.starts_at || 0).getTime() - new Date(b.starts_at || 0).getTime())
+              .map((e) => (
+                <GroupEventRow key={e.id} event={e} onClick={() => nav(`/e/${e.id}`)}
+                  seriesN={e.series_id ? (seriesCounts(upcomingEvents)[e.series_id] ?? 1) : 0} />
+              ))}
+          </div>
         </>
       )}
     </div>
@@ -636,7 +640,7 @@ export function GroupMembersPage() {
 function GroupEventRow({ event, onClick, seriesN, testid = "group-event" }: { event: Event; onClick: () => void; seriesN?: number; testid?: string }) {
   return (
     <div
-      className={`card ev tile ${event.theme ? `theme-tile theme-${event.theme}` : ""}`}
+      className={`list-row ev ${event.theme ? `theme-tile theme-${event.theme}` : ""}`}
       data-testid={testid}
       style={{ cursor: "pointer" }}
       onClick={onClick}

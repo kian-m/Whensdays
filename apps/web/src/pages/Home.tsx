@@ -194,7 +194,7 @@ export function Home() {
             Nothing new from the pages you follow yet.
           </p>
         ) : (
-          <div className="stack" data-testid="event-list">
+          <div className="list" data-testid="event-list">
             {followingEvents.map((e) => (
               <FollowedTile key={e.id} e={e} onClick={() => nav(`/e/${e.id}`)} />
             ))}
@@ -237,7 +237,7 @@ export function Home() {
                 : "Nothing here - you haven't been added to any events."}
             </p>
           ) : (
-            <div className="stack" data-testid="event-list">
+            <div className="list" data-testid="event-list">
               {shown.map((e) => (
                 <EventRow key={e.id} e={e} pile={data?.faces?.[e.id]} isNew={unseen.has(e.id)}
                   past={isPast(e)} attended={attended(e)} declinedByMe={iDeclined(e)}
@@ -256,7 +256,7 @@ export function Home() {
                 <button type="button" className="btn ghost sm" data-testid="following-see-all"
                   onClick={() => setFilter("following")}>See all</button>
               </div>
-              <div className="stack">
+              <div className="list">
                 {followingPreview.map((e) => (
                   <FollowedTile key={e.id} e={e} onClick={() => nav(`/e/${e.id}`)} />
                 ))}
@@ -281,7 +281,7 @@ function FollowedTile({ e, onClick }: { e: PublicEvent; onClick: () => void }) {
   const page = viaGroup ? e.group_name : e.performer_name || e.host_name;
   const prefix = !viaGroup && e.performer_name ? "with" : "via";
   return (
-    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : ""}`}
+    <div className={`list-row ev ${e.theme ? `theme-tile theme-${e.theme}` : ""}`}
       data-testid="following-tile" onClick={onClick}>
       <EventThumb photo={e.photo_url} title={e.title} size={72} />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -310,7 +310,7 @@ function EventRow({ e, pile, onClick, isNew, soon, past, attended, declinedByMe,
   const faces = (pile?.faces ?? []).slice(0, 5);
   const extra = (pile?.going ?? 0) - faces.length;
   return (
-    <div className={`card ev tile ${e.theme ? `theme-tile theme-${e.theme}` : ""}`} data-testid="event-row" onClick={onClick}>
+    <div className={`list-row ev ${e.theme ? `theme-tile theme-${e.theme}` : ""}`} data-testid="event-row" onClick={onClick}>
       <EventThumb photo={e.photo_url} title={e.title} size={72} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="row between">

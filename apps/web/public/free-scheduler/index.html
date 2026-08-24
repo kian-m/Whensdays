@@ -4,122 +4,136 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Whensdays: free group scheduler</title>
-<meta name="description" content="Pick your dates, share one link, and see when your group is free. Create a real plan right here - no accounts needed to RSVP.">
+<meta name="description" content="Pick your dates and see your link appear - no button, no accounts needed to RSVP. A free plan for your group, ready to share.">
 <link rel="canonical" href="https://whensdays.com/free-scheduler/">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <style>
   :root{color-scheme:dark}
-  body{margin:0;background:#1a1424;color:#f2e9dc;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;line-height:1.6}
-  .wrap{max-width:480px;margin:0 auto;padding:2.6rem 1.2rem 3.5rem;text-align:center}
-  h1{font-size:2.1rem;font-weight:850;letter-spacing:-.025em;line-height:1.1;margin:0 0 .6rem}
+  *{box-sizing:border-box}
+  body{margin:0;background:#1a1424;color:#f2e9dc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:430px;margin:0 auto;padding:4.2rem 1.3rem 3.5rem;
+    opacity:0;transform:translateY(14px);animation:rise 0.9s cubic-bezier(0.2,0.7,0.2,1) 0.05s forwards}
+  @keyframes rise{ to{ opacity:1; transform:none; } }
+  @media (prefers-reduced-motion: reduce){ .wrap{ animation:none; opacity:1; transform:none; } }
+
+  .brand{display:inline-flex;align-items:center;gap:.5rem;margin-bottom:2.4rem;font-size:.72rem;
+    letter-spacing:.14em;text-transform:uppercase;color:#746a83;text-decoration:none}
+  .brand img{width:20px;height:20px;border-radius:5px}
+
+  h1{font-family:Georgia,'Iowan Old Style','Palatino Linotype',Palatino,serif;font-weight:500;
+    font-size:2.4rem;line-height:1.16;letter-spacing:-.01em;margin:0 0 1rem}
   p{margin:.6rem 0}
-  .sub{font-size:1.04rem;color:#d8cee3;max-width:420px;margin:0 auto 1.8rem}
+  .sub{color:#a596b4;max-width:32ch;margin:0 0 3rem;font-size:1rem}
   a{color:#ee6c4d}
-  .brand{display:inline-flex;align-items:center;gap:.5rem;margin-bottom:1.8rem;font-weight:800;text-decoration:none;color:#f2e9dc}
-  .brand img{width:30px;height:30px;border-radius:8px}
 
-  /* --- the tool itself --- */
-  form{text-align:left}
-  .field{margin-bottom:1.3rem}
-  label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a596b4;margin-bottom:.4rem}
-  input[type=text]{width:100%;box-sizing:border-box;padding:.75rem .85rem;border-radius:8px;border:1px solid #3a2f4d;
-    background:#241c31;color:#f2e9dc;font-size:1rem;font-family:inherit}
-  input[type=text]:focus{outline:2px solid #e9a13b;outline-offset:1px}
-  input[type=text]::placeholder{color:#6f6280}
+  .field{margin-bottom:2.1rem}
+  .field label{display:block;font-family:Georgia,'Iowan Old Style',Palatino,serif;font-style:italic;
+    font-size:.95rem;color:#a596b4;margin-bottom:.6rem}
+  .field input{width:100%;background:none;border:none;border-bottom:1px solid #3a2f4d;color:#f2e9dc;
+    font:inherit;font-size:1.05rem;padding:.35rem .1rem .55rem;font-family:inherit}
+  .field input::placeholder{color:#6f6280}
+  .field input:focus{outline:none;border-bottom-color:#ee6c4d;border-bottom-width:2px;padding-bottom:calc(.55rem - 1px)}
+  .field input:disabled{color:#a596b4;border-bottom-color:#2b2338}
 
-  .quick{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.7rem}
-  .quick button{padding:.4rem .8rem;border-radius:8px;border:1px solid #3a2f4d;background:#241c31;color:#d8cee3;
-    font-size:.8rem;font-weight:600;cursor:pointer}
-  .quick button:hover{border-color:#a596b4}
+  .quick{display:flex;flex-wrap:wrap;gap:.15rem 0;font-size:.85rem;margin-bottom:1.5rem;color:#6f6280}
+  .quick button{background:none;border:none;color:#a596b4;font:inherit;font-size:inherit;padding:.15rem .5rem;
+    cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;
+    transition:text-decoration-color .15s,color .15s}
+  .quick button:first-child{padding-left:0}
+  .quick button:hover{color:#f2e9dc;text-decoration-color:#a596b4}
+  .quick button:disabled{color:#4a4058;text-decoration-color:transparent;cursor:default}
+  .quick .sep{padding:.15rem 0}
 
-  .weekdays,.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.35rem}
-  .weekdays{margin-bottom:.35rem}
-  .weekdays span{text-align:center;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:#6f6280}
-  .grid{margin-bottom:.3rem}
-  .day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid #3a2f4d;
-    background:#241c31;color:#f2e9dc;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  .weekdays,.grid{display:grid;grid-template-columns:repeat(7,1fr)}
+  .weekdays{margin-bottom:.5rem}
+  .weekdays span{text-align:center;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:#6f6280}
+  .grid{row-gap:.4rem}
+  .day{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+    background:none;border:none;color:#f2e9dc;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
     font-size:.9rem;font-variant-numeric:tabular-nums;cursor:pointer}
-  .day:hover{border-color:#a596b4}
-  .day.on{background:#ee6c4d;border-color:#c14e33;color:#2f2440;font-weight:700}
+  .day::before{content:"";position:absolute;width:1.85rem;height:1.85rem;border-radius:50%;background:#ee6c4d;
+    transform:scale(0);transition:transform .18s cubic-bezier(.3,1.3,.6,1);z-index:0}
+  .day span{position:relative;z-index:1}
+  .day.on{color:#2f2440;font-weight:600}
+  .day.on::before{transform:scale(1)}
   .day.pad{visibility:hidden}
   .day.past{visibility:hidden;pointer-events:none}
-  .more{background:none;border:none;color:#ee6c4d;font-size:.8rem;font-weight:700;cursor:pointer;padding:.4rem 0;margin-bottom:.4rem}
+  .grid.locked .day{pointer-events:none}
+  .grid.locked .day:not(.on){opacity:.4}
+  .more{background:none;border:none;color:#746a83;font-size:.8rem;cursor:pointer;padding:.6rem 0 0;
+    text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}
+  .more:hover{color:#a596b4;text-decoration-color:#6f6280}
+  .more:disabled{color:#4a4058;text-decoration-color:transparent;cursor:default}
 
-  .cta{display:block;width:100%;box-sizing:border-box;margin-top:1.4rem;padding:.9rem 1.6rem;border-radius:8px;
-    font-weight:700;font-size:1.02rem;color:#2f2440;background:#ee6c4d;border:1px solid #c14e33;cursor:pointer;
-    text-align:center;font-family:inherit}
-  .cta:disabled{opacity:.45;cursor:default}
-  .cta:not(:disabled):hover{background:#c14e33;color:#f8e3c9}
-  .err{color:#e0607a;font-size:.85rem;min-height:1.2em;margin-top:.6rem}
+  /* --- the link: always present, never a button. it fills in on its own --- */
+  .link-area{margin-top:2.6rem}
+  .link-label{font-family:Georgia,'Iowan Old Style',Palatino,serif;font-style:italic;font-size:.95rem;
+    color:#a596b4;margin-bottom:.6rem}
+  .link-value{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:.92rem;
+    color:#6f6280;background:none;border:none;padding:0;text-align:left;cursor:default;width:100%;word-break:break-all}
+  .link-value.ready{color:#f2e9dc;background:#221b2d;padding:.9rem 1rem;border-radius:6px;cursor:pointer}
+  .link-value.ready:hover{background:#291f36}
+  .lock-note{font-size:.8rem;color:#6f6280;margin-top:.7rem}
+  .lock-note[hidden]{display:none}
+  .manage-row{margin-top:.9rem;font-size:.9rem}
+  .manage-row[hidden]{display:none}
+  .manage-row a{color:#a596b4;text-decoration:underline;text-underline-offset:3px}
+  .manage-row a:hover{color:#f2e9dc}
+  .manage-row .sep{color:#6f6280;margin:0 .5rem}
 
-  /* --- success state --- */
-  .done{display:none;text-align:center}
-  .done.show{display:block}
-  form.hidden{display:none}
-  .done h2{font-size:1.4rem;font-weight:850;letter-spacing:-.02em;margin:0 0 .5rem}
-  .link-copy{display:block;width:100%;box-sizing:border-box;margin-top:.8rem;padding:.85rem 1rem;border-radius:8px;
-    border:1px solid #3a2f4d;background:#241c31;color:#f2e9dc;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-    font-size:.9rem;cursor:pointer;word-break:break-all}
-  .link-copy:hover{border-color:#a596b4}
-  .manage{display:inline-block;margin-top:1rem}
-  .again{display:block;margin-top:1.2rem;font-size:.85rem;color:#a596b4}
+  .err{color:#e0607a;font-size:.85rem;min-height:1.2em;margin-top:.8rem}
 
-  /* --- counter: quiet social proof, any1.free-style zero-padded odometer --- */
-  .counter{margin-top:2.4rem}
+  .counter{margin-top:2.8rem;font-size:.85rem;color:#6f6280}
   .counter[hidden]{display:none}
-  .counter-num{display:block;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-    font-size:1.8rem;font-weight:700;letter-spacing:.06em;font-variant-numeric:tabular-nums;color:#f2e9dc}
-  .counter-label{display:block;margin-top:.15rem;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:#a596b4}
+  .counter b{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;
+    color:#a596b4;font-weight:600}
 
-  footer{margin-top:2.6rem;font-size:.85rem;color:#a596b4}
+  footer{margin-top:3.2rem;padding-top:1.6rem;border-top:1px solid #3a2f4d;font-size:.8rem;color:#6f6280}
+  footer a{color:#6f6280;text-decoration:underline;text-underline-offset:2px}
+  footer a:hover{color:#a596b4}
 </style>
 </head>
 <body>
 <div class="wrap">
   <a class="brand" href="/"><img src="/apple-touch-icon.png" alt="">Whensdays</a>
-  <h1>Find a time. Lock it in.</h1>
-  <p class="sub">Pick your dates, share one link, and see when your group is free. No accounts needed to RSVP.</p>
+  <h1>Find a time.<br>Lock it in.</h1>
+  <p class="sub">Pick your dates. Your link appears on its own - share it, and see when your people are free.</p>
 
-  <form id="plan-form">
-    <div class="field">
-      <label for="plan-title">What's the plan?</label>
-      <input type="text" id="plan-title" placeholder="Game night, dinner, D&amp;D..." maxlength="140" autocomplete="off">
-    </div>
-    <div class="field">
-      <label for="plan-name">Your name</label>
-      <input type="text" id="plan-name" placeholder="So your group knows who's asking" maxlength="80" autocomplete="name">
-    </div>
-    <div class="field">
-      <label>Which dates work?</label>
-      <div class="quick">
-        <button type="button" data-pick="week">Next 7 days</button>
-        <button type="button" data-pick="weekend">This weekend</button>
-        <button type="button" data-pick="2weekends">Next 2 weekends</button>
-      </div>
-      <div class="weekdays">
-        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
-      </div>
-      <div class="grid" id="cal-grid"></div>
-      <button type="button" class="more" id="cal-more">+ show another 2 weeks</button>
-    </div>
-    <button type="button" class="cta" id="submit-btn" disabled>Create and get the link</button>
-    <p class="err" id="err" role="alert"></p>
-  </form>
-
-  <div class="done" id="done">
-    <h2 id="done-title"></h2>
-    <p class="sub" id="done-sub">Share this link - anyone can vote, no account needed.</p>
-    <button type="button" class="link-copy" id="link-copy"></button>
-    <div><a class="manage" id="manage-link" href="#">Manage this plan</a></div>
-    <a class="again" href="/free-scheduler/">Plan another one</a>
+  <div class="field">
+    <label for="plan-title">What's the plan?</label>
+    <input type="text" id="plan-title" placeholder="Game night, dinner, D&amp;D" maxlength="140" autocomplete="off">
   </div>
+  <div class="field">
+    <label for="plan-name">Your name</label>
+    <input type="text" id="plan-name" placeholder="So your people know who's asking" maxlength="80" autocomplete="name">
+  </div>
+  <div class="field" style="margin-bottom:.9rem">
+    <label>A few dates that could work</label>
+  </div>
+  <div class="quick">
+    <button type="button" data-pick="week">Next 7 days</button><span class="sep">&middot;</span>
+    <button type="button" data-pick="weekend">This weekend</button><span class="sep">&middot;</span>
+    <button type="button" data-pick="2weekends">Next 2 weekends</button>
+  </div>
+  <div class="weekdays">
+    <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+  </div>
+  <div class="grid" id="cal-grid"></div>
+  <button type="button" class="more" id="cal-more">a couple more weeks</button>
+
+  <div class="link-area">
+    <div class="link-label">Your link</div>
+    <button type="button" class="link-value" id="link-value">Finish picking dates above and it appears here</button>
+    <p class="lock-note" id="lock-note" hidden>Dates are locked in for this link. Want to add more? Do it from your plan page.</p>
+    <p class="manage-row" id="manage-row" hidden><a href="#" id="manage-link">Manage this plan</a><span class="sep">&middot;</span><a href="/free-scheduler/">Plan another one</a></p>
+  </div>
+  <p class="err" id="err" role="alert"></p>
 
   <p class="counter" id="counter" hidden>
-    <span class="counter-num" id="counter-num">000000</span>
-    <span class="counter-label">events scheduled so far</span>
+    <b id="counter-num">000000</b> plans have found a time here
   </p>
 
-  <footer>Whensdays is a free scheduling app for friend groups and clubs, with availability polls, recurring series, and RSVPs that need no account. Once you share the link you can lock more than one date at once, and everyone's calendar syncs automatically. <a href="/">whensdays.com</a> · <a href="/vs/when2meet/">vs When2meet</a> · <a href="/vs/doodle/">vs Doodle</a> · <a href="/vs/lettucemeet/">vs LettuceMeet</a> · <a href="/vs/timeful/">vs Timeful</a></footer>
+  <footer>A free tool from Whensdays, with availability polls, recurring series, and RSVPs that need no account. <a href="/">whensdays.com</a> &middot; <a href="/vs/when2meet/">vs When2meet</a> &middot; <a href="/vs/doodle/">vs Doodle</a> &middot; <a href="/vs/lettucemeet/">vs LettuceMeet</a> &middot; <a href="/vs/timeful/">vs Timeful</a></footer>
 </div>
 <script>
 (function () {
@@ -128,18 +142,18 @@
   // ---- date grid: always relative to "today", never a hardcoded date ----
   var WEEK_MS = 7 * 24 * 3600 * 1000;
   var today = new Date(); today.setHours(0, 0, 0, 0);
-  var weeksShown = 4; // grows via "+ show another 2 weeks"
-  var selected = {}; // ymd -> true
+  var weeksShown = 4;
+  var selected = {};
   var cellByYmd = {};
 
   function ymd(d) {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
   function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
-
-  var gridStart = addDays(today, -today.getDay()); // back to the most recent Sunday
+  var gridStart = addDays(today, -today.getDay());
 
   var gridEl = document.getElementById("cal-grid");
+  var moreBtn = document.getElementById("cal-more");
   function renderGrid() {
     gridEl.innerHTML = "";
     cellByYmd = {};
@@ -154,25 +168,28 @@
         btn.tabIndex = -1;
       } else {
         var key = ymd(d);
-        btn.textContent = String(d.getDate());
+        var span = document.createElement("span");
+        span.textContent = String(d.getDate());
+        btn.appendChild(span);
         btn.setAttribute("aria-pressed", selected[key] ? "true" : "false");
         if (selected[key]) btn.className += " on";
-        btn.addEventListener("click", function (k, el) {
+        btn.addEventListener("click", (function (k, el) {
           return function () {
             selected[k] = !selected[k];
             el.classList.toggle("on", !!selected[k]);
             el.setAttribute("aria-pressed", selected[k] ? "true" : "false");
-            refreshSubmit();
+            scheduleAutoCreate();
           };
-        }(key, btn));
+        })(key, btn));
         cellByYmd[key] = btn;
       }
       gridEl.appendChild(btn);
     }
+    if (locked) gridEl.classList.add("locked"); else gridEl.classList.remove("locked");
   }
   renderGrid();
 
-  document.getElementById("cal-more").addEventListener("click", function () {
+  moreBtn.addEventListener("click", function () {
     weeksShown += 2;
     renderGrid();
     if (weeksShown >= 8) this.style.display = "none";
@@ -181,12 +198,9 @@
   // Quick picks toggle the matching cells ON (additive - tapping a second
   // shortcut layers more dates rather than replacing the first pick).
   function pickDates(dates) {
-    var needWeeks = weeksShown;
-    dates.forEach(function (d) {
-      var span = Math.ceil((d - gridStart) / WEEK_MS) + 1;
-      if (span > needWeeks) needWeeks = span;
-    });
-    if (needWeeks > weeksShown) { weeksShown = Math.min(needWeeks, 8); renderGrid(); }
+    var need = weeksShown;
+    dates.forEach(function (d) { var span = Math.ceil((d - gridStart) / WEEK_MS) + 1; if (span > need) need = span; });
+    if (need > weeksShown) { weeksShown = Math.min(need, 8); renderGrid(); }
     dates.forEach(function (d) {
       if (d < today) return;
       var key = ymd(d);
@@ -194,7 +208,7 @@
       var el = cellByYmd[key];
       if (el) { el.classList.add("on"); el.setAttribute("aria-pressed", "true"); }
     });
-    refreshSubmit();
+    scheduleAutoCreate();
   }
   document.querySelectorAll(".quick button").forEach(function (btn) {
     btn.addEventListener("click", function () {
@@ -206,14 +220,10 @@
         // visit has no Saturday left to pick (it's in the past), so "this
         // weekend" is just today; every other day of the week gets the
         // upcoming Sat+Sun.
-        var dow = today.getDay(); // 0 = Sunday .. 6 = Saturday
+        var dow = today.getDay();
         var dates;
-        if (dow === 0) {
-          dates = [today];
-        } else {
-          var sat1 = addDays(today, (6 - dow + 7) % 7); // 0 when today IS Saturday
-          dates = [sat1, addDays(sat1, 1)];
-        }
+        if (dow === 0) { dates = [today]; }
+        else { var sat1 = addDays(today, (6 - dow + 7) % 7); dates = [sat1, addDays(sat1, 1)]; }
         if (kind === "2weekends") {
           var sat2 = dow === 0 ? addDays(today, 6) : addDays(dates[0], 7);
           dates = dates.concat([sat2, addDays(sat2, 1)]);
@@ -223,23 +233,60 @@
     });
   });
 
-  // ---- form state ----
+  // ---- no button anywhere: once there's enough to go on, the link creates
+  // itself and appears. The API has no way to add poll days to an existing
+  // event (poll setup is one-time-only, server-side), so once the real event
+  // exists the date grid locks - further changes would silently stop
+  // matching the link already handed out, which is worse than not allowing
+  // them. ----
+  var DEBOUNCE_MS = 1100;
   var titleEl = document.getElementById("plan-title");
   var nameEl = document.getElementById("plan-name");
-  var submitBtn = document.getElementById("submit-btn");
+  var linkEl = document.getElementById("link-value");
   var errEl = document.getElementById("err");
+  var lockNote = document.getElementById("lock-note");
+  var manageRow = document.getElementById("manage-row");
+  var counterWrap = document.getElementById("counter");
 
-  function refreshSubmit() {
-    var hasDate = Object.keys(selected).some(function (k) { return selected[k]; });
-    submitBtn.disabled = !(titleEl.value.trim() && nameEl.value.trim() && hasDate);
+  var timer = null;
+  var creating = false;
+  var created = false;
+  var locked = false;
+
+  function hasMinInfo() {
+    return !!(titleEl.value.trim() && nameEl.value.trim() && Object.keys(selected).some(function (k) { return selected[k]; }));
   }
-  titleEl.addEventListener("input", refreshSubmit);
-  nameEl.addEventListener("input", refreshSubmit);
 
-  submitBtn.addEventListener("click", function () {
+  function scheduleAutoCreate() {
+    if (created || creating) return;
+    if (timer) clearTimeout(timer);
+    if (!hasMinInfo()) {
+      linkEl.textContent = "Finish picking dates above and it appears here";
+      linkEl.className = "link-value";
+      return;
+    }
+    timer = setTimeout(doCreate, DEBOUNCE_MS);
+  }
+  titleEl.addEventListener("input", scheduleAutoCreate);
+  nameEl.addEventListener("input", scheduleAutoCreate);
+
+  function lockForm() {
+    locked = true;
+    titleEl.disabled = true;
+    nameEl.disabled = true;
+    gridEl.classList.add("locked");
+    moreBtn.disabled = true;
+    document.querySelectorAll(".quick button").forEach(function (b) { b.disabled = true; });
+    lockNote.hidden = false;
+  }
+
+  function doCreate() {
+    if (created || creating) return;
+    creating = true;
     errEl.textContent = "";
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Creating...";
+    linkEl.textContent = "Preparing your link";
+    linkEl.className = "link-value";
+
     var days = Object.keys(selected).filter(function (k) { return selected[k]; }).sort();
     var title = titleEl.value.trim();
     var name = nameEl.value.trim();
@@ -265,28 +312,30 @@
         return r.json();
       }).then(function (ev) {
         // Same localStorage shape/key the app itself uses for a guest session
-        // (App.tsx's GUEST_KEY) - so clicking "Manage this plan" lands signed
-        // in as this plan's host, not a stranger asked to join it.
+        // (App.tsx's GUEST_KEY) - so "Manage this plan" lands signed in as
+        // this plan's host, not a stranger asked to join it.
         try { localStorage.setItem("clsandbox.guest", JSON.stringify(guest)); } catch (e) { /* private mode */ }
         var url = location.origin + "/e/" + ev.id;
-        document.getElementById("done-title").textContent = "“" + title + "” is ready";
-        var linkBtn = document.getElementById("link-copy");
-        linkBtn.textContent = url.replace(/^https?:\/\//, "");
-        linkBtn.addEventListener("click", function () {
+        created = true;
+        creating = false;
+        linkEl.textContent = url.replace(/^https?:\/\//, "");
+        linkEl.className = "link-value ready";
+        linkEl.onclick = function () {
           navigator.clipboard && navigator.clipboard.writeText(url);
-          linkBtn.textContent = "Copied";
-          setTimeout(function () { linkBtn.textContent = url.replace(/^https?:\/\//, ""); }, 1800);
-        });
+          linkEl.textContent = "Copied";
+          setTimeout(function () { linkEl.textContent = url.replace(/^https?:\/\//, ""); }, 1800);
+        };
         document.getElementById("manage-link").href = "/e/" + ev.id;
-        document.getElementById("plan-form").classList.add("hidden");
-        document.getElementById("done").classList.add("show");
+        manageRow.hidden = false;
+        lockForm();
       });
     }).catch(function () {
-      errEl.textContent = "Something went wrong creating your plan. Please try again.";
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Create and get the link";
+      creating = false;
+      linkEl.textContent = "Finish picking dates above and it appears here";
+      linkEl.className = "link-value";
+      errEl.textContent = "Something went wrong preparing your link. Try again in a moment.";
     });
-  });
+  }
 
   // ---- counter: progressive enhancement only, never a placeholder number ----
   fetch("/api/public/stats").then(function (r) {
@@ -295,7 +344,7 @@
     var n = Number(data.events_scheduled);
     if (!isFinite(n) || n < 0) return;
     document.getElementById("counter-num").textContent = String(Math.round(n)).padStart(6, "0");
-    document.getElementById("counter").hidden = false;
+    counterWrap.hidden = false;
   }).catch(function () {});
 })();
 </script>

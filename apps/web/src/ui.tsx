@@ -560,9 +560,9 @@ export function MonthPicker({ selected, onToggle }: { selected: Set<string>; onT
           const on = selected.has(v);
           return (
             <button key={d} type="button" disabled={past} data-testid={`cal-day-${v}`}
-              className={`cal-day ${on ? "on" : ""}`} aria-pressed={on}
-              style={{ opacity: past ? 0.3 : 1, display: "grid", placeItems: "center" }}
-              onClick={() => onToggle(v)}>{d}</button>
+              className={`bare-day ${on ? "on" : ""}`} aria-pressed={on}
+              style={{ opacity: past ? 0.3 : 1 }}
+              onClick={() => onToggle(v)}><span>{d}</span></button>
           );
         })}
       </div>
