@@ -880,3 +880,69 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* OSM attribution line under address suggestions (ODbL) */
 .addr-attrib { padding: 6px 12px; font-size: 0.68rem; color: var(--muted); border-top: 1px solid var(--line); }
 .addr-attrib a { text-decoration: underline; }
+
+/* ===== Quiet Plans - a restraint pass on House Lights =====
+   Same tokens (plum/cream/coral, --go/--time/--no), far less chrome. These
+   are ADDITIVE utility classes - nothing above this line is changed, so
+   nothing that already renders can regress. See docs/design/QUIET-PLANS.md
+   for the full direction + phased rollout this belongs to. */
+
+/* .list / .list-row: a card-list rewritten as hairline-divided rows instead
+   of one bordered box per item (Home tiles, Group event rows). Padding does
+   the separating instead of a border on every row - the border moves to
+   BETWEEN rows, where it's actually dividing two different things. */
+.list { display: flex; flex-direction: column; }
+.list-row { display: flex; align-items: center; gap: 0.85rem; padding: 0.95rem 0; }
+.list-row + .list-row { border-top: 1px solid var(--line); }
+
+/* .stamp-text: a status word that's information-adjacent but doesn't carry a
+   live count/tally, so it drops the bordered .pill chrome for quiet mono
+   text (still stamp voice - dates/statuses stay legible, just unboxed).
+   Reserve .pill itself for anything that actually shows a number (a tally,
+   a live count) - see QUIET-PLANS.md §1 rule 14. */
+.stamp-text {
+  font-family: var(--font-data); font-size: 0.72rem; letter-spacing: 0.04em;
+  color: var(--muted); text-transform: uppercase;
+}
+.stamp-text.going, .stamp-text.locked, .stamp-text.scheduled { color: var(--go); }
+.stamp-text.maybe, .stamp-text.deciding, .stamp-text.polling { color: var(--time); }
+.stamp-text.declined, .stamp-text.cancelled { color: var(--no); }
+
+/* .toggle-quiet: a same-meaning replacement for a filled/bordered button
+   toggle (RSVP Going/Maybe/Can't go) - a small dot carries the state, text
+   carries the weight once chosen. Each state keeps ITS OWN meaning color
+   (--go/--time/--no), the same one .pill already uses for it, so "selected"
+   never invents a second accent alongside coral (QUIET-PLANS.md §1 rule 15).
+   44px min height keeps the tap target - quieter must never mean smaller. */
+.toggle-quiet {
+  display: inline-flex; align-items: center; gap: 0.55em;
+  background: none; border: none; padding: 0.3rem 0; font: inherit; font-size: 0.95rem;
+  color: var(--muted); cursor: pointer; min-height: 44px;
+}
+.toggle-quiet .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); flex: none; }
+.toggle-quiet.on { color: var(--ink); font-weight: 700; }
+.toggle-quiet.on.going .dot { background: var(--go); }
+.toggle-quiet.on.maybe .dot { background: var(--time); }
+.toggle-quiet.on.declined .dot { background: var(--no); }
+.toggle-quiet:focus-visible { outline: 2px solid var(--time); outline-offset: 2px; }
+
+/* .bare-day: a date-grid cell with no border/background at rest - the
+   numeral floats on the surface, and picking it seats a filled coral circle
+   underneath (same "this is chosen" language as the free-scheduler page).
+   Scoped to simple click-toggle day pickers (MonthPicker) for now; the
+   drag-paint week/month/time grids keep their existing .cell treatment -
+   that's flagged as its own, higher-risk phase in QUIET-PLANS.md §3. */
+.bare-day {
+  position: relative; min-height: 40px; min-width: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer;
+  font-family: var(--font-data); font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.bare-day::before {
+  content: ""; position: absolute; width: 1.7rem; height: 1.7rem; border-radius: 50%;
+  background: var(--accent); transform: scale(0);
+  transition: transform 0.18s cubic-bezier(0.3, 1.3, 0.6, 1); z-index: 0;
+}
+.bare-day span { position: relative; z-index: 1; }
+.bare-day.on { color: var(--plum); font-weight: 700; }
+.bare-day.on::before { transform: scale(1); }
