@@ -180,19 +180,21 @@ function DayList({ cursor, byDay, onOpen }: {
 }) {
   const items = byDay.get(dayKey(cursor)) ?? [];
   return (
-    <div className="card stack" data-testid="cal-day">
+    <div className="stack" data-testid="cal-day">
       {items.length === 0 && <p className="muted small" data-testid="cal-day-empty">Nothing scheduled this day.</p>}
-      {items.map((it) => (
-        <button key={it.key} type="button" className="row cal-day-row" onClick={() => it.eventId && onOpen(it.eventId)}
-          style={{ cursor: it.eventId ? "pointer" : "default" }}>
-          <span className="stamp time" style={{ width: 84, textAlign: "right" }}>{fmtTime(it.start)}</span>
-          <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: it.color }} />
-          <span className="stack" style={{ gap: 0, alignItems: "flex-start" }}>
-            <strong>{it.title}</strong>
-            {it.imported && <span className="muted small">from a connected calendar</span>}
-          </span>
-        </button>
-      ))}
+      <div className="list">
+        {items.map((it) => (
+          <button key={it.key} type="button" className="list-row row cal-day-row" onClick={() => it.eventId && onOpen(it.eventId)}
+            style={{ cursor: it.eventId ? "pointer" : "default", width: "100%" }}>
+            <span className="stamp time" style={{ width: 84, textAlign: "right" }}>{fmtTime(it.start)}</span>
+            <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: it.color }} />
+            <span className="stack" style={{ gap: 0, alignItems: "flex-start" }}>
+              <strong>{it.title}</strong>
+              {it.imported && <span className="muted small">from a connected calendar</span>}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -214,7 +216,7 @@ function FeedCard() {
   const [copied, setCopied] = useState(false);
   if (!data) return null;
   return (
-    <div className="card stack" data-testid="feed-card">
+    <div className="stack" data-testid="feed-card">
       <div>
         <h3>Your Whensdays feed</h3>
         <p className="muted small">Subscribe once - every event you're going to appears in your calendar automatically and stays up to date.</p>
@@ -240,7 +242,7 @@ function ProviderRow({ icon, label, connectedLabel, connectTestid, disconnectTes
 }) {
   const connected = connectedLabel !== undefined;
   return (
-    <div className="stack" style={{ gap: 8 }}>
+    <div className="list-row stack" style={{ gap: 8, alignItems: "stretch" }}>
       <div className="row between">
         <span className="row" style={{ gap: 8, flex: "1 1 auto", minWidth: 0, alignItems: "center" }}>
           {typeof icon === "string" ? <span style={{ flex: "none" }}>{icon}</span> : <span style={{ flex: "none", display: "flex" }}>{icon}</span>}
@@ -312,11 +314,12 @@ export function CalendarConnections() {
   const labelOf = (p: CalendarProvider) => connections.find((c) => c.provider === p)?.account_label;
 
   return (
-    <div className="card stack" data-testid="calendar-connections">
+    <div className="stack" data-testid="calendar-connections">
       <div>
         <h3>Connected calendars</h3>
         <p className="muted small">Read-only and private: your busy times grey out availability and flag conflicts. Nothing is shared or published.</p>
       </div>
+      <div className="list">
       <ProviderRow icon={Ic.calendar(16)} label={PROVIDER_LABEL.google} connectedLabel={labelOf("google")}
         connectTestid="connect-google" disconnectTestid="disconnect-google"
         onConnect={() => oauthConnect("google")} onDisconnect={() => disconnect("google")} />
@@ -360,6 +363,7 @@ export function CalendarConnections() {
           </form>
         )}
       </ProviderRow>
+      </div>
       {msg && <p className="muted small" data-testid="calendar-msg">{msg}</p>}
       <FeedCard />
     </div>

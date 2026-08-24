@@ -118,20 +118,22 @@ export function Groups() {
       {data && data.groups.length === 0 && (
         <p className="muted small">No groups yet - make one for your people.</p>
       )}
-      {data?.groups.map((g) => (
-        <div
-          key={g.id}
-          className="card row between"
-          data-testid="group-row"
-          style={{ cursor: "pointer" }}
-          onClick={() => nav(`/g/${g.id}`)}
-        >
-          <span className="row" style={{ gap: 8 }}>
-            <GroupIcon group={g} />
-            <span>{g.name}</span>
-          </span>
-        </div>
-      ))}
+      <div className="list">
+        {data?.groups.map((g) => (
+          <div
+            key={g.id}
+            className="list-row row between"
+            data-testid="group-row"
+            style={{ cursor: "pointer" }}
+            onClick={() => nav(`/g/${g.id}`)}
+          >
+            <span className="row" style={{ gap: 8 }}>
+              <GroupIcon group={g} />
+              <span>{g.name}</span>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -407,7 +409,7 @@ export function GroupPage() {
           already the FIRST card on this page, so this is the headline on top
           of it, not a replacement for it. */}
       {justCreatedPage && (
-        <div className="card stack" data-testid="group-page-live" style={{ gap: 4 }}>
+        <div className="stack" data-testid="group-page-live" style={{ gap: 4 }}>
           <div className="section-h" style={{ margin: 0 }}>Your page is live</div>
           <p className="muted small" style={{ margin: 0 }}>Share this link so people can follow you.</p>
         </div>
@@ -417,7 +419,7 @@ export function GroupPage() {
           and are now view-only. Small, one-time, dismissible - sits above both
           share cards since it references both. */}
       {canManage && !linkHintSeen && (
-        <div className="card row between" data-testid="group-link-hint"
+        <div className="row between" data-testid="group-link-hint"
           style={{ gap: 8, alignItems: "flex-start" }}>
           <span className="muted small">
             Heads up: links you shared before now open the <b>public page</b> only. To add someone as a member, send the <b>Invite to join</b> link below.
@@ -481,7 +483,7 @@ export function GroupPage() {
       {/* Rollout reality #2: pre-0044 events are all listed=false, so the
           public page can read as broken. Count them and offer the fix. */}
       {canManage && unlisted.length > 0 && (
-        <div className="card stack" style={{ gap: 6 }} data-testid="group-unlisted-hint">
+        <div className="stack" style={{ gap: 6 }} data-testid="group-unlisted-hint">
           <span className="muted small">
             {unlisted.length} upcoming {unlisted.length === 1 ? "event isn't" : "events aren't"} shown on your public page.
           </span>
@@ -500,7 +502,7 @@ export function GroupPage() {
       {/* Compact members summary (Instagram-style): a few faces + a count that
           opens the dedicated members page - the full list no longer floods the
           main group scroll. */}
-      <Link to={`/g/${group.id}/members`} className="card row between" data-testid="group-members-link"
+      <Link to={`/g/${group.id}/members`} className="row between" data-testid="group-members-link"
         style={{ cursor: "pointer", textDecoration: "none", color: "inherit" }}>
         <span className="row" style={{ gap: 8, minWidth: 0 }}>
           {members.length > 0 && (
@@ -586,35 +588,37 @@ export function GroupMembersPage() {
 
       <div className="section-h">Members</div>
       {members.length === 0 && <p className="muted small">No members yet - add someone below.</p>}
-      {members.map((m) => {
-        const isGroupOwner = m.user_id === group.owner_id;
-        return (
-          // Two rows so the action buttons can never collide with the name:
-          // identity on top, management actions right-aligned underneath.
-          <div key={m.user_id} className="card stack" style={{ gap: 8 }} data-testid="group-member">
-            <div className="row" style={{ gap: 8, minWidth: 0, flexWrap: "wrap" }}>
-              <Avatar url={m.avatar_url} name={m.display_name} size={32} />
-              <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                {m.display_name || m.handle}
-                {m.handle && <span className="muted small"> @{m.handle}</span>}
-              </span>
-              {(isGroupOwner || m.role === "admin") && (
-                <span className="pill scheduled" data-testid={`member-admin-${m.handle}`}>{isGroupOwner ? "Owner" : "Admin"}</span>
+      <div className="list">
+        {members.map((m) => {
+          const isGroupOwner = m.user_id === group.owner_id;
+          return (
+            // Two rows so the action buttons can never collide with the name:
+            // identity on top, management actions right-aligned underneath.
+            <div key={m.user_id} className="list-row stack" style={{ gap: 8, alignItems: "stretch" }} data-testid="group-member">
+              <div className="row" style={{ gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+                <Avatar url={m.avatar_url} name={m.display_name} size={32} />
+                <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                  {m.display_name || m.handle}
+                  {m.handle && <span className="muted small"> @{m.handle}</span>}
+                </span>
+                {(isGroupOwner || m.role === "admin") && (
+                  <span className="pill scheduled" data-testid={`member-admin-${m.handle}`}>{isGroupOwner ? "Owner" : "Admin"}</span>
+                )}
+              </div>
+              {canManage && !isGroupOwner && (
+                <div className="row" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  <button className="btn ghost sm" data-testid={`member-role-${m.handle}`}
+                    onClick={() => setRole(m.user_id, m.role === "admin" ? "member" : "admin")}>
+                    {m.role === "admin" ? "Remove admin" : "Make admin"}
+                  </button>
+                  <ConfirmButton label="Remove" confirmLabel="Tap again to remove" testid={`member-remove-${m.handle}`}
+                    onConfirm={() => removeMember(m.user_id)} />
+                </div>
               )}
             </div>
-            {canManage && !isGroupOwner && (
-              <div className="row" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                <button className="btn ghost sm" data-testid={`member-role-${m.handle}`}
-                  onClick={() => setRole(m.user_id, m.role === "admin" ? "member" : "admin")}>
-                  {m.role === "admin" ? "Remove admin" : "Make admin"}
-                </button>
-                <ConfirmButton label="Remove" confirmLabel="Tap again to remove" testid={`member-remove-${m.handle}`}
-                  onConfirm={() => removeMember(m.user_id)} />
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
 
       {canManage && (
         <form className="card stack" onSubmit={addMember}>

@@ -78,7 +78,7 @@ export function ClerkAccountCard() {
   }
 
   return (
-    <div className="card stack" data-testid="account-card">
+    <div className="stack" data-testid="account-card">
       <div className="row between">
         <h3 style={{ margin: 0 }}>Account</h3>
         <button className="btn ghost sm" data-testid="sign-out" onClick={() => signOut()}>Sign out</button>
