@@ -83,15 +83,17 @@ export function ListSkeleton({ rows = 4, thumb = true, header = false }: {
   return (
     <div className="stack" data-testid="skeleton" aria-busy="true">
       {header && <Skel w="40%" h={30} style={{ margin: "0.4rem 0" }} />}
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="card row" style={{ gap: 12 }}>
-          {thumb && <Skel w={56} h={56} r="var(--radius-sm)" style={{ flex: "none" }} />}
-          <span style={{ flex: 1, display: "block" }}>
-            <Skel w="55%" h={16} />
-            <Skel w="35%" style={{ marginTop: 8 }} />
-          </span>
-        </div>
-      ))}
+      <div className="list">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="list-row row" style={{ gap: 12 }}>
+            {thumb && <Skel w={56} h={56} r="var(--radius-sm)" style={{ flex: "none" }} />}
+            <span style={{ flex: 1, display: "block" }}>
+              <Skel w="55%" h={16} />
+              <Skel w="35%" style={{ marginTop: 8 }} />
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -107,7 +109,7 @@ export function EventSkeleton() {
         <Skel w="40%" />
         <Skel w="50%" />
       </div>
-      <div className="card stack">
+      <div className="stack">
         <Skel w="30%" h={16} />
         <Skel w="70%" h={38} r="var(--radius-sm)" />
       </div>

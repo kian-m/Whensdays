@@ -630,7 +630,7 @@ function Shell({ children, hideNav }: { children: React.ReactNode; hideNav?: boo
       {/* Guest→account conversion nudge (K-factor): guests keep full access,
           but signing up preserves their plans across devices. */}
       {profile?.user_id.startsWith("guest_") && (
-        <div className="card row between" data-testid="guest-banner" style={{ marginBottom: "0.9rem" }}>
+        <div className="row between" data-testid="guest-banner" style={{ marginBottom: "0.9rem" }}>
           <span className="small">You're in as a guest - sign up to keep your plans on any device.</span>
           <span className="row" style={{ gap: 6 }}>
             <button className="btn ghost sm" data-testid="guest-reset"

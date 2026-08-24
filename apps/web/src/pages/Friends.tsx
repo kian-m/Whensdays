@@ -74,55 +74,63 @@ export function Friends() {
       {data && data.incoming.length > 0 && (
         <>
           <div className="section-h">Requests</div>
-          {data.incoming.map((r) => (
-            <div key={r.id} className="card row between">
-              <span>{r.display_name} <span className="muted small">@{r.handle}</span></span>
-              <span className="row">
-                <button className="btn soft sm" data-testid={`accept-${r.handle}`} onClick={() => accept(r.id)}>Accept</button>
-                <ConfirmButton label="Decline" confirmLabel="Tap again to decline" testid={`decline-${r.handle}`}
-                  onConfirm={() => remove(r.id)} />
-              </span>
-            </div>
-          ))}
+          <div className="list">
+            {data.incoming.map((r) => (
+              <div key={r.id} className="list-row row between">
+                <span>{r.display_name} <span className="muted small">@{r.handle}</span></span>
+                <span className="row">
+                  <button className="btn soft sm" data-testid={`accept-${r.handle}`} onClick={() => accept(r.id)}>Accept</button>
+                  <ConfirmButton label="Decline" confirmLabel="Tap again to decline" testid={`decline-${r.handle}`}
+                    onConfirm={() => remove(r.id)} />
+                </span>
+              </div>
+            ))}
+          </div>
         </>
       )}
 
       <div className="section-h">Your friends</div>
       {data && data.friends.length === 0 && <p className="muted small">No friends yet - add someone above.</p>}
-      {data?.friends.map((f) => <FriendCard key={f.friend_id} friend={f} onRemove={() => remove(f.id)} />)}
+      <div className="list">
+        {data?.friends.map((f) => <FriendCard key={f.friend_id} friend={f} onRemove={() => remove(f.id)} />)}
+      </div>
 
       {data && data.suggestions.length > 0 && (
         <>
           <div className="section-h">People you may know</div>
           <p className="muted small" style={{ marginTop: -4 }}>From events you've both been to - the more it was a close, invite-only plan, the higher up.</p>
-          {data.suggestions.map((s) => (
-            <div key={s.friend_id} className="card row between" data-testid="suggestion">
-              <span className="row" style={{ gap: 8 }}>
-                <Avatar url={s.avatar_url} name={s.display_name} size={32} />
-                <span className="stack" style={{ gap: 0 }}>
-                  <span>{s.display_name} <span className="muted small">@{s.handle}</span></span>
-                  <span className="muted small">{s.shared_events} event{s.shared_events > 1 ? "s" : ""} together</span>
+          <div className="list">
+            {data.suggestions.map((s) => (
+              <div key={s.friend_id} className="list-row row between" data-testid="suggestion">
+                <span className="row" style={{ gap: 8 }}>
+                  <Avatar url={s.avatar_url} name={s.display_name} size={32} />
+                  <span className="stack" style={{ gap: 0 }}>
+                    <span>{s.display_name} <span className="muted small">@{s.handle}</span></span>
+                    <span className="muted small">{s.shared_events} event{s.shared_events > 1 ? "s" : ""} together</span>
+                  </span>
                 </span>
-              </span>
-              <button className="btn soft sm" data-testid={`suggest-add-${s.handle}`} onClick={() => addByHandle(s.handle)}>Add</button>
-            </div>
-          ))}
+                <button className="btn soft sm" data-testid={`suggest-add-${s.handle}`} onClick={() => addByHandle(s.handle)}>Add</button>
+              </div>
+            ))}
+          </div>
         </>
       )}
 
       {data && data.outgoing.length > 0 && (
         <>
           <div className="section-h">Pending</div>
-          {data.outgoing.map((r) => (
-            <div key={r.id} className="card row between">
-              <span>{r.display_name} <span className="muted small">@{r.handle}</span></span>
-              <span className="row">
-                <span className="muted small">Awaiting reply</span>
-                <ConfirmButton label="Cancel" confirmLabel="Tap again to cancel" testid={`cancel-req-${r.handle}`}
-                  onConfirm={() => remove(r.id)} />
-              </span>
-            </div>
-          ))}
+          <div className="list">
+            {data.outgoing.map((r) => (
+              <div key={r.id} className="list-row row between">
+                <span>{r.display_name} <span className="muted small">@{r.handle}</span></span>
+                <span className="row">
+                  <span className="muted small">Awaiting reply</span>
+                  <ConfirmButton label="Cancel" confirmLabel="Tap again to cancel" testid={`cancel-req-${r.handle}`}
+                    onConfirm={() => remove(r.id)} />
+                </span>
+              </div>
+            ))}
+          </div>
         </>
       )}
     </div>
@@ -152,7 +160,7 @@ function FriendCard({ friend, onRemove }: { friend: Friend; onRemove: () => void
   const locked = commitmentBusy(avail?.commitments ?? []);
 
   return (
-    <div className="card stack">
+    <div className="list-row stack" style={{ alignItems: "stretch" }}>
       <div className="row between">
         <span className="row" style={{ gap: 8 }}>
           <Avatar url={friend.avatar_url} name={friend.display_name} size={32} />

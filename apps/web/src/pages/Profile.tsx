@@ -253,7 +253,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
       {!DEV_AUTH && <ClerkAccountCard />}
 
       {!editing ? (
-        <div className="card stack" data-testid="profile-view">
+        <div className="stack" data-testid="profile-view">
           <div className="row between">
             <span className="row" style={{ gap: 14 }}>
               <Avatar url={avatar} name={displayName} size={64} />
@@ -309,7 +309,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
       </form>
       )}
 
-      <div className="card stack" data-testid="appearance">
+      <div className="stack" data-testid="appearance">
         <div className="row between">
           <h3 style={{ margin: 0 }}>Appearance</h3>
           <div className="row" style={{ gap: 6 }}>
@@ -396,7 +396,7 @@ export function ProfilePage({ onUpdated }: { onUpdated: (p: Profile) => void }) 
       <CalendarConnections />
 
       {/* Support: signed-in users look here for help, not the landing footer. */}
-      <div className="card" data-testid="help-card">
+      <div className="stack" data-testid="help-card">
         <div className="section-h" style={{ marginTop: 0 }}>Help &amp; feedback</div>
         <p className="muted small" style={{ margin: 0 }}>
           Having trouble, want to report something, or have an idea? Email{" "}

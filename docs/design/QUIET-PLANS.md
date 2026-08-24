@@ -1,17 +1,35 @@
 # Quiet Plans — a restraint pass on House Lights
 
-**Status:** approved and IN PROGRESS (2026-08). Phases 1-3 below are shipped: the `styles.css`
-foundation classes (`.list`/`.list-row`, `.stamp-text`, `.toggle-quiet`, `.bare-day`), Home's event
-rows, Groups' public + member event lists, EventPage's RSVP toggle, and `MonthPicker`'s date grid
-(`ui.tsx`, used by `NewEvent` and the hero's add-date flow) all run the Quiet Plans language now.
-`apps/web/public/free-scheduler/index.html` shipped the full treatment plus an auto-create flow (no
-button - the link appears once there's enough info; the date grid then locks, since the API has no
-endpoint to add poll days to an event that's already been created).
+**Status:** approved and WIDELY SHIPPED (2026-08). The restraint pass now covers every page:
+Home, Groups (list + public + member pages), EventPage (RSVP toggle, Lineup, Invite friends,
+Add-to-calendar, Series, ShareLink, PollResults, Guests, all the one-off banners), Friends,
+Profile, Calendars, the shared skeletons (`ListSkeleton`/`EventSkeleton`), `ClerkAccount`, the
+guest banner in `App.tsx`, and `MonthPicker` (`ui.tsx`, used by `NewEvent` and the hero's add-date
+flow). `apps/web/public/free-scheduler/index.html` shipped the full treatment plus an auto-create
+flow (no button - the link appears once there's enough info; the date grid then locks, since the
+API has no endpoint to add poll days to an event that's already been created).
+
+**The rule that decided every card, restated concretely:** a list of similar items (event tiles,
+friends, group members, calendar providers, guests) → `.list`/`.list-row`, hairline between rows.
+A single-purpose info card that isn't a list and isn't a form (Add to calendar, RSVP, Lineup,
+Invite friends, Series, ShareLink, one-off dismissible banners, the Profile summary/Appearance/
+help cards) → drop the box, keep the heading, let whitespace separate it from its neighbors. A
+genuine multi-field FORM (create-group, create-event, hero-edit, general-setup, add-friend,
+profile-edit), a `<details>` disclosure (comments, vote-details, group-public-past), a modal (crop
+dialog), or anything sitting directly against a drag-paint grid (Profile's availability card,
+EventPage's general-results) keeps its card - forms and disclosures need the boundary to read as
+one unit, and grid-adjacent cards are explicitly deferred to the grids phase below so the two
+changes never get tangled in one diff. Two explicit product-reasoning exceptions, kept boxed on
+purpose per existing CLAUDE.md docs: Groups' `group-share-page-card` and `group-invite-card` stay
+TWO SEPARATE bordered cards (not two sections of one) so a host can never mistake "share the page"
+for "hand out membership" - removing the boxes would blur exactly the distinction they exist to
+make.
+
 **Deliberately NOT converted yet** (see §3 for why): the drag-paint availability/voting grids
-(`DayGrid`/`TimeGrid` - week/month/dates-scope), Discover's `PublicEventRow` (a richer two-row card,
-not a simple list tile - a card border earns its keep there), a full pill-by-pill audit of
-Profile/Friends/Calendars, and the nav/tabbar (its border already separates two real things - the
-fixed bar from scrolling content - so it doesn't need to change).
+(`DayGrid`/`TimeGrid` - week/month/dates-scope, plus the cards directly wrapping them), Discover's
+`PublicEventRow` (a richer two-row card, not a simple list tile - a card border earns its keep
+there), and the nav/tabbar (its border already separates two real things - the fixed bar from
+scrolling content - so it doesn't need to change).
 **Executor:** any Claude model. Each phase is self-contained; follow it literally.
 **Never do more than the phase you were asked to run.**
 
@@ -91,24 +109,45 @@ Reference the before/after strip in `quiet-plans-comp.html` for the visual targe
    one standalone module on the page, see §2). Drive-by fix: removed a stray "⏳" emoji from the
    waitlist note (pre-existing House Lights §1 violation, unrelated to this pass but caught while
    editing the same block).
-3.5. **Groups** (done, folded into the EventPage PR). Public + member event lists → `.list-row`,
-   same pattern as Home. `PublicEventRow` on Discover was left as a bordered card on purpose - it's
-   a richer two-row layout (thumb+title, then a follow-button row), not a simple list tile, so a
-   border still earns its keep there (§2).
-3.6. **MonthPicker** (done, folded into the same PR). `ui.tsx`'s day-of-month grid (used by
-   `NewEvent`'s "pick days" scope and the hero's add-date flow) → `.bare-day`. This is the SAME
-   simple click-toggle pattern as the free-scheduler's own calendar, so it carried over directly
-   with no new risk.
-4. **Grids** (NOT done - still the highest-risk phase). `DayGrid`/`TimeGrid` (week/month/dates-scope
-   availability + voting grids) keep their existing `.cell` treatment. These carry drag-to-paint,
-   heatmap intensity tiers, and multi-user responder-dot overlays that a bare-numeral swap could
-   easily regress - prototype ONE grid in isolation, screenshot it, before touching all three.
-5. **Profile + Friends + Calendars** (NOT done). A full pill/card audit of these pages hasn't
-   happened yet - Home/Groups were done because they're the highest-traffic surfaces; these are the
-   natural next slice, same method (§2).
-6. **Nav/tabbar** (deliberately skipped, not deferred). Its border already separates two real
+3.5. **Groups** (done). Public + member event lists → `.list-row`, same pattern as Home; the main
+   groups list, `GroupMembersPage`'s member list, and the one-off dismissible banners
+   (`group-page-live`, `group-link-hint`, `group-unlisted-hint`, `group-members-link`) all dropped
+   their boxes too. `group-share-page-card`/`group-invite-card` and `group-public-card` (the page's
+   own header/poster) stay boxed on purpose - see the exceptions above. `PublicEventRow` on
+   Discover was left as a bordered card on purpose - it's a richer two-row layout (thumb+title,
+   then a follow-button row), not a simple list tile, so a border still earns its keep there (§2).
+3.6. **MonthPicker** (done). `ui.tsx`'s day-of-month grid (used by `NewEvent`'s "pick days" scope
+   and the hero's add-date flow) → `.bare-day`. This is the SAME simple click-toggle pattern as the
+   free-scheduler's own calendar, so it carried over directly with no new risk.
+3.7. **EventPage, full pass** (done). Beyond the RSVP toggle: `Lineup` and `InviteFriends` → lists
+   of people (`.list-row`), `Guests` → grouped lists per RSVP status, `AddToCalendar`/`SeriesCard`/
+   `ShareLink`/`PollResults`/`vote-first` dropped their boxes (matching Rsvp's own treatment - they
+   share its visual role), and the small banners (`draft-banner`, `cancelled-note`,
+   `pending-performer-banner`, `poll-closed`) went boxless too. `general-results` (wraps the
+   drag-paint heatmap) was left alone - deferred with the grids in phase 4 below, not touched
+   separately, so the two changes can't get tangled in one diff. Two more emoji drive-by fixes
+   caught while editing this file: a stray "⏳" on the waitlist note, and "⬇️" on the .ics download
+   button (both pre-existing House Lights §1 violations, unrelated to this pass).
+3.8. **Profile + Friends + Calendars, full pass** (done). Friends: the incoming/suggestions/
+   outgoing lists and each `FriendCard` → `.list-row` (`FriendCard`'s own expandable availability
+   panel needed an `alignItems:"stretch"` override alongside `.list-row` - see the note in §2 about
+   combining it with `.stack`). Profile: the read-only summary, Appearance, and Help cards dropped
+   their boxes; the edit form and the availability card (wraps `DayGrid`) stay, the latter deferred
+   with the grids. Calendars: `DayList`, `FeedCard`, and `CalendarConnections`' provider rows
+   (`ProviderRow` needed the same `alignItems:"stretch"` fix as `FriendCard`) all converted.
+   `ClerkAccount`'s account card and the guest banner in `App.tsx` also dropped their boxes for the
+   same reason - they're single-purpose info, not lists or forms. The shared skeletons
+   (`ListSkeleton`/`EventSkeleton` in `ui.tsx`) were updated to match - a boxed skeleton loading
+   into boxless real content was a visible seam.
+4. **Grids** (NOT done - still the highest-risk phase, deliberately untouched). `DayGrid`/`TimeGrid`
+   (week/month/dates-scope availability + voting grids) and every card that wraps them directly
+   (Profile's availability card, EventPage's `general-results`) keep their existing `.cell`/`.card`
+   treatment. These carry drag-to-paint, heatmap intensity tiers, and multi-user responder-dot
+   overlays that a bare-numeral swap could easily regress - prototype ONE grid in isolation,
+   screenshot it, before touching all three.
+5. **Nav/tabbar** (deliberately skipped, not deferred). Its border already separates two real
    things - the fixed bottom bar from scrolling page content - so §1 rule 13 says it stays.
-7. **Closeout**: update `CLAUDE.md`'s look-and-feel paragraph to mention Quiet Plans as the current
+6. **Closeout**: update `CLAUDE.md`'s look-and-feel paragraph to mention Quiet Plans as the current
    execution of House Lights (not a replacement doc — House Lights stays the token source of
    truth), and retire this file's "Status" line to "shipped."
 

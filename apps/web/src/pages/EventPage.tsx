@@ -91,7 +91,7 @@ export function EventPage() {
         </div>
       )}
       {data2.event.status === "draft" && data2.can_manage && (
-        <div className="card row between" data-testid="draft-banner">
+        <div className="row between" data-testid="draft-banner">
           <span className="small"><strong>Draft</strong> - only you{data2.cohosts.length > 0 ? " and cohosts" : ""} can see this. Guests, emails, and reminders are paused.</span>
           <button className="btn sm" style={{ flex: "none" }} data-testid="draft-publish"
             onClick={async () => { await sendJSON(api, "POST", `/api/events/${data2.event.id}/draft`, { draft: false }); reload(); }}>
@@ -110,9 +110,9 @@ export function EventPage() {
       <HeroCard data={data2} reload={reload} canEdit={showManage && e.status !== "cancelled"} onPreviewTheme={setThemePreview} onEditing={setHeroEditing} />
 
       {e.status === "cancelled" && (
-        <div className="card empty" data-testid="cancelled-note">
-          <p className="muted">This get-together was cancelled by the host.</p>
-        </div>
+        <p className="muted" style={{ textAlign: "center", padding: "1.4rem 0" }} data-testid="cancelled-note">
+          This get-together was cancelled by the host.
+        </p>
       )}
 
       {data2.series && data2.series.length > 1 && <SeriesCard data={data2} />}
@@ -193,7 +193,7 @@ function PendingPerformerBanner({ data, reload }: { data: EventDetail; reload: (
     reload();
   }
   return (
-    <div className="card row between" data-testid="pending-performer-banner">
+    <div className="row between" data-testid="pending-performer-banner">
       <span className="small">You're on the lineup for this event, pending. Confirm to let your followers see it.</span>
       <span className="row" style={{ gap: 6, flex: "none" }}>
         <ConfirmButton label="Remove" confirmLabel="Tap again to remove" testid="pending-performer-remove" onConfirm={remove} />
@@ -236,31 +236,33 @@ function Lineup({ data, canManage, reload }: { data: EventDetail; canManage: boo
   }
 
   return (
-    <div className="card stack" data-testid="lineup">
+    <div className="stack" data-testid="lineup">
       <h3 style={{ margin: 0 }}>Lineup</h3>
-      {data.performers.map((p) => {
-        const self = p.user_id === viewerId;
-        return (
-          <div key={p.user_id} className="row between" data-testid="performer">
-            <span className="row" style={{ gap: 8, alignItems: "center" }}>
-              <Avatar url={p.avatar_url} name={p.display_name || p.handle || "?"} size={28} />
-              <span>{p.display_name || p.handle}</span>
-              {p.status === "pending" && (canManage || self) && <Pill kind="deciding">Pending</Pill>}
-            </span>
-            <span className="row" style={{ gap: 6, flex: "none" }}>
-              {!self && (
-                <FollowButton kind="host" value={p.user_id} following={p.following} source="lineup"
-                  testid={`follow-performer-${p.handle || p.user_id}`} />
-              )}
-              {(canManage || self) && (
-                <ConfirmButton label="Remove" confirmLabel="Tap again to remove"
-                  testid={`performer-remove-${p.handle || p.user_id}`}
-                  onConfirm={() => removePerformer(p.user_id)} />
-              )}
-            </span>
-          </div>
-        );
-      })}
+      <div className="list">
+        {data.performers.map((p) => {
+          const self = p.user_id === viewerId;
+          return (
+            <div key={p.user_id} className="list-row row between" data-testid="performer">
+              <span className="row" style={{ gap: 8, alignItems: "center" }}>
+                <Avatar url={p.avatar_url} name={p.display_name || p.handle || "?"} size={28} />
+                <span>{p.display_name || p.handle}</span>
+                {p.status === "pending" && (canManage || self) && <Pill kind="deciding">Pending</Pill>}
+              </span>
+              <span className="row" style={{ gap: 6, flex: "none" }}>
+                {!self && (
+                  <FollowButton kind="host" value={p.user_id} following={p.following} source="lineup"
+                    testid={`follow-performer-${p.handle || p.user_id}`} />
+                )}
+                {(canManage || self) && (
+                  <ConfirmButton label="Remove" confirmLabel="Tap again to remove"
+                    testid={`performer-remove-${p.handle || p.user_id}`}
+                    onConfirm={() => removePerformer(p.user_id)} />
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
       {canManage && (
         <form className="row" onSubmit={addPerformer}>
           <input className="input" maxLength={40} data-testid="performer-handle" value={handle}
@@ -304,7 +306,7 @@ function SeriesCard({ data }: { data: EventDetail }) {
     ? new Date(last.starts_at).getTime() < Date.now() + 21 * 24 * 3600_000
     : false;
   return (
-    <div className="card stack" data-testid="series">
+    <div className="stack" data-testid="series">
       <h3 style={{ margin: 0 }}>
         Repeats {RECURRENCE_LABEL[data.event.recurrence] || ""} · {idx + 1} of {series.length}
       </h3>
@@ -354,17 +356,19 @@ function InviteFriends({ data, reload }: { data: EventDetail; reload: () => void
   }
 
   return (
-    <div className="card stack" data-testid="invite-friends">
+    <div className="stack" data-testid="invite-friends">
       <h3 style={{ margin: 0 }}>Invite friends</h3>
-      {invitable.map((f) => (
-        <div key={f.friend_id} className="row between">
-          <span className="row" style={{ gap: 8 }}>
-            <Avatar url={f.avatar_url} name={f.display_name} size={28} />
-            <span>{f.display_name} <span className="muted small">@{f.handle}</span></span>
-          </span>
-          <button className="btn soft sm" data-testid={`invite-${f.handle}`} onClick={() => invite(f.friend_id)}>Invite</button>
-        </div>
-      ))}
+      <div className="list">
+        {invitable.map((f) => (
+          <div key={f.friend_id} className="list-row row between">
+            <span className="row" style={{ gap: 8 }}>
+              <Avatar url={f.avatar_url} name={f.display_name} size={28} />
+              <span>{f.display_name} <span className="muted small">@{f.handle}</span></span>
+            </span>
+            <button className="btn soft sm" data-testid={`invite-${f.handle}`} onClick={() => invite(f.friend_id)}>Invite</button>
+          </div>
+        ))}
+      </div>
       {invitedNames.length > 0 && (
         <p className="muted small">Invited: {invitedNames.join(", ")}</p>
       )}
@@ -421,7 +425,7 @@ function AddToCalendar({ event }: { event: EventDetail["event"] }) {
   }
 
   return (
-    <div className="card stack" data-testid="add-to-calendar">
+    <div className="stack" data-testid="add-to-calendar">
       <h3 style={{ margin: 0 }}>Add to your calendar</h3>
       <p className="muted small" style={{ margin: 0 }}>One tap - title, time and a link back to this page ride along.</p>
       <div className="row" style={{ gap: "0.6rem", flexWrap: "wrap" }}>
@@ -441,7 +445,7 @@ function AddToCalendar({ event }: { event: EventDetail["event"] }) {
           Google Calendar
         </a>
         <button className="btn ghost sm" data-testid="download-ics" disabled={busy} onClick={downloadICS}>
-          ⬇️ .ics file
+          Download .ics file
         </button>
       </div>
     </div>
@@ -495,7 +499,7 @@ function GuestView({ data, reload, previewingAsGuest }: { data: EventDetail; rel
     <div className="stack">
       <WhosIn data={data} />
       {guestPollFirst ? (
-        <div className="card stack" data-testid="vote-first">
+        <div className="stack" data-testid="vote-first">
           <h3>Help pick the time</h3>
           <p className="muted small" style={{ margin: 0 }}>Tap the times that work for you — you'll RSVP once the host locks one in.</p>
           {isPoll
@@ -507,9 +511,7 @@ function GuestView({ data, reload, previewingAsGuest }: { data: EventDetail; rel
           <Rsvp eventId={e.id} current={myRsvp} currentAnon={!!me?.anonymous} reload={reload}
             isGuest={isGuest} onSelect={setRsvpSel} hostName={data.host_name} />
           {pollClosed(e) && (
-            <div className="card" data-testid="poll-closed">
-              <span className="muted small">This poll has closed - the host is picking the time. You'll get the locked-in email.</span>
-            </div>
+            <p className="muted small" data-testid="poll-closed">This poll has closed - the host is picking the time. You'll get the locked-in email.</p>
           )}
           {/* Voting sits BEHIND the RSVP: gated to committed guests, then collapsed
               so RSVP stays the one clear first action. Opens by default if you've
@@ -599,7 +601,7 @@ function Rsvp({ eventId, current, currentAnon, reload, isGuest, onSelect, hostNa
   }
   const opts: [string, string][] = [["going", "Going"], ["maybe", "Maybe"], ["declined", "Can't go"]];
   return (
-    <div className="card stack">
+    <div className="stack">
       <h3>Are you in?</h3>
       <div className="row wrap" style={{ gap: "1.4rem" }}>
         {opts.map(([v, label]) => (
@@ -1580,7 +1582,7 @@ function ShareLink({ eventId }: { eventId: string }) {
   // ONE affordance by design: the link itself. Tap = copied. (QR, WhatsApp/SMS
   // deep links, and web-share were removed - the link travels everywhere.)
   return (
-    <div className="card stack">
+    <div className="stack">
       <h3>Invite people</h3>
       <button type="button" className="share-copy" data-testid="share-link" title="Tap to copy"
         onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); analytics.capture(EVENTS.shareLinkCopied); setTimeout(() => setCopied(false), 1800); }}>
@@ -1623,7 +1625,7 @@ function PollResults({ data, reload }: { data: EventDetail; reload: () => void }
     reload();
   }
   return (
-    <div className="card stack">
+    <div className="stack">
       <h3>Availability</h3>
       {ranked.map((o, i) => {
         const yes = yesFor(o);
@@ -2136,7 +2138,7 @@ function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: stri
   const going = attendees.filter((a) => a.rsvp === "going").length;
 
   return (
-    <div className="card stack" data-testid="guests">
+    <div className="stack" data-testid="guests">
       <div className="row between">
         <h3 style={{ margin: 0 }}>Who's coming</h3>
         <span className="muted small">{going} going · {total} responded</span>
@@ -2149,33 +2151,35 @@ function Guests({ attendees, viewerId }: { attendees: Attendee[]; viewerId: stri
         return (
           <div key={key} className="stack" style={{ gap: 6 }} data-testid={`rsvp-group-${key}`}>
             <div className="section-h" style={{ margin: 0 }}>{label} · {rows.length}</div>
-            {rows.map((a, i) => {
-              const isSelf = a.user_id === viewerId;
-              // Masked anonymous rows have no user_id/handle - never befriendable.
-              const canAdd = !viewerIsGuest && !!a.handle && !isSelf && !friendIds.has(a.user_id);
-              const already = a.handle ? (pending.has(a.handle) || requested.has(a.handle)) : false;
-              return (
-                <div key={a.user_id || `anon-${i}`} className="row between" data-testid="guest-row">
-                  <span className="row" style={{ gap: 8 }}>
-                    <Avatar url={a.avatar_url} name={a.display_name} size={28} />
-                    <span className="stack" style={{ gap: 0 }}>
-                      <span>{a.display_name || "Guest"}{isSelf && <span className="muted small"> (you)</span>}</span>
-                      {a.handle && <span className="muted small">@{a.handle}</span>}
+            <div className="list">
+              {rows.map((a, i) => {
+                const isSelf = a.user_id === viewerId;
+                // Masked anonymous rows have no user_id/handle - never befriendable.
+                const canAdd = !viewerIsGuest && !!a.handle && !isSelf && !friendIds.has(a.user_id);
+                const already = a.handle ? (pending.has(a.handle) || requested.has(a.handle)) : false;
+                return (
+                  <div key={a.user_id || `anon-${i}`} className="list-row row between" data-testid="guest-row">
+                    <span className="row" style={{ gap: 8 }}>
+                      <Avatar url={a.avatar_url} name={a.display_name} size={28} />
+                      <span className="stack" style={{ gap: 0 }}>
+                        <span>{a.display_name || "Guest"}{isSelf && <span className="muted small"> (you)</span>}</span>
+                        {a.handle && <span className="muted small">@{a.handle}</span>}
+                      </span>
                     </span>
-                  </span>
-                  {canAdd ? (
-                    already ? (
-                      <span className="muted small" data-testid={`friend-requested-${a.handle}`}>Requested</span>
-                    ) : (
-                      <button className="btn soft sm" data-testid={`add-friend-${a.handle}`}
-                        onClick={() => addFriend(a.handle!)}>+ Add friend</button>
-                    )
-                  ) : friendIds.has(a.user_id) ? (
-                    <span className="muted small">Friends</span>
-                  ) : null}
-                </div>
-              );
-            })}
+                    {canAdd ? (
+                      already ? (
+                        <span className="muted small" data-testid={`friend-requested-${a.handle}`}>Requested</span>
+                      ) : (
+                        <button className="btn soft sm" data-testid={`add-friend-${a.handle}`}
+                          onClick={() => addFriend(a.handle!)}>+ Add friend</button>
+                      )
+                    ) : friendIds.has(a.user_id) ? (
+                      <span className="muted small">Friends</span>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         );
       })}

@@ -203,7 +203,7 @@ export function Home() {
       ) : (
         <>
           {union.length === 0 ? (
-            <div className="card empty stack" data-testid="events-empty">
+            <div className="empty stack" data-testid="events-empty">
               <h3>No plans yet</h3>
               <p className="muted">Host a dinner, movie night or camping trip - or wait for an invite.</p>
               {/* No Discover link here - the public surface is out of the product
