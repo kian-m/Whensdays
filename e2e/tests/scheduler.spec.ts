@@ -293,6 +293,15 @@ test.describe("scheduler", () => {
     // The edit form is grouped into single-open sections - the cover/theme live
     // under "Look".
     await page.getByTestId("edit-sec-look").click();
+    // The GIF grid is OPT-IN. GifPicker fetches trending on mount, so an
+    // unconditionally-mounted one both hit Klipy on every edit-form open and
+    // filled the section with a grid nobody asked for.
+    await expect(page.getByTestId("cover-gif-open")).toBeVisible();
+    await expect(page.getByTestId("gif-grid")).toHaveCount(0);
+    await page.getByTestId("cover-gif-open").click();
+    await expect(page.getByTestId("gif-grid")).toBeVisible();
+    await page.getByTestId("cover-gif-open").click(); // toggles back shut
+    await expect(page.getByTestId("gif-grid")).toHaveCount(0);
     // Upload a square cover (client-resized like avatars).
     const png =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -353,6 +362,13 @@ test.describe("scheduler", () => {
     // The new date shows in the event's timezone (the one the browser reported
     // at creation), so the input's LOCAL calendar day is the day rendered.
     await expect(page.getByText(new RegExp(monthDay(retimed)))).toBeVisible();
+    // Cover gone => the tile shows NO image at all: no thumb, and no monogram
+    // standing in for one. The title leads, the same call the hero makes.
+    await page.goto("/");
+    const plainRow = page.getByTestId("event-row").filter({ hasText: title }).first();
+    await expect(plainRow).toBeVisible();
+    await expect(plainRow.getByTestId("event-thumb")).toHaveCount(0);
+    await expect(plainRow.getByTestId("title-poster")).toHaveCount(0);
   });
 
   test("plan the next one: ?again= prefills the wizard from a past event", async ({ page }) => {

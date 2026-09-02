@@ -1,10 +1,17 @@
-/* House Lights: a small theater just before the show starts. Dark is the
-   default "stage"; light is the "matinee" (house lights up). Every surface is
-   solid --surface with hairline --line borders - flat, no blur, no drifting
-   background. Palette is extracted from the wordmark (icon.svg): plum
-   stage, cream ink, and the W's candy stripes as functional color (coral =
-   action, amber = time/pending, teal = going/free). See
-   docs/design/HOUSE-LIGHTS.md for the full spec. */
+/* House Lights, run BORDERLESS (2026-09). Same theater, same palette - the
+   chrome is gone. `apps/web/public/free-scheduler/index.html` is the visual
+   source of truth: content sits directly on the stage, separation comes from
+   SPACE and type hierarchy, never from a box or a rule. The only things that
+   still draw a line are (a) the 1px underline under a text input, which turns
+   coral on focus, and (b) nothing else. Where two things genuinely must read
+   as separate layers (a modal, a floating menu, a fixed bar, the picked cell
+   in a grid) the separator is a FILL or a shadow, never a stroke.
+
+   Palette is unchanged, extracted from the wordmark (icon.svg): plum stage,
+   cream ink, and the W's candy stripes as functional color (coral = action or
+   "the thing you picked", amber = time/pending, teal = going/free, rose =
+   busy/declined). See docs/design/HOUSE-LIGHTS.md for the token spec and
+   docs/design/QUIET-PLANS.md for the restraint pass this completes. */
 :root {
   color-scheme: dark;
   /* stage (dark, default) */
@@ -22,6 +29,10 @@
   --go: #3aa38b;          /* teal - going / free / success */
   --maybe: #e9a13b;       /* alias of --time */
   --no: #e0607a;          /* rose - busy / declined / destructive */
+  /* resting fill for a grid cell (availability / heatmap "nobody"). Replaces
+     the hairline that used to draw the cell: a grid reads as tinted blocks on
+     the stage, so free/busy/locked stay distinguishable by FILL alone. */
+  --cell: color-mix(in srgb, var(--muted) 15%, transparent);
   --r: 12px; --r-sm: 8px; --r-xs: 5px;
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   --stripe: linear-gradient(90deg, var(--accent) 0 25%, var(--time) 25% 50%, var(--go) 50% 75%, var(--cream) 75% 100%);
@@ -52,10 +63,19 @@
   --go: #2b7f6c;
   --maybe: #9c6614;
   --no: #c14458;
+  --cell: color-mix(in srgb, var(--muted) 16%, transparent);
   --shadow: 0 18px 44px rgba(47, 36, 64, 0.14);
 }
 
 * { box-sizing: border-box; }
+
+/* Focus visibility is the one thing a borderless UI must NOT lose. With every
+   resting border stripped, this universal rule guarantees a keyboard user can
+   always see where they are; individual components only ever adjust the
+   offset, never remove it. Text inputs are the single exception - they use the
+   free-scheduler idiom instead (the 1px underline thickens to 2px coral),
+   which is at least as visible. */
+:focus-visible { outline: 2px solid var(--time); outline-offset: 2px; }
 
 html, body, #root { height: 100%; }
 
@@ -145,7 +165,9 @@ a:hover { text-decoration: underline; }
 .nav-links a {
   padding: 0.4rem 0.7rem; border-radius: var(--r-sm); color: var(--muted); font-weight: 600; font-size: 0.9rem;
 }
-.nav-links a.active { background: var(--surface-2); color: var(--accent); }
+.nav-links a { padding: 0.4rem 0.5rem; }
+/* active nav item: coral type, no tinted box behind it */
+.nav-links a.active { background: none; color: var(--accent); }
 
 /* bottom tab bar - mobile only (hidden on wider screens) */
 .tabbar { display: none; }
@@ -179,8 +201,10 @@ a:hover { text-decoration: underline; }
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
     height: calc(58px + env(safe-area-inset-bottom));
     padding: 0 0.3rem env(safe-area-inset-bottom);
+    /* An opaque --surface fill is what separates the fixed bar from the
+       scrolling stage now - the hairline on top is gone with every other
+       border. */
     background: var(--surface);
-    border-top: 1px solid var(--line);
   }
   /* keep content clear of the fixed bar */
   .app { padding-bottom: calc(58px + env(safe-area-inset-bottom) + 1rem); }
@@ -201,31 +225,45 @@ a:hover { text-decoration: underline; }
   .row.between > .btn, .row.between > .chip { flex: none; }
 }
 
-/* cards - flat, solid surface with a hairline border. No blur, no glint,
-   no glow. */
+/* .card is no longer a box - it is a SPACING primitive. The class stays (it's
+   on ~30 call sites and still marks "this is one module") but it draws no
+   surface, no border and no radius; its vertical padding plus the .stack gap
+   around it is what separates one module from the next (0.55 + 1 + 0.55 ≈
+   2.1rem, the same rhythm the free-scheduler page puts between its fields). */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  padding: 1rem;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0.55rem 0;
 }
-.stack { display: flex; flex-direction: column; gap: 0.9rem; }
+.stack { display: flex; flex-direction: column; gap: 1rem; }
+/* A modal is the one place a real surface still earns its keep: it has to
+   float above the page, and a fill + the one allowed shadow do that without a
+   stroke. */
+.crop-card { background: var(--surface); border-radius: var(--r); padding: 1rem; box-shadow: var(--shadow); }
 
 /* Host event-edit form: grouped disclosure sections (single-open) + a sticky
-   action bar so Save/Cancel stay reachable in the taller sectioned form. */
-.edit-sec { border: 1px solid var(--line); border-radius: var(--r-sm); }
+   action bar so Save/Cancel stay reachable in the taller sectioned form. The
+   sections used to be bordered boxes; now the summary carries the stamp voice
+   (mono, uppercase, letterspaced) so TYPE says "new section", not a rule. */
+.edit-sec { border: none; border-radius: 0; }
 .edit-sec > summary {
-  cursor: pointer; font-weight: 600; padding: 0.7rem 0.85rem; list-style: none; user-select: none;
+  cursor: pointer; padding: 0.7rem 0; list-style: none; user-select: none;
+  font-family: var(--font-data); font-weight: 600; font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);
 }
+.edit-sec[open] > summary { color: var(--ink); }
 .edit-sec > summary::-webkit-details-marker { display: none; }
 .edit-sec > summary::after { content: "⌄"; float: right; opacity: 0.55; }
 .edit-sec[open] > summary::after { content: "⌃"; }
-.edit-sec > div { padding: 0 0.85rem 0.85rem; }
+.edit-sec > div { padding: 0.2rem 0 1rem; }
 .edit-actions {
   position: sticky; bottom: 0; z-index: 5;
-  margin: 0.2rem -1.2rem -1.1rem; padding: 0.75rem 1.2rem;
-  background: var(--surface);
-  border-top: 1px solid var(--line); border-radius: 0 0 var(--r) var(--r);
+  margin: 0.2rem 0 0; padding: 0.75rem 0;
+  /* opaque stage colour so form rows scroll UNDER it - the fill replaces the
+     hairline that used to mark the sticky edge */
+  background: var(--bg);
+  border-top: none; border-radius: 0;
 }
 @media (max-width: 640px) {
   /* keep the sticky bar clear of the fixed mobile tabbar */
@@ -272,60 +310,68 @@ a:hover { text-decoration: underline; }
 }
 .ev .title { font-weight: 700; }
 
-/* buttons - crisp, editorial. Sharp radius, confident weight, real
-   interaction physics (hover lift, press scale, visible focus ring) - defined
-   once here, never per-component. Primary is plum text on a coral fill;
-   hover flips to accent-deep with cream text (the only two safe coral text
-   pairings). No gradients on interactive elements. */
+/* buttons - the free-scheduler idiom: an action is TEXT, not a rectangle.
+   Every .btn is background-less and border-less, and reads as a link whose
+   underline fades in on hover (text-decoration-color transparent -> current).
+   The ONE exception is .primary: a coral fill with plum type, which is the
+   same "filled shape = this is the thing" grammar the reference page uses for
+   a picked date. One filled element per screen, everything else is type.
+
+   Tap targets are NOT reduced: min-height stays 44px and labels stay nowrap;
+   only the paint is gone. */
 .btn {
-  display: inline-flex; align-items: center; gap: 0.45em;
-  font: inherit; font-weight: 700; font-size: 0.95rem;
-  padding: 0.6rem 1.15rem; border-radius: var(--r-sm);
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.45em;
+  font: inherit; font-weight: 650; font-size: 0.95rem;
+  padding: 0.5rem 0; min-height: 44px; border-radius: var(--r-xs);
   cursor: pointer;
   white-space: nowrap; /* a button label must never wrap mid-phrase on mobile */
-  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
-  /* An unmodified .btn (no .primary/.ghost/.quiet/.danger) must still be
-     presentable - a plain <button className="btn"> used to render with a
-     transparent fill + transparent border (browser-default looking) at every
-     call site that forgot a modifier. Default to the quiet look; .primary/
-     .ghost/.danger below override it for the sites that need a different job. */
-  background: var(--surface-2); color: var(--ink); border: 1px solid var(--line);
+  background: none; border: none; color: var(--ink);
+  text-decoration: underline; text-decoration-color: transparent;
+  text-decoration-thickness: 1px; text-underline-offset: 4px;
+  transition: color 0.15s ease, background 0.15s ease, text-decoration-color 0.15s ease, transform 0.12s ease;
 }
-.btn:hover { transform: translateY(-1px); }
-.btn:active { transform: translateY(0) scale(0.98); }
-.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--time); outline-offset: 2px; }
-.btn:disabled { opacity: 0.45; cursor: default; transform: none; }
-.btn.primary { background: var(--accent); color: var(--plum); border-color: var(--accent-deep); }
+/* Three tiers, no boxes:
+     .primary            - the one coral fill on the screen
+     .btn / .soft/.quiet - a real action: ink type, standing underline
+     .ghost              - a secondary action: muted type, underline on hover
+   That ordering is what replaces "filled vs outlined vs plain" now that none
+   of them is a rectangle. */
+.btn, .btn.soft, .btn.quiet { color: var(--ink); font-weight: 700; text-decoration-color: var(--muted); }
+.btn:hover, .btn.soft:hover, .btn.quiet:hover { text-decoration-color: var(--accent); }
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.4; cursor: default; transform: none; text-decoration-color: transparent; }
+/* the one filled element: the primary action */
+.btn.primary {
+  background: var(--accent); color: var(--plum); font-weight: 700;
+  padding: 0.5rem 1.15rem; text-decoration: none;
+}
 .btn.primary:hover { background: var(--accent-deep); color: var(--cream); }
-.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
-.btn.ghost:hover { border-color: var(--muted); }
-/* .quiet is the current name; .soft is kept as an alias so pages that still
-   reference the old class name keep working until they're swept in a later
-   phase. */
-.btn.quiet, .btn.soft { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
-.btn.danger { background: transparent; color: var(--no); border-color: var(--line); }
-.btn.sm { padding: 0.35rem 0.85rem; font-size: 0.85rem; }
+.btn.ghost { background: none; color: var(--muted); font-weight: 650; text-decoration-color: transparent; }
+.btn.ghost:hover { color: var(--ink); text-decoration-color: var(--muted); }
+.btn.danger { background: none; color: var(--no); text-decoration-color: transparent; }
+.btn.danger:hover { text-decoration-color: var(--no); }
+.btn.sm { padding: 0.25rem 0; font-size: 0.85rem; min-height: 36px; }
+.btn.sm.primary { padding: 0.25rem 0.8rem; }
 .btn-block { width: 100%; text-align: center; }
 
-/* segmented control - joined single-choice buttons, visually distinct from
-   chips (which are for optional multi-select). Used by the create flow's
-   scheduling mode. Labels wrap rather than overflow on a narrow phone.
-   Selected = teal fill + plum text, same as .chip.on - picking a segment is a
-   SELECTION, not an instruction, so it stays out of coral (coral is reserved
-   for the one primary action per screen). */
+/* segmented control - single-choice options. No joined box, no dividing
+   strokes: the options sit side by side as plain type and the CHOSEN one gets
+   a teal fill (selection is a state; coral stays reserved for the one primary
+   action per screen). */
 .segmented {
-  display: flex; width: 100%; border: 1px solid var(--line);
-  border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2);
+  display: flex; width: 100%; gap: 0.3rem;
+  border: none; border-radius: 0; overflow: visible; background: none;
 }
 .segmented button {
   flex: 1 1 0; min-width: 0; font: inherit; font-weight: 600; font-size: 0.82rem;
-  line-height: 1.15; white-space: normal; cursor: pointer; color: var(--ink);
-  padding: 0.55rem 0.4rem; min-height: 44px; background: transparent; border: none;
-  border-left: 1px solid var(--line); transition: background 0.12s ease, color 0.12s ease;
+  line-height: 1.15; white-space: normal; cursor: pointer; color: var(--muted);
+  padding: 0.55rem 0.4rem; min-height: 44px; background: none; border: none;
+  border-radius: var(--r-xs);
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.segmented button:first-child { border-left: none; }
-.segmented button.on { background: var(--go); color: var(--plum); }
-.segmented button:focus-visible { outline: 2px solid var(--time); outline-offset: -2px; }
+.segmented button:hover { color: var(--ink); }
+.segmented button.on { background: var(--go); color: var(--plum); font-weight: 700; }
+.segmented button:focus-visible { outline-offset: -2px; }
 
 /* plain text link - for secondary/optional actions that must NOT read as a chip
    or a primary button (create flow's "More", "Where + more", disclosures). */
@@ -338,12 +384,23 @@ a:hover { text-decoration: underline; }
 .linklike:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
 .linklike.muted { color: var(--muted); font-weight: 500; }
 
-/* inputs */
-label.field { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35rem; }
+/* inputs - bare. No filled box, no rounded rectangle: a field is a line of
+   type sitting on a hairline rule, and the rule turns coral and doubles in
+   weight on focus (the free-scheduler idiom, and the ONLY border left in the
+   system). The label above it is the display serif in italic - the reference
+   page's signature, and the thing that makes a form read as editorial rather
+   than as a control panel. */
+label.field {
+  display: block; margin-bottom: 0.5rem;
+  font-family: var(--font-display); font-style: italic; font-weight: 500;
+  font-size: 0.95rem; color: var(--muted);
+}
+label.field .muted { font-style: italic; }
 .input, select.input, textarea.input {
-  width: 100%; min-width: 0; max-width: 100%; font: inherit; padding: 0.65rem 0.8rem;
-  border: 1px solid var(--line); border-radius: var(--r-sm);
-  background: var(--bg); color: var(--ink);
+  width: 100%; min-width: 0; max-width: 100%; font: inherit;
+  padding: 0.35rem 0.1rem 0.55rem;
+  border: none; border-bottom: 1px solid var(--line); border-radius: 0;
+  background: none; color: var(--ink);
 }
 /* iOS Safari gives date/time inputs an intrinsic width that refuses to shrink,
    so they can blow past their container on phones. Strip the native chrome and
@@ -352,35 +409,47 @@ label.field { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom
 input.input[type="datetime-local"], input.input[type="date"], input.input[type="time"] {
   -webkit-appearance: none; appearance: none; min-height: 44px; display: block;
 }
+/* focus: the rule turns coral and thickens to 2px, and the padding drops 1px
+   so the baseline never jumps. Visible enough to stand in for a focus ring
+   (see the universal :focus-visible rule at the top of this file). */
 .input:focus {
-  outline: none; border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  outline: none; box-shadow: none;
+  border-bottom-color: var(--accent); border-bottom-width: 2px;
+  padding-bottom: calc(0.55rem - 1px);
 }
+[data-theme="light"] .input:focus { border-bottom-color: var(--accent-deep); }
 textarea.input { resize: vertical; min-height: 64px; }
+/* native checkbox/radio: the UA default is a bright system blue, the one
+   off-palette pixel left on a form once the boxes are gone. */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 /* placeholder examples read as hints, not content */
 .input::placeholder { color: var(--muted); opacity: 0.6; }
 
-/* chips / pills - typographic, flat. A selected chip fills teal (selection is
-   a state, coral stays reserved for instructions). Status pills read as
-   editorial state labels: mono uppercase letterspaced micro-type, hairline
-   border, colored dot. */
+/* chips - unpicked is plain muted type (the padding stays so the tap target
+   doesn't shrink, it just isn't painted); PICKED seats a teal fill behind the
+   label, the same "a filled shape means chosen" move the reference page makes
+   with its coral date circle. No resting outline anywhere. */
 .chip {
   display: inline-flex; align-items: center; gap: 0.4em;
-  border: 1px solid var(--line); background: transparent; border-radius: var(--r-sm);
-  padding: 0.5rem 0.95rem; font: inherit; font-weight: 600; font-size: 0.9rem;
-  cursor: pointer; white-space: nowrap; color: var(--ink);
-  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  border: none; background: none; border-radius: var(--r-xs);
+  padding: 0.5rem 0.85rem; font: inherit; font-weight: 600; font-size: 0.9rem;
+  cursor: pointer; white-space: nowrap; color: var(--muted);
+  text-decoration: underline; text-decoration-color: transparent;
+  text-decoration-thickness: 1px; text-underline-offset: 4px;
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease, text-decoration-color 0.15s ease;
 }
-.chip:hover { transform: translateY(-1px); border-color: var(--muted); }
+.chip:hover { color: var(--ink); text-decoration-color: var(--muted); }
 .chip:active { transform: scale(0.97); }
-.chip.on { background: var(--go); border-color: var(--go); color: var(--plum); }
+.chip.on { background: var(--go); color: var(--plum); font-weight: 700; text-decoration: none; }
 .chip.on svg { color: var(--plum); }
+/* status pills - pure stamp type + a colored dot. The box that used to hold
+   them said nothing the word wasn't already saying. */
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
-  font-family: var(--font-data); font-weight: 600; font-size: 0.66rem;
+  font-family: var(--font-data); font-weight: 600; font-size: 0.68rem;
   letter-spacing: 0.12em; text-transform: uppercase; font-variant-numeric: tabular-nums;
-  border-radius: var(--r-xs); padding: 0.28rem 0.6rem;
-  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+  border-radius: 0; padding: 0;
+  border: none; background: none; color: var(--muted);
 }
 .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 /* kinds: deciding (renames "polling") = amber; locked ("Locked in") = teal;
@@ -430,14 +499,22 @@ textarea.input { resize: vertical; min-height: 64px; }
    neutral (unselected) · green .on (free) · red .busy-mark (busy).
    Cells that show a count (poll-results heatmaps) always render it in mono,
    tabular-nums - the stamp voice for numbers, never the default body font. */
+/* BORDERLESS TRI-STATE. Every cell state is now carried by its FILL, because
+   a bare cell with no fill and no stroke would erase the grid itself (you
+   could not see where the tap targets are, and "unset" would be
+   indistinguishable from "nothing here"). So: unset = a faint neutral tint
+   (--cell), free = solid teal, busy = solid rose, locked = rose hatching.
+   Four unmistakably different fills, zero strokes. The 44px tap target is
+   unchanged. */
 .cell {
   position: relative;
-  min-height: 44px; min-width: 44px; border: 1px solid var(--line); border-radius: 6px;
-  background: var(--surface-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+  min-height: 44px; min-width: 44px; border: none; border-radius: var(--r-xs);
+  background: var(--cell); cursor: pointer; transition: background 0.12s ease;
   font-family: var(--font-data); font-variant-numeric: tabular-nums;
 }
-.cell.on { background: var(--go); border-color: var(--go); }
-.cell.busy-mark { background: var(--no); border-color: var(--no); }
+.cell:focus-visible { outline-offset: -2px; }
+.cell.on { background: var(--go); }
+.cell.busy-mark { background: var(--no); }
 
 /* Results heatmaps (GeneralResults' week/month/general grids + TimeGrid's
    counts-branch, 'dates' scope): three discrete teal alpha steps rather than
@@ -445,11 +522,13 @@ textarea.input { resize: vertical; min-height: 64px; }
    slider. Rendering only - the interaction logic that drives which class a
    cell gets (togglePick, canPick, onCellClick) lives in EventPage.tsx/ui.tsx
    and is untouched here. */
-.cell.c1 { background: color-mix(in srgb, var(--go) 16%, transparent); color: var(--ink); }
-.cell.c2 { background: color-mix(in srgb, var(--go) 34%, transparent); color: var(--ink); }
-.cell.c3 { background: color-mix(in srgb, var(--go) 55%, transparent); color: var(--cream); }
-/* the best cell(s) - coral border + a tiny BEST tag, same idea as the comp. */
-.cell.best { border: 2px solid var(--accent); }
+/* stepped up from the old values: they used to sit on a --surface-2 cell, and
+   now they have to out-read the neutral --cell tint underneath. */
+.cell.c1 { background: color-mix(in srgb, var(--go) 26%, transparent); color: var(--ink); }
+.cell.c2 { background: color-mix(in srgb, var(--go) 45%, transparent); color: var(--ink); }
+.cell.c3 { background: color-mix(in srgb, var(--go) 68%, transparent); color: var(--cream); }
+/* the best cell(s): the coral BEST tag alone marks them now - it is a literal
+   label, so the 2px coral ring it used to also carry was pure decoration. */
 .cell.best::after {
   content: "BEST"; position: absolute; top: -7px; right: -2px;
   font-family: var(--font-data); font-size: 0.5rem; letter-spacing: 0.08em; font-weight: 700;
@@ -465,17 +544,19 @@ textarea.input { resize: vertical; min-height: 64px; }
    1fr tracks shrink to fit (min-width:0) and keep the tap target vertical
    (min-height:40px); numbers 1-31 read fine in a ~28px-wide cell. */
 .cal-day {
-  min-width: 0; min-height: 40px; border: 1px solid var(--line); border-radius: 6px;
-  background: var(--surface-2); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+  min-width: 0; min-height: 40px; border: none; border-radius: var(--r-xs);
+  background: var(--cell); cursor: pointer; transition: background 0.12s ease;
 }
-.cal-day.on { background: var(--go); border-color: var(--go); }
-/* Busy pulled from an imported calendar - locked, hatched red so it reads as
-   "busy, and not yours to edit". */
+.cal-day.on { background: var(--go); }
+/* Busy pulled from an imported calendar - locked, hatched rose so it reads as
+   "busy, and not yours to edit". The hatch is what makes it unmistakable
+   against the flat busy fill, which matters more now that neither has a
+   stroke; the stripes were tightened and darkened for that reason. */
 .cell.locked {
-  cursor: not-allowed; border-color: transparent;
+  cursor: not-allowed;
   background:
-    repeating-linear-gradient(45deg, transparent 0 5px, rgba(226, 96, 110, 0.35) 5px 7px),
-    color-mix(in srgb, var(--no) 16%, transparent);
+    repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--no) 55%, transparent) 4px 7px),
+    color-mix(in srgb, var(--no) 14%, transparent);
 }
 /* Color key shown under every availability grid. */
 .legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 0.8rem; color: var(--muted); }
@@ -495,17 +576,17 @@ textarea.input { resize: vertical; min-height: 64px; }
   box-shadow: var(--shadow);
 }
 
-/* Hero card: the ONLY card that gets the candy stripe, along its top edge.
-   Padding lives on .hero-body instead of the card itself so the cover photo
-   or TitlePoster (photo-less fallback) can bleed edge-to-edge underneath the
-   stripe, exactly like the comp's phone mock. */
-.card.event-hero { position: relative; overflow: hidden; padding: 0; }
-.card.event-hero::before { content: ""; display: block; height: 3px; background: var(--stripe); }
+/* Hero: no card, no candy stripe, no edge-to-edge bleed - there is no edge
+   any more. A cover photo (when there is one) is a rounded image sitting on
+   the stage; the title leads underneath it at display scale, the way the
+   reference page leads with its h1. */
+.card.event-hero { position: relative; overflow: visible; padding: 0; }
 .card.event-hero > .event-cover {
   width: 100%; max-width: 100%; max-height: 300px; object-fit: cover;
-  border-radius: 0; box-shadow: none; margin: 0; display: block;
+  border-radius: var(--r); box-shadow: none; margin: 0; display: block;
 }
-.hero-body { padding: 1.1rem 1.2rem 1.2rem; }
+.hero-body { padding: 1.1rem 0 0; }
+.hero-body h1 { font-size: clamp(1.9rem, 6.5vw, 2.5rem); line-height: 1.04; }
 
 /* TitlePoster (hero scale): the no-photo cover fallback - a typographic
    playbill, not an emoji tile. Plum + grain, the title in Fraunces at
@@ -547,18 +628,25 @@ textarea.input { resize: vertical; min-height: 64px; }
 
 /* Hero meta rows (when/where): icon + a stamp line (amber for anything
    time-related) + an optional muted .sub line, hairline-divided. */
-.meta { display: flex; gap: 0.65rem; align-items: flex-start; padding: 0.45rem 0; border-top: 1px solid var(--line); }
-.meta:first-of-type { border-top: 0; }
+/* Hero meta rows (when/where): icon + a stamp line + an optional muted .sub.
+   The hairline that used to divide them is gone - they are already separated
+   by the icon column and the stamp voice, and the rule was doing nothing the
+   layout wasn't. */
+.meta { display: flex; gap: 0.65rem; align-items: flex-start; padding: 0.3rem 0; border: none; }
 .meta svg { flex: none; width: 17px; height: 17px; margin-top: 2px; color: var(--muted); }
 .meta > div { min-width: 0; }
 .meta .sub { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
-/* Invite card: the link is the button - tap to copy. */
+/* Invite link: tap to copy. Lifted verbatim from the reference page's
+   .link-value.ready - a quiet --surface-2 slab, mono type, no dashes, no
+   stroke. */
 .share-copy {
-  font: inherit; color: var(--accent); font-weight: 700;
-  background: var(--surface-2); border: 1px dashed var(--line);
-  border-radius: var(--r-sm); padding: 0.7rem 0.9rem; cursor: pointer;
+  font-family: var(--font-data); font-size: 0.88rem; color: var(--ink); font-weight: 500;
+  background: var(--surface-2); border: none;
+  border-radius: var(--r-xs); padding: 0.9rem 1rem; cursor: pointer;
   overflow-wrap: anywhere; text-align: left;
+  transition: background 0.15s ease;
 }
+.share-copy:hover { background: color-mix(in srgb, var(--muted) 22%, transparent); }
 .share-copy:active { transform: scale(0.99); }
 
 /* event tile thumbnail (cover photo/gif as the tile's main visual). No
@@ -568,16 +656,17 @@ textarea.input { resize: vertical; min-height: 64px; }
 .thumb { border-radius: var(--r-sm); object-fit: cover; flex: none; display: block; }
 /* comment thread: chat-style bubbles (avatar + bubble; own = accent tint) */
 .comment-row { display: flex; gap: 8px; align-items: flex-start; }
+/* No bubble outline. Someone else's comment is plain type next to their
+   avatar; your OWN keeps a faint coral tint (a fill, not a stroke) so the
+   thread still reads at a glance. */
 .comment-bubble {
-  flex: 1; min-width: 0; padding: 0.5rem 0.7rem;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
+  flex: 1; min-width: 0; padding: 0.4rem 0.7rem;
+  background: none;
+  border: none;
   border-radius: var(--r-sm);
-  border-top-left-radius: 4px; /* chat tail toward the avatar */
 }
 .comment-bubble.own {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .comment-meta { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; min-height: 22px; }
 .comment-meta .muted { font-size: 0.72rem; }
@@ -599,7 +688,7 @@ textarea.input { resize: vertical; min-height: 64px; }
    ~2-row pixel max-height (no `vh`, which is unreliable on mobile) so it scrolls
    from the very first render instead of stretching to many rows. */
 .gif-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); grid-auto-rows: 96px; gap: 6px; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; -webkit-overflow-scrolling: touch; }
-.gif-grid button { border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--r-sm); padding: 0; cursor: pointer; overflow: hidden; }
+.gif-grid button { border: none; background: var(--surface-2); border-radius: var(--r-sm); padding: 0; cursor: pointer; overflow: hidden; }
 .gif-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* Event page themes are a QUIET wash, two ways at once:
@@ -651,7 +740,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .fx-locked {
   position: fixed; top: 16%; left: 50%; transform: translateX(-50%); z-index: 40;
   pointer-events: none; width: min(90vw, 380px);
-  background: var(--surface); border: 1px solid var(--go); border-radius: var(--r);
+  background: var(--surface); border: none; border-radius: var(--r);
   overflow: hidden; box-shadow: var(--shadow);
 }
 .fx-locked::before { content: ""; display: block; height: 3px; background: var(--stripe); }
@@ -686,10 +775,12 @@ textarea.input { resize: vertical; min-height: 64px; }
 .facepile .face { display: inline-flex; margin-left: -7px; border-radius: 50%; }
 .facepile .face:first-child { margin-left: 0; }
 /* ring separates overlapped faces from each other and the surface */
-.facepile .face .avatar { box-shadow: 0 0 0 2px var(--surface); }
+/* the separation ring is now the STAGE colour, not a card surface - there is
+   no card behind a facepile any more. */
+.facepile .face .avatar { box-shadow: 0 0 0 2px var(--bg); }
 /* friends get a teal ring OUTSIDE the surface separation ring - going/free is
    teal's job everywhere else, and a friend showing up is good news too. */
-.facepile .face-friend .avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--go); }
+.facepile .face-friend .avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--go); }
 
 /* horizontally scrollable emoji picker strip */
 .emoji-strip {
@@ -733,7 +824,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .land-cta { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
 
 /* filter chip row - scrolls horizontally on mobile */
-.filter-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+.filter-row { display: flex; gap: 2px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
 .filter-row .chip { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .filter-count {
   background: var(--surface-2); color: var(--accent); border-radius: 999px;
@@ -772,7 +863,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .crop-card { max-width: min(92vw, 352px); }
 .crop-viewport {
   position: relative; overflow: hidden; max-width: 100%;
-  border-radius: var(--r-sm); border: 1px solid var(--line);
+  border-radius: var(--r-sm); border: none;
   touch-action: none; cursor: grab; background: #000;
 }
 .crop-viewport:active { cursor: grabbing; }
@@ -782,23 +873,26 @@ textarea.input { resize: vertical; min-height: 64px; }
   box-shadow: 0 0 0 9999px rgba(10, 14, 26, 0.55); pointer-events: none;
 }
 
-/* calendar view (month/week/day) */
+/* calendar view (month/week/day) - the ruled grid is gone. Same structure the
+   reference page's own date grid uses: seven columns of numerals on the bare
+   stage, the weekday letters as mono micro-type above, today as a filled
+   coral disc. Column alignment does the work the rules used to. */
 .cal-month {
-  display: grid; grid-template-columns: repeat(7, 1fr);
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
-  overflow: hidden; box-shadow: var(--shadow);
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+  background: none; border: none; border-radius: 0;
+  overflow: visible; box-shadow: none;
 }
 .cal-head {
-  padding: 0.5rem 0.4rem; text-align: center; font-size: 0.72rem; font-weight: 700; color: var(--muted);
-  border-bottom: 1px solid var(--line);
-  font-family: var(--font-data); text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 0.4rem 0.2rem 0.6rem; text-align: center; font-size: 0.66rem; font-weight: 600; color: var(--muted);
+  border: none;
+  font-family: var(--font-data); text-transform: uppercase; letter-spacing: 0.1em;
 }
 .cal-cell {
-  min-height: 84px; padding: 4px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+  min-height: 84px; padding: 4px 2px; border: none; border-radius: var(--r-xs);
   display: flex; flex-direction: column; gap: 2px; cursor: pointer; overflow: hidden;
 }
-.cal-cell:nth-child(7n) { border-right: none; }
-.cal-other { background: rgba(127, 127, 140, 0.08); color: var(--muted); }
+.cal-cell:hover { background: color-mix(in srgb, var(--muted) 9%, transparent); }
+.cal-other { background: none; opacity: 0.38; }
 .cal-daynum {
   font-size: 0.72rem; font-weight: 700; width: 20px; height: 20px; display: inline-grid; place-items: center; border-radius: 50%;
   font-family: var(--font-data); font-variant-numeric: tabular-nums;
@@ -810,14 +904,14 @@ textarea.input { resize: vertical; min-height: 64px; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 .cal-week {
-  display: grid; grid-template-columns: repeat(7, 1fr);
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
-  overflow: hidden; box-shadow: var(--shadow);
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+  background: none; border: none; border-radius: 0;
+  overflow: visible; box-shadow: none;
 }
-.cal-week-col { border-right: 1px solid var(--line); }
-.cal-week-col:last-child { border-right: none; }
-.cal-week-head { display: flex; flex-direction: column; align-items: center; padding: 0.5rem 0.2rem; border-bottom: 1px solid var(--line); }
-.cal-week-today { background: var(--surface-2); }
+.cal-week-col { border: none; }
+.cal-week-head { display: flex; flex-direction: column; align-items: center; padding: 0.4rem 0.2rem 0.6rem; border: none; }
+/* today's column: a faint fill instead of the ruled box it used to sit in */
+.cal-week-today { background: color-mix(in srgb, var(--accent) 9%, transparent); border-radius: var(--r-sm); }
 .cal-pill-lg { font-size: 0.72rem; padding: 4px 6px; border-radius: 7px; display: flex; flex-direction: column; align-items: flex-start; white-space: normal; }
 .cal-pill-time {
   font-family: var(--font-data); font-weight: 700; font-size: 0.6rem;
@@ -834,15 +928,19 @@ textarea.input { resize: vertical; min-height: 64px; }
 .empty { text-align: center; color: var(--muted); padding: 2.2rem 1rem; }
 .hero { text-align: center; padding: 3.5rem 1rem; }
 .hero h1 { font-size: 2.6rem; }
-.tally { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.tally { height: 6px; border-radius: 999px; background: var(--cell); overflow: hidden; }
 .tally > span { display: block; height: 100%; background: var(--go); }
 .err { color: var(--no); font-size: 0.9rem; }
-.divider { height: 1px; background: var(--line); margin: 0.4rem 0; }
+/* .divider was a hairline rule between sections. Borderless, the separation
+   is simply the space it used to occupy. */
+.divider { height: 0; background: none; margin: 0.7rem 0; }
 
-/* address autocomplete dropdown (Photon suggestions) */
+/* address autocomplete dropdown (Photon suggestions) - a floating layer, so
+   it keeps a --surface fill + the shadow; the stroke it also had was
+   redundant with both. */
 .addr-menu {
   position: absolute; z-index: 30; left: 0; right: 0; margin-top: 4px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface); border: none; border-radius: var(--r-sm);
   box-shadow: var(--shadow); overflow: hidden; max-height: 240px; overflow-y: auto;
 }
 .addr-item {
@@ -872,13 +970,13 @@ textarea.input { resize: vertical; min-height: 64px; }
   bottom: calc(64px + env(safe-area-inset-bottom));
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 0.7rem 0.9rem; border-radius: var(--r);
-  background: var(--surface); border: 1px solid var(--line);
+  background: var(--surface); border: none;
   box-shadow: var(--shadow); max-width: 700px; margin: 0 auto;
 }
 @media (min-width: 641px) { .consent-bar { bottom: 16px; } }
 
 /* OSM attribution line under address suggestions (ODbL) */
-.addr-attrib { padding: 6px 12px; font-size: 0.68rem; color: var(--muted); border-top: 1px solid var(--line); }
+.addr-attrib { padding: 6px 12px 8px; font-size: 0.68rem; color: var(--muted); border: none; }
 .addr-attrib a { text-decoration: underline; }
 
 /* ===== Quiet Plans - a restraint pass on House Lights =====
@@ -892,8 +990,10 @@ textarea.input { resize: vertical; min-height: 64px; }
    the separating instead of a border on every row - the border moves to
    BETWEEN rows, where it's actually dividing two different things. */
 .list { display: flex; flex-direction: column; }
-.list-row { display: flex; align-items: center; gap: 0.85rem; padding: 0.95rem 0; }
-.list-row + .list-row { border-top: 1px solid var(--line); }
+/* Borderless: the hairline between rows is gone too, so the padding has to
+   carry the separation on its own - hence the bump from 0.95rem. */
+.list-row { display: flex; align-items: center; gap: 0.85rem; padding: 0.8rem 0; }
+.list-row + .list-row { border-top: none; }
 
 /* .stamp-text: a status word that's information-adjacent but doesn't carry a
    live count/tally, so it drops the bordered .pill chrome for quiet mono
@@ -919,12 +1019,12 @@ textarea.input { resize: vertical; min-height: 64px; }
   background: none; border: none; padding: 0.3rem 0; font: inherit; font-size: 0.95rem;
   color: var(--muted); cursor: pointer; min-height: 44px;
 }
-.toggle-quiet .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); flex: none; }
+.toggle-quiet .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cell); flex: none; }
 .toggle-quiet.on { color: var(--ink); font-weight: 700; }
 .toggle-quiet.on.going .dot { background: var(--go); }
 .toggle-quiet.on.maybe .dot { background: var(--time); }
 .toggle-quiet.on.declined .dot { background: var(--no); }
-.toggle-quiet:focus-visible { outline: 2px solid var(--time); outline-offset: 2px; }
+.toggle-quiet:focus-visible { outline-offset: 2px; }
 
 /* .bare-day: a date-grid cell with no border/background at rest - the
    numeral floats on the surface, and picking it seats a filled coral circle

@@ -1,6 +1,10 @@
 # Quiet Plans — a restraint pass on House Lights
 
-**Status:** approved and WIDELY SHIPPED (2026-08). The restraint pass now covers every page:
+**Status:** SHIPPED IN FULL (2026-09). Phase 5 below took the restraint pass to its end state — **there
+are no borders left**. `.card` is no longer a box (it is a spacing primitive), inputs are bare underlines,
+buttons are text, pills are stamp type, the availability/voting grids carry their state in FILLS, and the
+calendar views lost their ruled grid. `apps/web/public/free-scheduler/index.html` is the visual reference
+for the whole app now, not just for the marketing one-pager. The earlier per-page pass (below) covers:
 Home, Groups (list + public + member pages), EventPage (RSVP toggle, Lineup, Invite friends,
 Add-to-calendar, Series, ShareLink, PollResults, Guests, all the one-off banners), Friends,
 Profile, Calendars, the shared skeletons (`ListSkeleton`/`EventSkeleton`), `ClerkAccount`, the
@@ -25,11 +29,12 @@ TWO SEPARATE bordered cards (not two sections of one) so a host can never mistak
 for "hand out membership" - removing the boxes would blur exactly the distinction they exist to
 make.
 
-**Deliberately NOT converted yet** (see §3 for why): the drag-paint availability/voting grids
-(`DayGrid`/`TimeGrid` - week/month/dates-scope, plus the cards directly wrapping them), Discover's
-`PublicEventRow` (a richer two-row card, not a simple list tile - a card border earns its keep
-there), and the nav/tabbar (its border already separates two real things - the fixed bar from
-scrolling content - so it doesn't need to change).
+**Superseded by the borderless pass (§3 phases 4-5):** the three carve-outs this file originally kept -
+the drag-paint grids and their wrapper cards, Discover's `PublicEventRow`, and the nav/tabbar - are all
+converted now, along with the two "keep them boxed on purpose" exceptions above. Groups' share-page vs
+invite-to-join distinction is now carried by their two `.section-h` labels, their two `.pill`s
+(PUBLIC / MEMBERS) and their two `--surface-2` link slabs instead of by two borders; the tab bar is
+separated from scrolling content by its opaque `--surface` fill.
 **Executor:** any Claude model. Each phase is self-contained; follow it literally.
 **Never do more than the phase you were asked to run.**
 
@@ -139,17 +144,45 @@ Reference the before/after strip in `quiet-plans-comp.html` for the visual targe
    same reason - they're single-purpose info, not lists or forms. The shared skeletons
    (`ListSkeleton`/`EventSkeleton` in `ui.tsx`) were updated to match - a boxed skeleton loading
    into boxless real content was a visible seam.
-4. **Grids** (NOT done - still the highest-risk phase, deliberately untouched). `DayGrid`/`TimeGrid`
-   (week/month/dates-scope availability + voting grids) and every card that wraps them directly
-   (Profile's availability card, EventPage's `general-results`) keep their existing `.cell`/`.card`
-   treatment. These carry drag-to-paint, heatmap intensity tiers, and multi-user responder-dot
-   overlays that a bare-numeral swap could easily regress - prototype ONE grid in isolation,
-   screenshot it, before touching all three.
-5. **Nav/tabbar** (deliberately skipped, not deferred). Its border already separates two real
-   things - the fixed bottom bar from scrolling page content - so §1 rule 13 says it stays.
-6. **Closeout**: update `CLAUDE.md`'s look-and-feel paragraph to mention Quiet Plans as the current
-   execution of House Lights (not a replacement doc — House Lights stays the token source of
-   truth), and retire this file's "Status" line to "shipped."
+4. **Grids** (done, 2026-09). The bare-NUMERAL idea in §2 was rejected on inspection: an availability
+   cell with no fill and no stroke erases the grid itself - you cannot see where the tap targets are, and
+   "unset" becomes indistinguishable from "nothing here". So `.cell` keeps its shape and drops only the
+   stroke: every state is now a FILL (`--cell` neutral = unset, `--go` = free, `--no` = busy, rose hatching
+   = imported-calendar locked, three teal alpha steps = heat tiers). The `.cell.best` 2px coral ring went
+   too - the coral "BEST" tag is a literal label and was already doing that job. 44px tap targets, the
+   drag-paint logic, and the responder-dot overlays are untouched. `MonthPicker` keeps `.bare-day`, which
+   IS the bare-numeral treatment and works there because it is a simple click-toggle day picker.
+5. **Everything else** (done, 2026-09 - the borderless pass). At the primitive level in `styles.css`:
+   - `.card` stops being a box entirely and becomes a spacing primitive (`padding: 0.55rem 0`, no fill, no
+     stroke, no radius); `.stack` gap goes to 1rem so a module is separated by ~2.1rem of air, the same
+     rhythm the free-scheduler page puts between its fields. `.crop-card` (a modal) opts back into a
+     `--surface` fill + the one shadow, because it genuinely floats.
+   - `.input` becomes bare: no fill, no box, a 1px `--line` underline that turns 2px coral on focus (the
+     ONLY stroke left in the system). `label.field` becomes the display serif in ITALIC - the reference
+     page's signature, and what makes a form read as editorial rather than as a control panel.
+   - `.btn` loses its fill and border and becomes text in three tiers: `.primary` = the one coral fill on
+     the screen (a filled shape is the reference's own grammar for "this is the thing"), plain `.btn`/
+     `.soft`/`.quiet` = ink type with a standing underline, `.ghost` = muted type that underlines on hover.
+     `min-height: 44px` and `white-space: nowrap` are unchanged - quieter never means smaller.
+   - `.chip` and `.segmented` drop every resting outline; a picked one seats a teal fill behind the label.
+     `.pill` drops its box and becomes pure stamp type + a colored dot.
+   - The event hero stops being a card (and loses its candy-stripe top rule). Its photo-less
+     `TitlePoster` fallback is gone from the hero in `EventPage.tsx` - it was a filled plum box that also
+     printed the title a second time directly above the h1; borderless, the event simply leads with its
+     title at display scale. `TitlePoster` still renders at thumb scale on list tiles.
+   - `.cal-month`/`.cal-week` lose their ruled grid: seven columns of numerals on the bare stage, weekday
+     letters as mono micro-type above, today as a filled disc - structurally the same as the reference
+     page's own date grid.
+   - Comment bubbles, the GIF grid, `.addr-menu`, `.consent-bar`, `.fx-locked`, `.crop-viewport`,
+     `.edit-sec`, `.edit-actions`, `.share-copy`, `.divider`, `.list-row`, and the tab bar all dropped
+     their strokes; each one that still needs to read as a separate layer uses a fill and/or the shadow.
+   - **Focus survived deliberately**: a universal `:focus-visible { outline: 2px solid var(--time) }` sits
+     at the top of `styles.css` as the safety net (with every resting border gone it matters more, not
+     less), and components only ever adjust its offset. Text inputs are the one exception and use the
+     reference's own idiom - the underline thickens to 2px coral - which is at least as visible.
+6. **Closeout** (done). This file's status is "shipped"; `HOUSE-LIGHTS.md` carries a header note saying it
+   remains the TOKEN source of truth but no longer describes surfaces, with §1 rules 3 and 9 amended in
+   place. The live spec for "how a surface is built" is the header comment of `apps/web/src/styles.css`.
 
 ## 4. Verification loop (run at the end of EVERY phase)
 

@@ -1,7 +1,12 @@
 # House Lights — the Whensdays design revamp playbook
 
-**Status:** direction approved from `docs/design/house-lights-comp.html` (open it in a browser — it is the
-visual source of truth for every token, component, and copy decision below).
+**Status:** shipped, then **run BORDERLESS (2026-09)**. House Lights is still the source of truth for the
+*tokens* — palette, type system, stamp voice, the anti-slop contract. It is NOT the source of truth for
+surfaces any more: `docs/design/QUIET-PLANS.md` §5 removed every remaining bordered box, and
+`apps/web/public/free-scheduler/index.html` (not `house-lights-comp.html`) is now the visual reference for
+how a screen is put together. Where §4 below says "1px `--line` border" or "hairline", read it as history —
+the current rule is in the header comment of `apps/web/src/styles.css`. Rules 3 and 9 are amended in place
+below; everything else in §1 is unchanged and still binding.
 **Executor:** any Claude model. Each phase is self-contained; follow it literally.
 **Never do more than the phase you were asked to run.**
 
@@ -25,8 +30,11 @@ These are hard rules. If a change would violate one, the change is wrong — not
    Icons come only from `Icons.tsx` (§5). Verification: the grep in §9 must return zero.
 2. **No gradients on interactive elements.** The only gradients allowed in the entire app: the candy
    `--stripe`, the skeleton shimmer, and poster/theme washes on non-interactive surfaces.
-3. **No `backdrop-filter`, no animated background.** Surfaces are solid `--surface` with hairline `--line`
-   borders and the `--grain` texture on `body` and posters only.
+3. **No `backdrop-filter`, no animated background.** *(Amended 2026-09 — borderless.)* Content sits
+   directly on the stage. There are no bordered surfaces: separation comes from space and type hierarchy,
+   and where two things must read as different layers the separator is a FILL (`--surface`/`--surface-2`/
+   `--cell`) or the one allowed shadow, never a stroke. The single surviving stroke in the system is the
+   1px underline under a text input, which turns coral on focus. `--grain` stays on `body` and posters.
 4. **No white/cream text on coral fills.** Primary buttons are plum-on-coral (validated 4.8:1). Hover flips
    to `--coral-deep` with cream text (that pairing passes).
 5. **Dates, times, counts, and status pills always use the stamp voice** (Spline Sans Mono, uppercase,
@@ -36,8 +44,8 @@ These are hard rules. If a change would violate one, the change is wrong — not
 7. **No exclamation marks in UI copy.** Warmth comes from wording, not punctuation.
 8. **Radii only from tokens** (`--r` 12 / `--r-sm` 8 / `--r-xs` 5). Never fully-rounded pills, never
    `border-radius: 999px` (exception: avatars/facepiles are circles).
-9. **One shadow per screen** — the element that must float (modal, phone-frame, active card). Everything
-   else is flat with borders.
+9. **One shadow per screen** — the element that must float (modal, floating menu, consent bar, lock
+   banner). Everything else is flat *and unbordered*; a shadow and a border never both do the same job.
 10. **Icons are information, not decoration.** Max ~1 icon per control; most buttons and section headers are
     words only. Meta rows (when/where), tab bar, and close/check affordances are the icon budget.
 11. **Do not touch:** `data-testid` attributes, server code, analytics event names, guest-flow logic, route
