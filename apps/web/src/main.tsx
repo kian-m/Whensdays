@@ -5,6 +5,9 @@ import { ClerkProvider } from "@clerk/clerk-react";
 // its optical-size range), Familjen Grotesk (body/UI), Spline Sans Mono
 // (stamps/pills/section labels). See docs/design/HOUSE-LIGHTS.md §3.
 import "@fontsource-variable/fraunces/opsz.css";
+// italic axis: the free-scheduler idiom uses the display serif in italic for
+// every field label (see label.field in styles.css).
+import "@fontsource-variable/fraunces/opsz-italic.css";
 import "@fontsource-variable/familjen-grotesk";
 import "@fontsource-variable/spline-sans-mono";
 import { App, DEV_AUTH } from "./App";

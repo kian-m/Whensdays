@@ -146,7 +146,7 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, testid }: {
     <button type="button" className="btn ghost sm" data-testid={testid}
       style={{
         color: "var(--no)",
-        ...(armed ? { background: "color-mix(in srgb, var(--no) 16%, transparent)", borderColor: "var(--no)", fontWeight: 700 } : {}),
+        ...(armed ? { background: "color-mix(in srgb, var(--no) 18%, transparent)", padding: "0.25rem 0.7rem", fontWeight: 700 } : {}),
       }}
       onClick={() => { if (armed) { setArmed(false); void onConfirm(); } else setArmed(true); }}>
       {armed ? confirmLabel : label}
@@ -579,7 +579,7 @@ export function AvailLegend({ hasCalendar }: { hasCalendar?: boolean }) {
     <div className="legend" data-testid="avail-legend">
       <span className="sw"><i style={{ background: "var(--go)" }} /> Free</span>
       <span className="sw"><i style={{ background: "var(--no)" }} /> Busy</span>
-      <span className="sw"><i style={{ background: "var(--line)" }} /> Not set</span>
+      <span className="sw"><i style={{ background: "var(--cell)" }} /> Not set</span>
       {hasCalendar && (
         <span className="sw"><i className="cell locked" style={{ height: 15, borderRadius: 4 }} /> From your calendar</span>
       )}
@@ -940,9 +940,11 @@ export function Avatar({ url, name, size = 36 }: { url?: string | null; name?: s
 // of an emoji tile or gradient block. Plum + grain background, the event
 // title in Fraunces 900 cream at poster scale, an amber stamp line
 // underneath (venue/city if known), and a faint radial cream light from the
-// top (see .poster in styles.css). At "thumb" scale it shrinks to the same
-// language EventThumb uses for photo-less tiles: the first letter, centered,
-// with a 3px stripe along the bottom edge instead of the stamp line.
+// top (see .poster in styles.css). At "thumb" scale it shrinks to the first
+// letter, centered, with a 3px stripe along the bottom edge instead of the
+// stamp line - that thumb form is now GROUP-ONLY (GroupIcon + the public
+// entity header in Groups.tsx). Events no longer take a placeholder cover at
+// any scale: no hero poster, no tile monogram. See EventThumb below.
 export function TitlePoster({ title, sub, scale = "hero", size }: {
   title: string;
   sub?: string;
@@ -971,17 +973,25 @@ export function TitlePoster({ title, sub, scale = "hero", size }: {
   );
 }
 
-// Event tile thumbnail: the cover photo/GIF is the main visual when set.
-// Photo-less events fall back to a TitlePoster monogram (thumb scale) - never
-// an emoji or nothing. Shared by Home, Discover and Groups.
-export function EventThumb({ photo, title = "", size = 46 }: {
+// Event tile thumbnail: the cover photo/GIF is the main visual when set, and
+// NOTHING when it isn't. A photo-less event renders no image anywhere - the
+// same call the hero makes (EventPage lost its TitlePoster fallback in the
+// borderless pass): a big single initial standing in for a cover was filler,
+// and it read louder than the title it was decorating. The tile simply leads
+// with its title instead. Every caller (Home's EventRow/FollowedTile,
+// Discover's PublicEventRow, Groups' GroupEventRow) puts this first in a
+// two-child flex row, so returning null collapses cleanly - a flex `gap` only
+// applies BETWEEN children, leaving the text block flush with the row edge.
+// `title` is kept in the signature (unused now) so callers stay unchanged and
+// a future fallback has it to hand. TitlePoster is still the GROUP icon
+// fallback (Groups.tsx) - a group is a persistent named entity where a
+// monogram aids recognition in a list, and its icon is deliberately settable.
+export function EventThumb({ photo, size = 46 }: {
   photo?: string; title?: string; size?: number;
 }) {
-  if (photo) {
-    return <img className="thumb" data-testid="event-thumb" src={photo} alt=""
-      style={{ width: size, height: size }} loading="lazy" />;
-  }
-  return <TitlePoster title={title} scale="thumb" size={size} />;
+  if (!photo) return null;
+  return <img className="thumb" data-testid="event-thumb" src={photo} alt=""
+    style={{ width: size, height: size }} loading="lazy" />;
 }
 
 // Klipy GIF picker (server-proxied - the API key never reaches the browser).

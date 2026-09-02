@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Attendee, DAYPARTS, EventDetail, Friend, GeneralVote, ImportedEvent, TimeOption, Vote, WEEKDAYS, EVENT_THEMES, busyConflict, daysFromDate, dayLabel as dayCol, fmtDate, fmtDateTime, fmtMinutes, gridSlots, toDatetimeLocal, getJSON, guessCity, importedBusy, mapsUrl, appleMapsUrl, openGoogleMaps, isStandalone, nextMonths, sendJSON, timeAgo, useApi } from "../lib";
-import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, FollowButton, GifPicker, HomescreenPrompt, Linkify, MonthPicker, Pill, TimeGrid, TitlePoster, fileToPhoto, useAsync } from "../ui";
+import { AddressInput, Avatar, BackLink, ConfirmButton, CropModal, DayGrid, EventSkeleton, FollowButton, GifPicker, HomescreenPrompt, Linkify, MonthPicker, Pill, TimeGrid, fileToPhoto, useAsync } from "../ui";
 import { EVENTS, analytics } from "../analytics";
 import { DEV_AUTH, GuestSignupButton } from "../App";
 import { Ic } from "../Icons";
@@ -1068,6 +1068,10 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
   const [applySeries, setApplySeries] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [cropFile, setCropFile] = useState<File | null>(null);
+  // The cover GIF grid is opt-in. GifPicker loads trending on MOUNT, so this
+  // flag is what keeps opening the edit form from firing a Klipy request (and
+  // from filling the Look section with a grid nobody asked for).
+  const [pickingGif, setPickingGif] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // The edit form is grouped into 4 disclosure sections; only ONE is open at a
   // time (openSec holds its key, null = all collapsed). "When" leads open -
@@ -1130,19 +1134,16 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
   }
 
   if (!editing) {
-    // Poster stamp line: venue/city if known, else nothing (there is no
-    // event-type field on the frontend Event model to fall back to - see
-    // the Phase 4/5 note in the House Lights doc).
-    const posterSub = e.location_mode === "host_place" && e.location_address
-      ? e.location_address
-      : e.city || undefined;
     return (
       <div className="card event-hero">
-        {/* Cover slot: a real photo/GIF, or the TitlePoster playbill fallback
-            when there's none - never an emoji tile, never nothing. */}
-        {e.photo_url
-          ? <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />
-          : <TitlePoster title={e.title} sub={posterSub} scale="hero" />}
+        {/* Cover slot: a real photo/GIF, or NOTHING. The photo-less fallback
+            used to be a filled plum TitlePoster playbill - a box, and one that
+            printed the title a second time right above the h1. Borderless
+            (see the header of styles.css), a photo-less event simply leads
+            with its title at display scale, exactly like the reference page's
+            h1. List tiles now make the same call - EventThumb renders nothing
+            without a photo (ui.tsx); TitlePoster's thumb scale is group-only. */}
+        {e.photo_url && <img className="event-cover" data-testid="event-cover" src={e.photo_url} alt="" />}
         <div className="hero-body stack">
           {/* Title left, Edit right on desktop; stacked on a phone (the title
               gets the full width instead of being squeezed to a sliver). */}
@@ -1352,11 +1353,31 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
       <details className="edit-sec" open={openSec === "look"}>
         <summary data-testid="edit-sec-look" onClick={secToggle("look")}>Look</summary>
         <div className="stack">
-          <div className="row wrap" style={{ gap: 6 }}>
-            <button type="button" className="btn ghost sm" data-testid="cover-upload"
-              onClick={() => fileRef.current?.click()}>{photo ? "Change photo" : "Add a photo"}</button>
+          {/* Cover image. The micro-label is what tells you what this block
+              sets - it used to be a bare "Add a photo" button with a trending
+              GIF grid dumped underneath and the word "cover" nowhere on the
+              screen. Photo and GIF are now offered as ONE idea, two routes
+              visible up front, and the grid is gated behind its own button
+              (same pattern as the comment composer below and the group icon in
+              Groups.tsx). Gating the MOUNT is the point: GifPicker fetches
+              trending on mount, so an unconditional one hit Klipy every time
+              anyone opened the edit form. */}
+          <div className="section-h" style={{ margin: "0.35rem 0 0" }}>Cover image</div>
+          <p className="muted small" style={{ margin: "-4px 0 0" }}>
+            A photo or GIF at the top of the invite. Optional.
+          </p>
+          {/* Plain .btn (ink + a standing underline), not .ghost: these are the
+              two actions of the block, and they should read like "Add cohost"
+              or "Add to lineup" further down the page, not like muted labels.
+              Remove stays .ghost - it's the recessive third option. */}
+          <div className="row wrap" style={{ gap: 16 }}>
+            <button type="button" className="btn sm" data-testid="cover-upload"
+              onClick={() => fileRef.current?.click()}>{photo ? "Change photo" : "Add photo"}</button>
+            <button type="button" className="btn sm" data-testid="cover-gif-open"
+              onClick={() => setPickingGif((p) => !p)}>{pickingGif ? "Close GIFs" : "Add GIF"}</button>
             {photo && (
-              <button type="button" className="btn ghost sm" data-testid="cover-remove" onClick={() => setPhoto("")}>Remove</button>
+              <button type="button" className="btn ghost sm" data-testid="cover-remove"
+                onClick={() => setPhoto("")}>Remove</button>
             )}
             <input ref={fileRef} type="file" accept="image/*" data-testid="cover-file"
               style={{ display: "none" }} onChange={onPickPhoto} />
@@ -1366,9 +1387,14 @@ function HeroCard({ data, reload, canEdit, onPreviewTheme, onEditing }: { data: 
                 onCancel={() => setCropFile(null)} />
             )}
           </div>
-          <GifPicker onPick={(url) => setPhoto(url)} />
+          {pickingGif && (
+            <GifPicker onPick={(url) => { setPhoto(url); setPickingGif(false); }} />
+          )}
+          {/* Matching block label - "Cover image" above and "Theme" here are
+              the section's two subjects, so they take the same micro-label
+              rather than one mono heading plus one inline "Theme:" prefix. */}
+          <div className="section-h" style={{ margin: "0.35rem 0 0" }}>Theme</div>
           <div className="row wrap" style={{ gap: 6 }}>
-            <span className="muted small">Theme:</span>
             {EVENT_THEMES.map((t) => (
               <button key={t.value} type="button" className={`chip sm ${theme === t.value ? "on" : ""}`}
                 data-testid={`theme-${t.value || "none"}`}
