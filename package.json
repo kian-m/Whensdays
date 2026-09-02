@@ -12,7 +12,8 @@
     "//overrides": "Security patches for TRANSITIVE deps whose parent pins an older version. Both come in via vite (build-time only - they never reach the browser), but patching is free and keeps the Dependabot list signal-only. Each is a patch bump INSIDE the parent's own declared range (vite 6.4.3 wants postcss ^8.5.3), so nothing is being forced across a major. Drop an entry once the parent ships a version that resolves past it on its own.",
     "overrides": {
       "postcss@<8.5.23": "^8.5.26",
-      "nanoid@<3.3.18": "^3.3.18"
+      "nanoid@<3.3.18": "^3.3.18",
+      "browserslist@<4.28.7": "^4.28.7"
     }
   }
 }
